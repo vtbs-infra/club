@@ -13,6 +13,7 @@ const ConfigSchema = Type.Object(
     appUrl: Type.String({ format: 'uri' }),
     databaseUrl: Type.String({ minLength: 1 }),
     authSecret: Type.String({ minLength: 32 }),
+    bilibiliLiveSource: Type.Union([Type.Literal('fake'), Type.Literal('public-web')]),
     host: Type.String({ minLength: 1 }),
     port: Type.Integer({ minimum: 1, maximum: 65_535 }),
     storageDriver: Type.Literal('local'),
@@ -47,6 +48,7 @@ export interface AppConfig {
   readonly appUrl: string;
   readonly databaseUrl: string;
   readonly authSecret: string;
+  readonly bilibiliLiveSource: 'fake' | 'public-web';
   readonly host: string;
   readonly port: number;
   readonly storageDriver: 'local';
@@ -102,11 +104,13 @@ function parseSmtp(env: NodeJS.ProcessEnv): AppConfig['smtp'] | Record<string, u
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const nodeEnv = env.NODE_ENV ?? 'development';
   const candidate = {
-    nodeEnv: env.NODE_ENV ?? 'development',
+    nodeEnv,
     appUrl: env.APP_URL ?? 'http://localhost:3000',
     databaseUrl: env.DATABASE_URL,
     authSecret: env.BETTER_AUTH_SECRET,
+    bilibiliLiveSource: env.BILIBILI_LIVE_SOURCE ?? (nodeEnv === 'test' ? 'fake' : 'public-web'),
     host: env.HOST ?? '0.0.0.0',
     port: parsePort(env.PORT),
     storageDriver: env.STORAGE_DRIVER ?? 'local',

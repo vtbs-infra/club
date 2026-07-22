@@ -39,7 +39,8 @@ At the time this plan was written:
 - No concrete shipment-tracking provider has been selected.
 - No branding, visual identity, or production domain has been selected.
 
-Milestones 0 and 1 are complete. The next implementation action is Milestone 2.
+Milestones 0, 1, and 2 are complete. The next implementation action is
+Milestone 3.
 
 ## 3. Non-negotiable implementation constraints
 
@@ -219,38 +220,38 @@ Before implementing the production adapter:
 
 ### Work
 
-- [ ] Add `verification_rooms`, `binding_challenges`, and
+- [x] Add `verification_rooms`, `binding_challenges`, and
       `bilibili_bindings` migrations.
-- [ ] Add partial unique indexes for one active binding per user and per UID.
-- [ ] Implement platform-only verification-room CRUD and connectivity test.
-- [ ] Define `LiveMessageSource` and normalized live-message events.
-- [ ] Implement a fake live source with deterministic disconnect/reconnect
+- [x] Add partial unique indexes for one active binding per user and per UID.
+- [x] Implement platform-only verification-room CRUD and connectivity test.
+- [x] Define `LiveMessageSource` and normalized live-message events.
+- [x] Implement a fake live source with deterministic disconnect/reconnect
       controls.
-- [ ] Implement the verified production live source.
-- [ ] Implement `RoomConnectionManager` with one in-process connection per
+- [x] Implement the verified production live source.
+- [x] Implement `RoomConnectionManager` with one in-process connection per
       needed room.
-- [ ] Restore connections for unexpired challenges after process startup.
-- [ ] Generate secure ASCII codes and store only HMAC digests.
-- [ ] Assign rooms server-side; challenge requests accept no room ID.
-- [ ] Enforce one active challenge per user, expiry, room match, and replay
+- [x] Restore connections for unexpired challenges after process startup.
+- [x] Generate secure ASCII codes and store only HMAC digests.
+- [x] Assign rooms server-side; challenge requests accept no room ID.
+- [x] Enforce one active challenge per user, expiry, room match, and replay
       protection.
-- [ ] Bind the event UID transactionally and consume the challenge.
-- [ ] Implement unbinding while preserving history and existing claims.
-- [ ] Add account/IP challenge throttling.
-- [ ] Audit room configuration, binding, unbinding, conflicts, and administrator
+- [x] Bind the event UID transactionally and consume the challenge.
+- [x] Implement unbinding while preserving history and existing claims.
+- [x] Add account/IP challenge throttling.
+- [x] Audit room configuration, binding, unbinding, conflicts, and administrator
       intervention.
-- [ ] Build platform room management and user binding UI.
-- [ ] Build a visible countdown, room link, retry states, and reconnect status.
+- [x] Build platform room management and user binding UI.
+- [x] Build a visible countdown, room link, retry states, and reconnect status.
 
 ### Exit criteria
 
-- [ ] A user cannot send a room ID or UID through the product API.
-- [ ] A message in the wrong room cannot consume a challenge.
-- [ ] Duplicate delivery of the same live event is harmless.
-- [ ] A UID and user each have at most one active binding.
-- [ ] Restart restores unexpired challenge listening.
-- [ ] Live-source failures do not crash HTTP service.
-- [ ] The complete flow passes using a fake live source in CI.
+- [x] A user cannot send a room ID or UID through the product API.
+- [x] A message in the wrong room cannot consume a challenge.
+- [x] Duplicate delivery of the same live event is harmless.
+- [x] A UID and user each have at most one active binding.
+- [x] Restart restores unexpired challenge listening.
+- [x] Live-source failures do not crash HTTP service.
+- [x] The complete flow passes using a fake live source in CI.
 
 ## 9. Milestone 3: month-end capture and immutable snapshots
 
@@ -592,8 +593,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: M0 foundation and M1 authentication/tenancy complete
-Next milestone: M2 verification rooms and Bilibili UID binding
+Implementation: M0 foundation, M1 authentication/tenancy, and M2 Bilibili UID binding complete
+Next milestone: M3 month-end capture and immutable snapshots
 Blocking user decision: none
 ```
 

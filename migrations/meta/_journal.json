@@ -15,6 +15,13 @@
       "when": 1784725326156,
       "tag": "0001_tired_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784728966095,
+      "tag": "0002_lean_frightful_four",
+      "breakpoints": true
     }
   ]
 }

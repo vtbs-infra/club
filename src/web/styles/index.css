@@ -386,6 +386,91 @@ h2 {
 .muted {
   color: #9299b1;
 }
+.account-section {
+  max-width: 740px;
+  margin-top: 20px;
+  padding: 30px;
+}
+.account-section > .muted {
+  max-width: 610px;
+  line-height: 1.6;
+}
+.binding-success {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 20px;
+}
+.binding-success h2 {
+  margin-top: 7px;
+}
+.binding-success p {
+  margin-bottom: 0;
+}
+.binding-actions {
+  display: grid;
+  justify-items: start;
+  gap: 15px;
+  margin-top: 24px;
+}
+.challenge-card {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid rgba(140, 229, 206, 0.18);
+  border-radius: 18px;
+  background: rgba(140, 229, 206, 0.05);
+}
+.challenge-card code {
+  color: #f7f8ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(30px, 5vw, 48px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.challenge-card p {
+  margin: 0;
+  color: #9299b1;
+  font-size: 13px;
+}
+.challenge-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.challenge-meta strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px;
+}
+.connection-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #aeb4ca;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.connection-state::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  content: '';
+  background: #efb365;
+}
+.connection-healthy::before {
+  background: #75e0c3;
+  box-shadow: 0 0 13px rgba(117, 224, 195, 0.55);
+}
+.connection-unhealthy::before {
+  background: #ef8d8d;
+}
+.connection-unknown::before {
+  background: #788098;
+}
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
@@ -486,6 +571,39 @@ h2 {
   place-content: center;
   text-align: center;
 }
+.platform-grid {
+  display: grid;
+  grid-template-columns: minmax(330px, 0.7fr) minmax(0, 1.3fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 52px;
+}
+.platform-grid > .auth-form {
+  position: sticky;
+  top: 24px;
+}
+.room-list {
+  display: grid;
+  gap: 16px;
+}
+.room-card {
+  display: grid;
+  gap: 26px;
+  padding: 28px;
+}
+.compact-title {
+  align-items: flex-start;
+}
+.compact-title h2 {
+  margin-top: 10px;
+}
+.compact-title p {
+  margin-bottom: 0;
+}
+.room-actions {
+  display: flex;
+  gap: 10px;
+}
 
 @media (max-width: 720px) {
   .shell {
@@ -511,7 +629,8 @@ h2 {
     display: none;
   }
   .auth-layout,
-  .workspace-grid {
+  .workspace-grid,
+  .platform-grid {
     grid-template-columns: 1fr;
   }
   .auth-layout {
@@ -528,5 +647,12 @@ h2 {
   .title-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .binding-success {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .platform-grid > .auth-form {
+    position: static;
   }
 }

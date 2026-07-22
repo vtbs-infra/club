@@ -6,6 +6,7 @@ import { AuthPage } from '../pages/AuthPage';
 import { FoundationPage } from '../pages/FoundationPage';
 import { OrganizationPage } from '../pages/OrganizationPage';
 import { OrganizationsPage } from '../pages/OrganizationsPage';
+import { VerificationRoomsPage } from '../pages/VerificationRoomsPage';
 
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
@@ -15,6 +16,7 @@ const router = createBrowserRouter([
   { element: <AccountPage />, path: '/account' },
   { element: <OrganizationsPage />, path: '/organizations' },
   { element: <OrganizationPage />, path: '/organizations/:organizationId' },
+  { element: <VerificationRoomsPage />, path: '/platform/verification-rooms' },
   { element: <FoundationPage />, path: '*' },
 ]);
 

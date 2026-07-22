@@ -24,6 +24,7 @@ test.beforeAll(async () => {
     config: createTestConfig({ nodeEnv: 'production' }),
     database,
     serveStatic: true,
+    startBackground: false,
     storage: storage.driver,
     webRoot: resolve('dist/web'),
   });

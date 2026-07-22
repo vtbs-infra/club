@@ -38,6 +38,28 @@ export interface OrganizationMember {
   readonly userId: string;
 }
 
+export interface BilibiliBinding {
+  readonly biliDisplayName: string | null;
+  readonly biliUid: string;
+  readonly boundAt: string;
+  readonly id: string;
+}
+
+export interface BilibiliChallenge {
+  readonly connectionState: 'CONNECTING' | 'HEALTHY' | 'UNHEALTHY' | null;
+  readonly expiresAt: string;
+  readonly id: string;
+  readonly room: { readonly displayName: string; readonly link: string };
+  readonly status: 'ACTIVE' | 'CONSUMED' | 'EXPIRED' | 'CANCELLED' | 'CONFLICT';
+}
+
+export interface IssuedBilibiliChallenge {
+  readonly code: string;
+  readonly expiresAt: string;
+  readonly id: string;
+  readonly room: { readonly displayName: string; readonly id: string; readonly link: string };
+}
+
 export function getIdentity(): Promise<Identity> {
   return apiRequest('/api/v1/me');
 }
@@ -66,4 +88,23 @@ export function register(email: string, name: string, password: string): Promise
 
 export function signOut(): Promise<unknown> {
   return apiRequest('/api/auth/sign-out', { method: 'POST' });
+}
+
+export function getBilibiliBinding(): Promise<BilibiliBinding | null> {
+  return apiRequest('/api/v1/me/bilibili-binding');
+}
+
+export function getCurrentBilibiliChallenge(): Promise<BilibiliChallenge | null> {
+  return apiRequest('/api/v1/me/bilibili-challenges/current');
+}
+
+export function createBilibiliChallenge(): Promise<IssuedBilibiliChallenge> {
+  return apiRequest('/api/v1/me/bilibili-challenges', {
+    body: JSON.stringify({}),
+    method: 'POST',
+  });
+}
+
+export function removeBilibiliBinding(): Promise<void> {
+  return apiRequest('/api/v1/me/bilibili-binding', { method: 'DELETE' });
 }

@@ -5,6 +5,7 @@ services:
     environment:
       APP_URL: http://localhost:3000
       BETTER_AUTH_SECRET: development-only-change-this-secret
+      BILIBILI_LIVE_SOURCE: public-web
       DATABASE_URL: postgres://club:club-dev@postgres:5432/club
       HOST: 0.0.0.0
       LOG_LEVEL: info
