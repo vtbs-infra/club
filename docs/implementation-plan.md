@@ -1,6 +1,6 @@
 # Club Implementation Plan
 
-Status: not started
+Status: M0 complete
 
 Plan baseline date: 2026-07-22
 Architecture source of truth: [product-architecture.md](product-architecture.md)
@@ -39,7 +39,7 @@ At the time this plan was written:
 - No concrete shipment-tracking provider has been selected.
 - No branding, visual identity, or production domain has been selected.
 
-The next implementation action is Milestone 0.
+Milestone 0 is complete. The next implementation action is Milestone 1.
 
 ## 3. Non-negotiable implementation constraints
 
@@ -121,28 +121,28 @@ Goal: create a production-shaped application shell with no product behavior.
 
 ### Work
 
-- [ ] Create the root `package.json`, lockfile, strict TypeScript configuration,
+- [x] Create the root `package.json`, lockfile, strict TypeScript configuration,
       frontend Vite configuration, and test configuration.
-- [ ] Pin a supported Node.js LTS range and pnpm version.
-- [ ] Configure formatting/linting and the command contract in section 4.
-- [ ] Create the approved `src/server`, `src/web`, and `src/shared` layout.
-- [ ] Build a Fastify application factory separate from process startup.
-- [ ] Add request IDs, Pino redaction, centralized error mapping, and graceful
+- [x] Pin a supported Node.js LTS range and pnpm version.
+- [x] Configure formatting/linting and the command contract in section 4.
+- [x] Create the approved `src/server`, `src/web`, and `src/shared` layout.
+- [x] Build a Fastify application factory separate from process startup.
+- [x] Add request IDs, Pino redaction, centralized error mapping, and graceful
       shutdown.
-- [ ] Add `/health/live` and `/health/ready`.
-- [ ] Create a minimal React application and have Fastify serve its production
+- [x] Add `/health/live` and `/health/ready`.
+- [x] Create a minimal React application and have Fastify serve its production
       assets with SPA fallback.
-- [ ] Add TypeBox route schemas and OpenAPI generation.
-- [ ] Add validated environment configuration.
-- [ ] Configure PostgreSQL and Drizzle.
-- [ ] Create the migration runner and an empty baseline migration.
-- [ ] Define an injected `Clock` abstraction and production implementation.
-- [ ] Define `StorageDriver` and implement private local storage with atomic
+- [x] Add TypeBox route schemas and OpenAPI generation.
+- [x] Add validated environment configuration.
+- [x] Configure PostgreSQL and Drizzle.
+- [x] Create the migration runner and an empty baseline migration.
+- [x] Define an injected `Clock` abstraction and production implementation.
+- [x] Define `StorageDriver` and implement private local storage with atomic
       temporary-write-and-rename behavior.
-- [ ] Add an isolated temporary-storage test driver.
-- [ ] Add Dockerfile, Compose file, `.env.example`, and persistent volumes.
-- [ ] Add CI that runs check, unit tests, integration tests, and build.
-- [ ] Document local setup and database migration commands.
+- [x] Add an isolated temporary-storage test driver.
+- [x] Add Dockerfile, Compose file, `.env.example`, and persistent volumes.
+- [x] Add CI that runs check, unit tests, integration tests, and build.
+- [x] Document local setup and database migration commands.
 
 ### Required decisions
 
@@ -154,14 +154,14 @@ Goal: create a production-shaped application shell with no product behavior.
 
 ### Exit criteria
 
-- [ ] A fresh checkout can install, migrate, build, and start through documented
+- [x] A fresh checkout can install, migrate, build, and start through documented
       commands.
-- [ ] `/health/live` succeeds without database access.
-- [ ] `/health/ready` reflects PostgreSQL and required local-storage readiness.
-- [ ] Production navigation falls back to the React index without intercepting
+- [x] `/health/live` succeeds without database access.
+- [x] `/health/ready` reflects PostgreSQL and required local-storage readiness.
+- [x] Production navigation falls back to the React index without intercepting
       `/api` routes.
-- [ ] Structured logs demonstrate redaction tests.
-- [ ] All commands in section 4 exist and pass, allowing initially empty suites
+- [x] Structured logs demonstrate redaction tests.
+- [x] All commands in section 4 exist and pass, allowing initially empty suites
       where a feature is not yet present.
 
 ## 7. Milestone 1: authentication, tenancy, permissions, and audit
@@ -592,8 +592,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: not started
-Next milestone: M0 repository and runtime foundation
+Implementation: M0 repository and runtime foundation complete
+Next milestone: M1 authentication, tenancy, permissions, and audit
 Blocking user decision: none
 ```
 
