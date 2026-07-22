@@ -27,6 +27,7 @@ jobs:
           --health-retries 10
 
     env:
+      BETTER_AUTH_SECRET: ci-only-secret-that-is-at-least-32-characters
       DATABASE_URL: postgres://club:club@127.0.0.1:5432/club_test
       TEST_DATABASE_URL: postgres://club:club@127.0.0.1:5432/club_test
 

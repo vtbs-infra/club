@@ -1,8 +1,12 @@
 import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
+import { schema, type AppSchema } from './schema.js';
+
+export type AppDatabase = PostgresJsDatabase<AppSchema>;
+
 export interface DatabaseService {
-  readonly orm: PostgresJsDatabase;
+  readonly orm: AppDatabase;
   ping(): Promise<void>;
   close(): Promise<void>;
 }
@@ -13,7 +17,7 @@ export function createDatabase(databaseUrl: string): DatabaseService {
     idle_timeout: 20,
     max: 10,
   });
-  const orm = drizzle(client);
+  const orm = drizzle(client, { schema });
 
   return {
     orm,

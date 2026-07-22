@@ -39,7 +39,7 @@ At the time this plan was written:
 - No concrete shipment-tracking provider has been selected.
 - No branding, visual identity, or production domain has been selected.
 
-Milestone 0 is complete. The next implementation action is Milestone 1.
+Milestones 0 and 1 are complete. The next implementation action is Milestone 2.
 
 ## 3. Non-negotiable implementation constraints
 
@@ -170,36 +170,36 @@ Goal: establish identity and isolation before product data exists.
 
 ### Work
 
-- [ ] Integrate Better Auth with PostgreSQL-backed sessions and Fastify.
-- [ ] Add email/password registration and login.
-- [ ] Keep email verification and automated reset conditional on SMTP.
-- [ ] Implement the `pnpm club admin:create` bootstrap CLI.
-- [ ] Create organizations, organization memberships, creators, and optional
+- [x] Integrate Better Auth with PostgreSQL-backed sessions and Fastify.
+- [x] Add email/password registration and login.
+- [x] Keep email verification and automated reset conditional on SMTP.
+- [x] Implement the `pnpm club admin:create` bootstrap CLI.
+- [x] Create organizations, organization memberships, creators, and optional
       creator-scope tables.
-- [ ] Implement `PLATFORM_ADMIN`, `OWNER`, `ADMIN`, `OPERATOR`, `FULFILLMENT`,
+- [x] Implement `PLATFORM_ADMIN`, `OWNER`, `ADMIN`, `OPERATOR`, `FULFILLMENT`,
       and `VIEWER`.
-- [ ] Centralize permission checks without coupling them to UI route names.
-- [ ] Require explicit organization scope on organization-owned queries.
-- [ ] Create the append-only audit service and table.
-- [ ] Add audit events for administrator bootstrap, organization membership, and
+- [x] Centralize permission checks without coupling them to UI route names.
+- [x] Require explicit organization scope on organization-owned queries.
+- [x] Create the append-only audit service and table.
+- [x] Add audit events for administrator bootstrap, organization membership, and
       permission changes.
-- [ ] Implement user identity, organization, member, and creator APIs.
-- [ ] Implement login, registration, account, and basic organization shells in
+- [x] Implement user identity, organization, member, and creator APIs.
+- [x] Implement login, registration, account, and basic organization shells in
       React.
-- [ ] Add Origin/CSRF handling for custom state-changing endpoints.
-- [ ] Add user/IP rate-limit primitives without Redis.
-- [ ] Add platform and organization route guards.
-- [ ] Add request-level tests for cross-organization isolation.
+- [x] Add Origin/CSRF handling for custom state-changing endpoints.
+- [x] Add user/IP rate-limit primitives without Redis.
+- [x] Add platform and organization route guards.
+- [x] Add request-level tests for cross-organization isolation.
 
 ### Exit criteria
 
-- [ ] A CLI-created platform administrator can create an organization and owner.
-- [ ] An owner can create a creator and assign scoped members.
-- [ ] Every role has an explicit tested permission matrix.
-- [ ] A user from organization A cannot read or mutate organization B.
-- [ ] `VIEWER` cannot access sensitive data routes.
-- [ ] Permission changes create immutable audit records.
-- [ ] Sessions survive application restarts.
+- [x] A CLI-created platform administrator can create an organization and owner.
+- [x] An owner can create a creator and assign scoped members.
+- [x] Every role has an explicit tested permission matrix.
+- [x] A user from organization A cannot read or mutate organization B.
+- [x] `VIEWER` cannot access sensitive data routes.
+- [x] Permission changes create immutable audit records.
+- [x] Sessions survive application restarts.
 
 ## 8. Milestone 2: verification rooms and Bilibili UID binding
 
@@ -592,8 +592,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: M0 repository and runtime foundation complete
-Next milestone: M1 authentication, tenancy, permissions, and audit
+Implementation: M0 foundation and M1 authentication/tenancy complete
+Next milestone: M2 verification rooms and Bilibili UID binding
 Blocking user decision: none
 ```
 

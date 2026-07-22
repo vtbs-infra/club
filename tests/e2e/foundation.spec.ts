@@ -1,10 +1,9 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from '@playwright/test';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 import { buildApp } from '../../src/server/app.js';
-import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
+import type { AppDatabase, DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
   createTemporaryStorage,
   type TemporaryStorage,
@@ -17,7 +16,7 @@ let storage: TemporaryStorage;
 test.beforeAll(async () => {
   const database: DatabaseService = {
     close: () => Promise.resolve(),
-    orm: {} as PostgresJsDatabase,
+    orm: {} as AppDatabase,
     ping: () => Promise.resolve(),
   };
   storage = await createTemporaryStorage();
@@ -39,7 +38,11 @@ test.afterAll(async () => {
 test('serves the production React shell and liveness API', async ({ page, request }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Community gifts/ })).toBeVisible();
-  await expect(page.getByText('Milestone 0')).toBeVisible();
+  await page.getByRole('link', { name: 'Create account' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Join your community team.' })).toBeVisible();
+  await expect(page.getByLabel('Display name')).toBeVisible();
+  await expect(page.getByLabel('Email')).toBeVisible();
+  await expect(page.getByLabel('Password')).toBeVisible();
 
   const live = await request.get('/health/live');
   expect(live.ok()).toBe(true);

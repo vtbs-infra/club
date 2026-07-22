@@ -15,15 +15,24 @@ import { createDatabase, type DatabaseService } from './infrastructure/db/databa
 import { createLoggerOptions } from './infrastructure/logging/logger.js';
 import { LocalStorageDriver } from './infrastructure/storage/local-storage.js';
 import type { StorageDriver } from './infrastructure/storage/storage-driver.js';
+import {
+  InMemoryRateLimiter,
+  registerRequestSecurity,
+} from './infrastructure/security/request-security.js';
+import { createAuth, type AppAuth } from './modules/auth/auth.js';
+import authRoutes from './modules/auth/routes.js';
+import organizationRoutes from './modules/organizations/routes.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
 
 const APPLICATION_VERSION = '0.1.0';
 
 export interface BuildAppOptions {
+  readonly auth?: AppAuth;
   readonly clock?: Clock;
   readonly config?: AppConfig;
   readonly database?: DatabaseService;
   readonly loggerStream?: DestinationStream;
+  readonly rateLimiter?: InMemoryRateLimiter;
   readonly serveStatic?: boolean;
   readonly storage?: StorageDriver;
   readonly webRoot?: string;
@@ -45,6 +54,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const ownsDatabase = options.database === undefined;
   const storage = options.storage ?? new LocalStorageDriver(config.storageLocalPath);
   const clock = options.clock ?? new SystemClock();
+  const auth = options.auth ?? createAuth({ config, database });
+  const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const logger = pino(createLoggerOptions(config.logLevel), options.loggerStream);
 
   const app = Fastify({
@@ -63,6 +74,29 @@ export async function buildApp(options: BuildAppOptions = {}) {
     app.addHook('onClose', async () => database.close());
   }
 
+  app.setErrorHandler(async (error: FastifyError, request, reply) => {
+    const statusCode = error instanceof AppError ? error.statusCode : error.validation ? 400 : 500;
+    const code =
+      error instanceof AppError
+        ? error.code
+        : error.validation
+          ? 'VALIDATION_ERROR'
+          : 'INTERNAL_SERVER_ERROR';
+    const message =
+      error instanceof AppError
+        ? error.message
+        : error.validation
+          ? 'The request did not match the expected schema.'
+          : 'An unexpected error occurred.';
+
+    if (statusCode >= 500) request.log.error({ err: error }, 'request failed');
+    else request.log.info({ code, statusCode }, 'request rejected');
+
+    return reply.status(statusCode).send({
+      error: { code, message, requestId: request.id },
+    });
+  });
+
   await app.register(swagger, {
     openapi: {
       info: {
@@ -73,6 +107,10 @@ export async function buildApp(options: BuildAppOptions = {}) {
       openapi: '3.1.0',
     },
   });
+
+  await app.register(authRoutes, { auth });
+  registerRequestSecurity(app, { auth, clock, config, rateLimiter });
+  await app.register(organizationRoutes, { auth, database });
 
   await app.register(systemStatusRoutes, {
     clock,
@@ -119,29 +157,6 @@ export async function buildApp(options: BuildAppOptions = {}) {
         message: 'The requested resource was not found.',
         requestId: request.id,
       },
-    });
-  });
-
-  app.setErrorHandler(async (error: FastifyError, request, reply) => {
-    const statusCode = error instanceof AppError ? error.statusCode : error.validation ? 400 : 500;
-    const code =
-      error instanceof AppError
-        ? error.code
-        : error.validation
-          ? 'VALIDATION_ERROR'
-          : 'INTERNAL_SERVER_ERROR';
-    const message =
-      error instanceof AppError
-        ? error.message
-        : error.validation
-          ? 'The request did not match the expected schema.'
-          : 'An unexpected error occurred.';
-
-    if (statusCode >= 500) request.log.error({ err: error }, 'request failed');
-    else request.log.info({ code, statusCode }, 'request rejected');
-
-    return reply.status(statusCode).send({
-      error: { code, message, requestId: request.id },
     });
   });
 
