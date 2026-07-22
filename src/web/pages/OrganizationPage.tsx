@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 
 import { getCreators, getMembers, type Membership } from '../api/identity';
 import { AuthenticatedPage } from '../components/AuthenticatedPage';
@@ -65,6 +65,9 @@ function OrganizationDetails({ membership, organizationId }: OrganizationDetails
                 <span className={creator.active ? 'status-active' : 'muted'}>
                   {creator.active ? 'Active' : 'Paused'}
                 </span>
+                <Link to={`/organizations/${organizationId}/creators/${creator.id}/snapshots`}>
+                  Snapshots
+                </Link>
               </li>
             ))}
           </ul>

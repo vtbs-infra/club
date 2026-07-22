@@ -5,6 +5,7 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
     appUrl: 'http://localhost:3000',
     authSecret: 'test-secret-that-is-at-least-32-characters-long',
     bilibiliLiveSource: 'fake',
+    bilibiliRosterSource: 'fake',
     databaseUrl: 'postgres://club:club@localhost:5432/club_test',
     host: '127.0.0.1',
     logLevel: 'silent',

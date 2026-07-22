@@ -22,6 +22,13 @@
       "when": 1784728966095,
       "tag": "0002_lean_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784732681215,
+      "tag": "0003_goofy_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

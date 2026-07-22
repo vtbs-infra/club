@@ -4,10 +4,12 @@ Club is an open-source platform for Vtubers, streamers, and their
 organizations to manage Bilibili guard-gift eligibility, claims, fulfillment,
 and shipment tracking.
 
-Milestones 0 through 2 are implemented. The application now includes its
+Milestones 0 through 3 are implemented. The application now includes its
 validated runtime foundation, PostgreSQL-backed identity and tenancy, append-only
 audit records, platform-managed verification rooms, and one-time-code Bilibili
-UID binding. The approved product and architecture baseline is documented in:
+UID binding, exact month-end roster scheduling, immutable monthly snapshots,
+private gzip evidence, and late-capture approval. The approved product and
+architecture baseline is documented in:
 
 - [Product and architecture specification](docs/product-architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
@@ -110,6 +112,19 @@ and requires outbound HTTPS and WebSocket access. Tests use the deterministic
 fake source and never call Bilibili. Current protocol assumptions and
 re-verification notes are recorded in
 [`docs/integrations/bilibili.md`](docs/integrations/bilibili.md).
+
+## Monthly snapshots
+
+For every active creator, the scheduler pre-creates current and next-month runs
+using the creator's IANA timezone. Capture starts at 23:59 on the last local day
+of the month. On-time consistent attempts finalize automatically; attempts first
+started at or after 00:00 remain pending until an organization owner or
+administrator approves them. Operators can inspect runs, attempts, failure codes,
+hash evidence, retry failed captures, and handle pending approval from the
+creator's **Snapshots** link.
+
+`BILIBILI_ROSTER_SOURCE=public-web` enables the verified production roster
+adapter. Tests use the fake adapter, and no manual roster-import API or UI exists.
 
 ## Verification commands
 

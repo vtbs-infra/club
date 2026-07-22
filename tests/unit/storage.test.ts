@@ -55,4 +55,21 @@ describe('LocalStorageDriver', () => {
       await temporary.cleanup();
     }
   });
+
+  it('removes stale atomic-write objects without touching completed evidence', async () => {
+    const temporary = await createTemporaryStorage();
+    try {
+      await temporary.driver.put({ data: 'orphan', key: 'private/snapshots/.orphan.tmp' });
+      await temporary.driver.put({ data: 'evidence', key: 'private/snapshots/page-1.json.gz' });
+      expect(
+        await temporary.driver.cleanupStaleTemporaryObjects(new Date(Date.now() + 1_000)),
+      ).toBe(1);
+      await expect(temporary.driver.open('private/snapshots/.orphan.tmp')).rejects.toThrow();
+      await expect(
+        temporary.driver.open('private/snapshots/page-1.json.gz'),
+      ).resolves.toBeDefined();
+    } finally {
+      await temporary.cleanup();
+    }
+  });
 });

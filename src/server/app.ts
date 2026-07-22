@@ -25,6 +25,11 @@ import { createBindingRuntime, type BindingRuntime } from './modules/binding/bin
 import bindingRoutes from './modules/binding/routes.js';
 import organizationRoutes from './modules/organizations/routes.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
+import snapshotRoutes from './modules/snapshots/routes.js';
+import {
+  createSnapshotRuntime,
+  type SnapshotRuntime,
+} from './modules/snapshots/snapshot-runtime.js';
 import verificationRoomRoutes from './modules/verification-rooms/routes.js';
 
 const APPLICATION_VERSION = '0.1.0';
@@ -39,6 +44,7 @@ export interface BuildAppOptions {
   readonly loggerStream?: DestinationStream;
   readonly rateLimiter?: InMemoryRateLimiter;
   readonly serveStatic?: boolean;
+  readonly snapshotRuntime?: SnapshotRuntime;
   readonly startBackground?: boolean;
   readonly storage?: StorageDriver;
   readonly webRoot?: string;
@@ -65,6 +71,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
   const bindingRuntime =
     options.bindingRuntime ?? createBindingRuntime({ clock, config, database });
+  const snapshotRuntime =
+    options.snapshotRuntime ?? createSnapshotRuntime({ clock, config, database, storage });
   const logger = pino(createLoggerOptions(config.logLevel), options.loggerStream);
 
   const app = Fastify({
@@ -84,10 +92,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
     app.addHook('onClose', async () => database.close());
   }
   app.addHook('onClose', async () => bindingRuntime.close());
+  app.addHook('onClose', () => snapshotRuntime.close());
   if (options.startBackground ?? config.nodeEnv !== 'test') {
     app.addHook('onReady', async () => {
       try {
         await bindingRuntime.start();
+        await snapshotRuntime.start();
       } catch (error) {
         app.log.error({ err: error }, 'binding runtime startup failed');
       }
@@ -138,6 +148,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     service: bindingRuntime.bindings,
   });
   await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
+  await app.register(snapshotRoutes, { auth, service: snapshotRuntime.service });
 
   await app.register(systemStatusRoutes, {
     clock,

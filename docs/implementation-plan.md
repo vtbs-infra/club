@@ -39,8 +39,7 @@ At the time this plan was written:
 - No concrete shipment-tracking provider has been selected.
 - No branding, visual identity, or production domain has been selected.
 
-Milestones 0, 1, and 2 are complete. The next implementation action is
-Milestone 3.
+Milestones 0 through 3 are complete. Milestone 4 has not been started.
 
 ## 3. Non-negotiable implementation constraints
 
@@ -274,51 +273,51 @@ Before implementing the production roster adapter:
 
 ### Work
 
-- [ ] Add snapshot run, attempt, page, attempt-member, and finalized-member
+- [x] Add snapshot run, attempt, page, attempt-member, and finalized-member
       migrations.
-- [ ] Add unique indexes from the specification.
-- [ ] Add database triggers that prevent changes to members of finalized
+- [x] Add unique indexes from the specification.
+- [x] Add database triggers that prevent changes to members of finalized
       snapshots.
-- [ ] Implement creator timezone validation using IANA names.
-- [ ] Implement pure cutoff calculation with an injected clock.
-- [ ] Pre-create missing current/next monthly runs for enabled creators.
-- [ ] Implement a scheduler loop that starts due runs and recovers interrupted
+- [x] Implement creator timezone validation using IANA names.
+- [x] Implement pure cutoff calculation with an injected clock.
+- [x] Pre-create missing current/next monthly runs for enabled creators.
+- [x] Implement a scheduler loop that starts due runs and recovers interrupted
       work.
-- [ ] Define `GuardRosterSource` and normalized roster page/result contracts.
-- [ ] Implement deterministic fake roster scenarios.
-- [ ] Implement the verified production roster source.
-- [ ] Store raw bytes as private gzip objects and page metadata in PostgreSQL.
-- [ ] Hash the uncompressed bytes with SHA-256.
-- [ ] Implement bounded pagination and the full consistency checks.
-- [ ] Reject missing pages, duplicate UIDs, count drift, first-page drift,
+- [x] Define `GuardRosterSource` and normalized roster page/result contracts.
+- [x] Implement deterministic fake roster scenarios.
+- [x] Implement the verified production roster source.
+- [x] Store raw bytes as private gzip objects and page metadata in PostgreSQL.
+- [x] Hash the uncompressed bytes with SHA-256.
+- [x] Implement bounded pagination and the full consistency checks.
+- [x] Reject missing pages, duplicate UIDs, count drift, first-page drift,
       unknown tiers, and timeouts.
-- [ ] Persist normalized candidate members only after an attempt passes
+- [x] Persist normalized candidate members only after an attempt passes
       consistency checks.
-- [ ] Keep each retry in a distinct `snapshot_attempt`.
-- [ ] Classify punctuality using `capture_started_at`.
-- [ ] Auto-finalize only on-time, consistent attempts.
-- [ ] Route late, consistent attempts to `PENDING_APPROVAL`.
-- [ ] Implement owner/admin approve and reject operations without member edits.
-- [ ] Finalize by copying the accepted attempt's candidate members into the
+- [x] Keep each retry in a distinct `snapshot_attempt`.
+- [x] Classify punctuality using `capture_started_at`.
+- [x] Auto-finalize only on-time, consistent attempts.
+- [x] Route late, consistent attempts to `PENDING_APPROVAL`.
+- [x] Implement owner/admin approve and reject operations without member edits.
+- [x] Finalize by copying the accepted attempt's candidate members into the
       immutable snapshot-member table in one transaction.
-- [ ] Audit finalization and late approval.
-- [ ] Build operator run, attempt, failure, evidence metadata, and approval UI.
-- [ ] Add raw-object integrity checks and stale temporary-object cleanup.
-- [ ] Make all time-sensitive tests use the injected clock.
+- [x] Audit finalization and late approval.
+- [x] Build operator run, attempt, failure, evidence metadata, and approval UI.
+- [x] Add raw-object integrity checks and stale temporary-object cleanup.
+- [x] Make all time-sensitive tests use the injected clock.
 
 ### Exit criteria
 
-- [ ] Last-day and cross-year cutoff tests pass in multiple IANA timezones.
-- [ ] A 23:59 start and post-midnight completion remain on time for the prior
+- [x] Last-day and cross-year cutoff tests pass in multiple IANA timezones.
+- [x] A 23:59 start and post-midnight completion remain on time for the prior
       month.
-- [ ] A first request at or after 00:00 is late.
-- [ ] Pages from separate attempts cannot be combined.
-- [ ] Inconsistent attempts cannot be approved.
-- [ ] Late attempts never create members or entitlements before approval.
-- [ ] Finalized members cannot be updated or deleted even through direct
+- [x] A first request at or after 00:00 is late.
+- [x] Pages from separate attempts cannot be combined.
+- [x] Inconsistent attempts cannot be approved.
+- [x] Late attempts never create members or entitlements before approval.
+- [x] Finalized members cannot be updated or deleted even through direct
       application database access.
-- [ ] PostgreSQL contains no full raw roster JSON payload.
-- [ ] No roster-import API or UI exists.
+- [x] PostgreSQL contains no full raw roster JSON payload.
+- [x] No roster-import API or UI exists.
 
 ## 10. Milestone 4: gift campaigns and entitlement reconciliation
 
@@ -593,8 +592,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: M0 foundation, M1 authentication/tenancy, and M2 Bilibili UID binding complete
-Next milestone: M3 month-end capture and immutable snapshots
+Implementation: M0 foundation through M3 month-end snapshots complete
+Next milestone: M4 gift campaigns and entitlement reconciliation (not started)
 Blocking user decision: none
 ```
 
