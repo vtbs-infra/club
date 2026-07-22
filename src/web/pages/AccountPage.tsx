@@ -1,4 +1,5 @@
 import { AuthenticatedPage } from '../components/AuthenticatedPage';
+import { BilibiliBindingPanel } from '../components/BilibiliBindingPanel';
 
 export function AccountPage() {
   return (
@@ -21,6 +22,7 @@ export function AccountPage() {
               <strong>{identity.memberships.length}</strong>
             </div>
           </div>
+          <BilibiliBindingPanel />
         </section>
       )}
     </AuthenticatedPage>

@@ -4,9 +4,10 @@ import { signOut } from '../api/identity';
 
 interface SiteHeaderProperties {
   readonly authenticated?: boolean;
+  readonly platformAdmin?: boolean;
 }
 
-export function SiteHeader({ authenticated = false }: SiteHeaderProperties) {
+export function SiteHeader({ authenticated = false, platformAdmin = false }: SiteHeaderProperties) {
   const navigate = useNavigate();
 
   return (
@@ -22,6 +23,7 @@ export function SiteHeader({ authenticated = false }: SiteHeaderProperties) {
           <>
             <NavLink to="/organizations">Organizations</NavLink>
             <NavLink to="/account">Account</NavLink>
+            {platformAdmin ? <NavLink to="/platform/verification-rooms">Platform</NavLink> : null}
             <button
               className="button button-quiet"
               type="button"

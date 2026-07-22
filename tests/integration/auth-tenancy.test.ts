@@ -98,6 +98,9 @@ integration('authentication, tenancy, permissions, and audit', () => {
     await database.orm.execute(sql`
       TRUNCATE TABLE
         audit_logs,
+        bilibili_bindings,
+        binding_challenges,
+        verification_rooms,
         member_creator_scopes,
         creators,
         organization_members,

@@ -21,19 +21,25 @@ import {
 } from './infrastructure/security/request-security.js';
 import { createAuth, type AppAuth } from './modules/auth/auth.js';
 import authRoutes from './modules/auth/routes.js';
+import { createBindingRuntime, type BindingRuntime } from './modules/binding/binding-runtime.js';
+import bindingRoutes from './modules/binding/routes.js';
 import organizationRoutes from './modules/organizations/routes.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
+import verificationRoomRoutes from './modules/verification-rooms/routes.js';
 
 const APPLICATION_VERSION = '0.1.0';
 
 export interface BuildAppOptions {
   readonly auth?: AppAuth;
+  readonly bindingRuntime?: BindingRuntime;
+  readonly challengeLimiter?: InMemoryRateLimiter;
   readonly clock?: Clock;
   readonly config?: AppConfig;
   readonly database?: DatabaseService;
   readonly loggerStream?: DestinationStream;
   readonly rateLimiter?: InMemoryRateLimiter;
   readonly serveStatic?: boolean;
+  readonly startBackground?: boolean;
   readonly storage?: StorageDriver;
   readonly webRoot?: string;
 }
@@ -56,9 +62,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const clock = options.clock ?? new SystemClock();
   const auth = options.auth ?? createAuth({ config, database });
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
+  const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
+  const bindingRuntime =
+    options.bindingRuntime ?? createBindingRuntime({ clock, config, database });
   const logger = pino(createLoggerOptions(config.logLevel), options.loggerStream);
 
   const app = Fastify({
+    ajv: { customOptions: { removeAdditional: false } },
     genReqId: () => randomUUID(),
     logController: new LogController({ disableRequestLogging: false }),
     loggerInstance: logger,
@@ -72,6 +82,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   if (ownsDatabase) {
     app.addHook('onClose', async () => database.close());
+  }
+  app.addHook('onClose', async () => bindingRuntime.close());
+  if (options.startBackground ?? config.nodeEnv !== 'test') {
+    app.addHook('onReady', async () => {
+      try {
+        await bindingRuntime.start();
+      } catch (error) {
+        app.log.error({ err: error }, 'binding runtime startup failed');
+      }
+    });
   }
 
   app.setErrorHandler(async (error: FastifyError, request, reply) => {
@@ -111,6 +131,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(authRoutes, { auth });
   registerRequestSecurity(app, { auth, clock, config, rateLimiter });
   await app.register(organizationRoutes, { auth, database });
+  await app.register(bindingRoutes, {
+    auth,
+    challengeLimiter,
+    clock,
+    service: bindingRuntime.bindings,
+  });
+  await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
 
   await app.register(systemStatusRoutes, {
     clock,

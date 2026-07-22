@@ -4,11 +4,10 @@ Club is an open-source platform for Vtubers, streamers, and their
 organizations to manage Bilibili guard-gift eligibility, claims, fulfillment,
 and shipment tracking.
 
-Milestones 0 and 1 are implemented. The application now includes its validated
-runtime foundation plus PostgreSQL-backed accounts and sessions, organizations,
-role and creator-scoped access control, append-only audit records, and the first
-account and organization screens. The approved product and architecture
-baseline is documented in:
+Milestones 0 through 2 are implemented. The application now includes its
+validated runtime foundation, PostgreSQL-backed identity and tenancy, append-only
+audit records, platform-managed verification rooms, and one-time-code Bilibili
+UID binding. The approved product and architecture baseline is documented in:
 
 - [Product and architecture specification](docs/product-architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
@@ -95,6 +94,22 @@ The generated contract is available at `/openapi.json`.
 Email verification and automated password reset are disabled unless the full
 optional `SMTP_*` configuration in `.env.example` is supplied. When SMTP is
 configured, new registrations require email verification.
+
+## Bilibili verification rooms
+
+Sign in as the platform administrator and open
+`/platform/verification-rooms`. Add at least one Bilibili live-room ID and use
+the connectivity test before enabling it for users. A user can then open
+`/account`, request a ten-minute code, follow the assigned room link, and send
+the code as a normal live-room message. The sender UID is bound automatically;
+the challenge API accepts neither a room ID nor a UID.
+
+`BILIBILI_LIVE_SOURCE=public-web` enables the runtime adapter used by local and
+Compose deployments. It uses anonymous, in-memory Bilibili web-room credentials
+and requires outbound HTTPS and WebSocket access. Tests use the deterministic
+fake source and never call Bilibili. Current protocol assumptions and
+re-verification notes are recorded in
+[`docs/integrations/bilibili.md`](docs/integrations/bilibili.md).
 
 ## Verification commands
 

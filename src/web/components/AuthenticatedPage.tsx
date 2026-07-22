@@ -18,7 +18,10 @@ export function AuthenticatedPage({ children }: AuthenticatedPageProperties) {
   }
   return (
     <main className="shell">
-      <SiteHeader authenticated />
+      <SiteHeader
+        authenticated
+        platformAdmin={identity.data?.user.platformRole === 'PLATFORM_ADMIN'}
+      />
       {identity.isPending ? <div className="page-state">Loading your account…</div> : null}
       {identity.isError &&
       !(identity.error instanceof ApiError && identity.error.status === 401) ? (
