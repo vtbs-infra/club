@@ -6,7 +6,7 @@ import { and, asc, count, desc, eq, inArray, isNull, lte } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
-import type { DatabaseService } from '../../infrastructure/db/database.js';
+import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   creators,
   memberCreatorScopes,
@@ -100,6 +100,7 @@ export class SnapshotService {
     private readonly source: GuardRosterSource,
     private readonly clock: Clock,
     private readonly maxDurationMs = 120_000,
+    private readonly onFinalized?: (runId: string, executor: AppDatabase) => Promise<unknown>,
   ) {
     this.audit = new AuditService(database);
   }
@@ -386,6 +387,7 @@ export class SnapshotService {
               updatedAt: completedAt,
             })
             .where(eq(snapshotRuns.id, run.id));
+          await this.onFinalized?.(run.id, transaction);
           await this.audit.record(
             {
               action: 'snapshot.finalized',
@@ -481,6 +483,7 @@ export class SnapshotService {
           updatedAt: now,
         })
         .where(eq(snapshotRuns.id, run.id));
+      await this.onFinalized?.(run.id, transaction);
       await this.audit.record(
         {
           action: 'snapshot.late-approved',

@@ -3,6 +3,7 @@ import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
 import { AccountPage } from '../pages/AccountPage';
 import { AuthPage } from '../pages/AuthPage';
+import { CampaignsPage } from '../pages/CampaignsPage';
 import { FoundationPage } from '../pages/FoundationPage';
 import { OrganizationPage } from '../pages/OrganizationPage';
 import { OrganizationsPage } from '../pages/OrganizationsPage';
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
   { element: <AccountPage />, path: '/account' },
   { element: <OrganizationsPage />, path: '/organizations' },
   { element: <OrganizationPage />, path: '/organizations/:organizationId' },
+  { element: <CampaignsPage />, path: '/organizations/:organizationId/campaigns' },
   {
     element: <SnapshotsPage />,
     path: '/organizations/:organizationId/creators/:creatorId/snapshots',

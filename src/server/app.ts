@@ -23,6 +23,8 @@ import { createAuth, type AppAuth } from './modules/auth/auth.js';
 import authRoutes from './modules/auth/routes.js';
 import { createBindingRuntime, type BindingRuntime } from './modules/binding/binding-runtime.js';
 import bindingRoutes from './modules/binding/routes.js';
+import { CampaignService } from './modules/campaigns/campaign-service.js';
+import campaignRoutes from './modules/campaigns/routes.js';
 import organizationRoutes from './modules/organizations/routes.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
 import snapshotRoutes from './modules/snapshots/routes.js';
@@ -71,8 +73,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
   const bindingRuntime =
     options.bindingRuntime ?? createBindingRuntime({ clock, config, database });
+  const campaignService = new CampaignService(database, clock);
   const snapshotRuntime =
-    options.snapshotRuntime ?? createSnapshotRuntime({ clock, config, database, storage });
+    options.snapshotRuntime ??
+    createSnapshotRuntime({
+      clock,
+      config,
+      database,
+      onFinalized: (runId, executor) => campaignService.reconcileSnapshot(runId, executor),
+      storage,
+    });
   const logger = pino(createLoggerOptions(config.logLevel), options.loggerStream);
 
   const app = Fastify({
@@ -147,6 +157,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     clock,
     service: bindingRuntime.bindings,
   });
+  await app.register(campaignRoutes, { auth, service: campaignService });
   await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
   await app.register(snapshotRoutes, { auth, service: snapshotRuntime.service });
 
