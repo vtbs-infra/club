@@ -11,6 +11,7 @@ import {
   users,
 } from '../../infrastructure/db/schema.js';
 import { AuditService } from '../audit/audit-service.js';
+import { normalizeIanaTimezone } from '../snapshots/month-end.js';
 
 export interface RequestAuditContext {
   readonly actorUserId: string;
@@ -68,7 +69,7 @@ function isUniqueViolation(error: unknown): boolean {
 
 function assertIanaTimezone(timezone: string): void {
   try {
-    new Intl.DateTimeFormat('en', { timeZone: timezone }).format();
+    normalizeIanaTimezone(timezone);
   } catch {
     throw new AppError('TIMEZONE_INVALID', 'A valid IANA timezone is required.', 400);
   }

@@ -1,0 +1,33 @@
+{
+  "code": 0,
+  "message": "0",
+  "data": {
+    "info": { "num": 2, "page": 1, "now": 1 },
+    "top3": [
+      {
+        "ruid": 900000,
+        "rank": 1,
+        "accompany": 20,
+        "uinfo": {
+          "uid": 100001,
+          "base": { "name": "Sanitized Governor" },
+          "guard": { "level": 1 }
+        },
+        "score": 0
+      }
+    ],
+    "list": [
+      {
+        "ruid": 900000,
+        "rank": 4,
+        "accompany": 5,
+        "uinfo": {
+          "uid": 100004,
+          "base": { "name": "Sanitized Captain" },
+          "guard": { "level": 3 }
+        },
+        "score": 0
+      }
+    ]
+  }
+}

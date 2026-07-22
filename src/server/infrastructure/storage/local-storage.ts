@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -71,5 +71,28 @@ export class LocalStorageDriver implements StorageDriver {
     const key = `temporary/.health-${randomUUID()}`;
     await this.put({ key, data: 'ok' });
     await this.delete(key);
+  }
+
+  public async cleanupStaleTemporaryObjects(olderThan: Date): Promise<number> {
+    let removed = 0;
+    const visit = async (directory: string): Promise<void> => {
+      let entries;
+      try {
+        entries = await readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+        throw error;
+      }
+      for (const entry of entries) {
+        const path = resolve(directory, entry.name);
+        if (entry.isDirectory()) await visit(path);
+        else if (entry.name.endsWith('.tmp') && (await stat(path)).mtime < olderThan) {
+          await rm(path, { force: true });
+          removed += 1;
+        }
+      }
+    };
+    await visit(this.root);
+    return removed;
   }
 }

@@ -90,3 +90,31 @@ contract. They can change without notice or apply regional/risk-control blocks.
 Re-verify this document and the sanitized contract fixture when upgrading the
 package, when connection tests start failing, or when Bilibili changes room
 authentication. Do not move provider response fields into domain or API types.
+
+## Guard-roster source selected for monthly snapshots
+
+M3 uses the public web-room endpoint
+`/xlive/app-room/v2/guardTab/topListNew` behind `PublicWebGuardRosterSource`.
+The endpoint was probed on 2026-07-22 with the same anonymous in-memory cookie
+initialization used by the live-message adapter. A non-empty public room returned
+all declared pages successfully with a maximum page size of 30.
+
+The response exposes `info.num` (declared member total), `info.page` (declared
+page count), and `info.now` (current page). `top3` is repeated on every response;
+page one normalization includes it once, while `list` begins at rank four and
+continues across pages. Members normalize from `uinfo.uid`, `uinfo.base.name`,
+`uinfo.guard.level`, and `rank`. Raw levels 1, 2, and 3 map to governor, admiral,
+and captain. Any other level makes the whole attempt inconsistent.
+
+The provider supplies neither a server-side snapshot timestamp nor a consistency
+token. Club therefore fetches every declared page with bounded concurrency and
+then re-fetches page one. It rejects total/page drift, key first-page membership
+drift, missing or out-of-order pages, duplicate UIDs, unknown tiers, count
+mismatch, and the 120-second attempt timeout. This is evidence of one complete,
+consistent capture interval, not a claim of atomic provider state.
+
+Each original response byte sequence is SHA-256 hashed, gzip-compressed, and
+stored under `private/snapshots/{runId}/{attemptId}/page-{page}.json.gz`.
+PostgreSQL stores only evidence metadata and normalized members. The sanitized
+provider-shaped fixture is `tests/fixtures/bilibili/guard-roster-page.json`; live
+calls are excluded from CI.

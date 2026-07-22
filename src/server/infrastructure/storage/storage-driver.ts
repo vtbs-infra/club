@@ -14,4 +14,5 @@ export interface StorageDriver {
   open(key: string): Promise<ReadableStream<Uint8Array>>;
   delete(key: string): Promise<void>;
   checkHealth(): Promise<void>;
+  cleanupStaleTemporaryObjects(olderThan: Date): Promise<number>;
 }
