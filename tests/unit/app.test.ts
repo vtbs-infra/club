@@ -1,11 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
-import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
+import type { AppDatabase, DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import type { ReadinessResponse } from '../../src/shared/contracts/health.js';
 import { createTestConfig } from '../helpers/test-config.js';
@@ -26,7 +25,7 @@ afterEach(async () => {
 function fakeDatabase(ping: () => Promise<void>): DatabaseService {
   return {
     close: vi.fn(() => Promise.resolve()),
-    orm: {} as PostgresJsDatabase,
+    orm: {} as AppDatabase,
     ping,
   };
 }

@@ -12,6 +12,7 @@ const ConfigSchema = Type.Object(
     ]),
     appUrl: Type.String({ format: 'uri' }),
     databaseUrl: Type.String({ minLength: 1 }),
+    authSecret: Type.String({ minLength: 32 }),
     host: Type.String({ minLength: 1 }),
     port: Type.Integer({ minimum: 1, maximum: 65_535 }),
     storageDriver: Type.Literal('local'),
@@ -26,6 +27,17 @@ const ConfigSchema = Type.Object(
       Type.Literal('silent'),
     ]),
     trustProxy: Type.Boolean(),
+    smtp: Type.Union([
+      Type.Null(),
+      Type.Object({
+        from: Type.String({ minLength: 1 }),
+        host: Type.String({ minLength: 1 }),
+        password: Type.Union([Type.Null(), Type.String({ minLength: 1 })]),
+        port: Type.Integer({ minimum: 1, maximum: 65_535 }),
+        secure: Type.Boolean(),
+        username: Type.Union([Type.Null(), Type.String({ minLength: 1 })]),
+      }),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -34,12 +46,21 @@ export interface AppConfig {
   readonly nodeEnv: 'development' | 'test' | 'production';
   readonly appUrl: string;
   readonly databaseUrl: string;
+  readonly authSecret: string;
   readonly host: string;
   readonly port: number;
   readonly storageDriver: 'local';
   readonly storageLocalPath: string;
   readonly logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   readonly trustProxy: boolean;
+  readonly smtp: {
+    readonly from: string;
+    readonly host: string;
+    readonly password: string | null;
+    readonly port: number;
+    readonly secure: boolean;
+    readonly username: string | null;
+  } | null;
 }
 
 export class ConfigurationError extends Error {
@@ -60,24 +81,53 @@ function parseBoolean(value: string | undefined): boolean | string {
   return value;
 }
 
+function parseSmtp(env: NodeJS.ProcessEnv): AppConfig['smtp'] | Record<string, unknown> {
+  const enabled = [
+    env.SMTP_FROM,
+    env.SMTP_HOST,
+    env.SMTP_PASSWORD,
+    env.SMTP_PORT,
+    env.SMTP_SECURE,
+    env.SMTP_USERNAME,
+  ].some((value) => value !== undefined);
+  if (!enabled) return null;
+  return {
+    from: env.SMTP_FROM,
+    host: env.SMTP_HOST,
+    password: env.SMTP_PASSWORD ?? null,
+    port: parsePort(env.SMTP_PORT ?? '587'),
+    secure: parseBoolean(env.SMTP_SECURE),
+    username: env.SMTP_USERNAME ?? null,
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const candidate = {
     nodeEnv: env.NODE_ENV ?? 'development',
     appUrl: env.APP_URL ?? 'http://localhost:3000',
     databaseUrl: env.DATABASE_URL,
+    authSecret: env.BETTER_AUTH_SECRET,
     host: env.HOST ?? '0.0.0.0',
     port: parsePort(env.PORT),
     storageDriver: env.STORAGE_DRIVER ?? 'local',
     storageLocalPath: env.STORAGE_LOCAL_PATH ?? './data/club',
     logLevel: env.LOG_LEVEL ?? 'info',
     trustProxy: parseBoolean(env.TRUST_PROXY),
+    smtp: parseSmtp(env),
   };
 
-  if (!Value.Check(ConfigSchema, candidate)) {
+  const smtpCredentialsMatch =
+    candidate.smtp === null ||
+    (typeof candidate.smtp === 'object' &&
+      (candidate.smtp.username === null) === (candidate.smtp.password === null));
+  if (!Value.Check(ConfigSchema, candidate) || !smtpCredentialsMatch) {
     const details = [...Value.Errors(ConfigSchema, candidate)]
       .map((error) => `${error.path || '/'} ${error.message}`)
       .join('; ');
-    throw new ConfigurationError(`Invalid application configuration: ${details}`);
+    const smtpDetails = smtpCredentialsMatch
+      ? ''
+      : `${details ? '; ' : ''}/smtp username and password must be configured together`;
+    throw new ConfigurationError(`Invalid application configuration: ${details}${smtpDetails}`);
   }
 
   return Object.freeze(candidate);

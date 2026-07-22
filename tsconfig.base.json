@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2024",
+    "esModuleInterop": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

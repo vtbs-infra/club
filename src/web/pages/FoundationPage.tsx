@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchReadiness } from '../api/health';
+import { SiteHeader } from '../components/SiteHeader';
 
 const foundations = [
   'Fastify API with TypeBox contracts',
@@ -26,15 +27,7 @@ export function FoundationPage() {
 
   return (
     <main className="shell">
-      <nav className="nav" aria-label="Primary navigation">
-        <a className="brand" href="/" aria-label="Club home">
-          <span className="brand-mark" aria-hidden="true">
-            C
-          </span>
-          <span>Club</span>
-        </a>
-        <span className="milestone">Milestone 0</span>
-      </nav>
+      <SiteHeader />
 
       <section className="hero">
         <div className="eyebrow">OPEN-SOURCE · SELF-HOSTED</div>
@@ -61,6 +54,14 @@ export function FoundationPage() {
                 : 'The application shell is running. Check service configuration.'}
             </span>
           </div>
+        </div>
+        <div className="hero-actions">
+          <a className="button" href="/register">
+            Create account
+          </a>
+          <a className="button button-secondary" href="/login">
+            Sign in
+          </a>
         </div>
       </section>
 

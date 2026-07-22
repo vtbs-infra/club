@@ -1,14 +1,14 @@
 # Club
 
-Club is a planned open-source platform for Vtubers, streamers, and their
+Club is an open-source platform for Vtubers, streamers, and their
 organizations to manage Bilibili guard-gift eligibility, claims, fulfillment,
 and shipment tracking.
 
-Milestone 0 is implemented: the repository now contains the validated
-TypeScript toolchain, Fastify service foundation, React production shell,
-PostgreSQL migration baseline, local private-storage driver, tests, and
-container/CI setup. The approved product and architecture baseline is
-documented in:
+Milestones 0 and 1 are implemented. The application now includes its validated
+runtime foundation plus PostgreSQL-backed accounts and sessions, organizations,
+role and creator-scoped access control, append-only audit records, and the first
+account and organization screens. The approved product and architecture
+baseline is documented in:
 
 - [Product and architecture specification](docs/product-architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
@@ -38,7 +38,7 @@ architecture; the implementation plan defines delivery order and verification.
 - Redis, generic job queues, microservices, and multi-instance coordination are
   out of scope.
 
-## Milestone 0 development setup
+## Development setup
 
 Requirements:
 
@@ -56,6 +56,10 @@ pnpm db:migrate
 pnpm dev
 ```
 
+`BETTER_AUTH_SECRET` is required and must contain at least 32 characters. Set it
+to a generated secret in every deployment; do not use the development value
+from `compose.yaml` in production.
+
 The development frontend listens on `http://localhost:5173` and proxies API and
 health requests to Fastify on port 3000. Production builds are served by the
 single Fastify process:
@@ -70,6 +74,27 @@ Health and API description endpoints:
 - `GET /health/live` checks only that the application process is alive.
 - `GET /health/ready` checks PostgreSQL and private storage.
 - `GET /openapi.json` returns the generated OpenAPI document.
+
+## First administrator and organization
+
+Create the initial platform administrator after applying migrations:
+
+```text
+pnpm club admin:create --email admin@example.com --name "Platform Admin"
+```
+
+The command prompts for the password without echoing it. For unattended setup,
+provide it through `CLUB_ADMIN_PASSWORD`. The command refuses to elevate an
+existing account.
+
+The administrator can use `POST /api/v1/platform/organizations` to create an
+organization and assign its first owner. Organization owners can then manage
+members, creator scopes, and creators through `/api/v1/organizations/:orgId`.
+The generated contract is available at `/openapi.json`.
+
+Email verification and automated password reset are disabled unless the full
+optional `SMTP_*` configuration in `.env.example` is supplied. When SMTP is
+configured, new registrations require email verification.
 
 ## Verification commands
 
