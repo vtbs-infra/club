@@ -1,10 +1,11 @@
-import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   bilibiliBindings,
+  claims,
   creators,
   entitlements,
   giftCampaigns,
@@ -19,6 +20,7 @@ import {
 } from '../../infrastructure/db/schema.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { AuthSession } from '../auth/auth.js';
+import { projectGiftState, type ClaimStatus } from '../claims/claim-domain.js';
 import {
   selectEarnedPackageIds,
   validateClaimFieldSchema,
@@ -553,21 +555,28 @@ export class CampaignService {
   }
 
   public async listForUser(userId: string) {
-    const rows = await this.database.orm
-      .select({
-        campaign: giftCampaigns,
-        entitlement: entitlements,
-        giftPackage: giftPackages,
-      })
-      .from(bilibiliBindings)
-      .innerJoin(
-        entitlements,
-        and(eq(entitlements.biliUid, bilibiliBindings.biliUid), isNull(bilibiliBindings.unboundAt)),
-      )
-      .innerJoin(giftCampaigns, eq(giftCampaigns.id, entitlements.campaignId))
-      .innerJoin(giftPackages, eq(giftPackages.id, entitlements.giftPackageId))
-      .where(eq(bilibiliBindings.userId, userId))
-      .orderBy(desc(giftCampaigns.periodStart), asc(giftPackages.sortOrder));
+    const [rows, userClaims, databaseTime] = await Promise.all([
+      this.database.orm
+        .select({
+          campaign: giftCampaigns,
+          entitlement: entitlements,
+          giftPackage: giftPackages,
+        })
+        .from(bilibiliBindings)
+        .innerJoin(
+          entitlements,
+          and(
+            eq(entitlements.biliUid, bilibiliBindings.biliUid),
+            isNull(bilibiliBindings.unboundAt),
+          ),
+        )
+        .innerJoin(giftCampaigns, eq(giftCampaigns.id, entitlements.campaignId))
+        .innerJoin(giftPackages, eq(giftPackages.id, entitlements.giftPackageId))
+        .where(eq(bilibiliBindings.userId, userId))
+        .orderBy(desc(giftCampaigns.periodStart), asc(giftPackages.sortOrder)),
+      this.database.orm.select().from(claims).where(eq(claims.userId, userId)),
+      this.database.orm.execute<{ value: Date | string }>(sql`select now() as value`),
+    ]);
     const grouped = new Map<
       string,
       { campaign: (typeof rows)[number]['campaign']; entitlements: unknown[] }
@@ -577,7 +586,29 @@ export class CampaignService {
       group.entitlements.push({ ...row.entitlement, giftPackage: row.giftPackage });
       grouped.set(row.campaign.id, group);
     }
-    return [...grouped.values()];
+    return [...grouped.values()].map((group) => {
+      const claim = userClaims.find(
+        (candidate) =>
+          candidate.campaignId === group.campaign.id &&
+          candidate.biliUid ===
+            (group.entitlements[0] as { readonly biliUid: string } | undefined)?.biliUid,
+      );
+      return {
+        ...group,
+        claim: claim ? { id: claim.id, status: claim.status, version: claim.version } : null,
+        displayState: projectGiftState({
+          claimStatus: (claim?.status as ClaimStatus | undefined) ?? null,
+          deadlineAt: group.campaign.claimDeadlineAt,
+          hasRevokedEntitlement: group.entitlements.some(
+            (item) => (item as { readonly revokedAt: Date | null }).revokedAt !== null,
+          ),
+          now:
+            databaseTime[0]!.value instanceof Date
+              ? databaseTime[0]!.value
+              : new Date(databaseTime[0]!.value),
+        }),
+      };
+    });
   }
 
   public async getForUser(userId: string, campaignId: string) {

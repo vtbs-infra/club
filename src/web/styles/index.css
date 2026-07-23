@@ -801,6 +801,80 @@ h2 {
   color: #ef8d8d;
   font-size: 12px;
 }
+.address-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+.address-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.address-card > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.address-card span,
+.address-card small {
+  color: #9299b1;
+}
+.address-card .button-row {
+  margin: 4px 0 0;
+}
+.address-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.address-form h3 {
+  margin: 0;
+  font-size: 22px;
+}
+.address-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.address-fields .wide-field {
+  grid-column: 1 / -1;
+}
+.gift-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 48px;
+}
+.gift-detail-grid address {
+  color: #cdd2e2;
+  font-style: normal;
+  line-height: 1.8;
+}
+.timeline {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.timeline li {
+  display: grid;
+  gap: 4px;
+  padding: 14px 0 14px 20px;
+  border-left: 2px solid rgba(140, 229, 206, 0.28);
+}
+.timeline span,
+.timeline small {
+  color: #9299b1;
+  font-size: 12px;
+}
 
 @media (max-width: 720px) {
   .shell {
@@ -829,7 +903,9 @@ h2 {
   .workspace-grid,
   .platform-grid,
   .campaign-layout,
-  .campaign-create {
+  .campaign-create,
+  .gift-detail-grid,
+  .address-fields {
     grid-template-columns: 1fr;
   }
   .auth-layout {

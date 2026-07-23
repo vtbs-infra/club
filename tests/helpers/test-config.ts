@@ -4,6 +4,8 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
   return {
     appUrl: 'http://localhost:3000',
     authSecret: 'test-secret-that-is-at-least-32-characters-long',
+    addressEncryptionActiveKeyVersion: 1,
+    addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     bilibiliLiveSource: 'fake',
     bilibiliRosterSource: 'fake',
     databaseUrl: 'postgres://club:club@localhost:5432/club_test',

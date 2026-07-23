@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import { getMyEntitlements } from '../api/campaigns';
 
@@ -14,11 +15,11 @@ export function GiftCardsPanel() {
         <p className="muted">No gifts match your active Bilibili UID yet.</p>
       ) : null}
       <div className="gift-card-grid">
-        {gifts.data?.map(({ campaign, entitlements }) => (
+        {gifts.data?.map(({ campaign, claim, displayState, entitlements }) => (
           <article className="gift-card" key={campaign.id}>
             <div className="title-row compact-title">
               <div>
-                <span className="role-chip">{campaign.status}</span>
+                <span className="role-chip">{displayState.replaceAll('_', ' ')}</span>
                 <h3>{campaign.title}</h3>
               </div>
               <span className="muted">{campaign.periodStart.slice(0, 7)}</span>
@@ -35,6 +36,9 @@ export function GiftCardsPanel() {
               ))}
             </ul>
             <small>Claim by {new Date(campaign.claimDeadlineAt).toLocaleString()}</small>
+            <Link className="card-link" to={`/gifts/${campaign.id}`}>
+              {claim ? 'View claim' : 'View gift'}
+            </Link>
           </article>
         ))}
       </div>

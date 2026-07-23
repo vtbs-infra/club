@@ -1,5 +1,6 @@
 import { AuthenticatedPage } from '../components/AuthenticatedPage';
 import { BilibiliBindingPanel } from '../components/BilibiliBindingPanel';
+import { AddressBookPanel } from '../components/AddressBookPanel';
 import { GiftCardsPanel } from '../components/GiftCardsPanel';
 
 export function AccountPage() {
@@ -24,6 +25,7 @@ export function AccountPage() {
             </div>
           </div>
           <BilibiliBindingPanel />
+          <AddressBookPanel />
           <GiftCardsPanel />
         </section>
       )}

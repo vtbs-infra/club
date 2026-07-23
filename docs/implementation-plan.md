@@ -358,34 +358,34 @@ Goal: let recipients safely claim every package earned in a campaign.
 
 ### Work
 
-- [ ] Implement versioned AES-256-GCM key-ring configuration.
-- [ ] Add encrypted address-book migrations and CRUD.
-- [ ] Add claims, claim-entitlement links, claim-address snapshots,
+- [x] Implement versioned AES-256-GCM key-ring configuration.
+- [x] Add encrypted address-book migrations and CRUD.
+- [x] Add claims, claim-entitlement links, claim-address snapshots,
       claim-option values, status history, and idempotency migrations.
-- [ ] Generate stable human-readable claim numbers.
-- [ ] Implement claim submission in one transaction.
-- [ ] Enforce one business claim per campaign and UID.
-- [ ] Implement `SUBMITTED`, `PROCESSING`, `SHIPPED`, `COMPLETED`, and
+- [x] Generate stable human-readable claim numbers.
+- [x] Implement claim submission in one transaction.
+- [x] Enforce one business claim per campaign and UID.
+- [x] Implement `SUBMITTED`, `PROCESSING`, `SHIPPED`, `COMPLETED`, and
       `CANCELLED` transitions.
-- [ ] Support cancellation and same-record re-submission only before deadline.
-- [ ] Freeze address and option values at `PROCESSING`.
-- [ ] Evaluate deadlines from database time.
-- [ ] Implement optimistic version checks or row locks for mutable claims.
-- [ ] Add idempotent claim and batch mutation handling.
-- [ ] Audit sensitive address reads and claim transitions.
-- [ ] Build address book, gift detail, claim form, claim history, and projected
+- [x] Support cancellation and same-record re-submission only before deadline.
+- [x] Freeze address and option values at `PROCESSING`.
+- [x] Evaluate deadlines from database time.
+- [x] Implement optimistic version checks or row locks for mutable claims.
+- [x] Add idempotent claim and batch mutation handling.
+- [x] Audit sensitive address reads and claim transitions.
+- [x] Build address book, gift detail, claim form, claim history, and projected
       status cards.
-- [ ] Redact encrypted fields and plaintext values from logs and errors.
+- [x] Redact encrypted fields and plaintext values from logs and errors.
 
 ### Exit criteria
 
-- [ ] Concurrent claim requests yield one claim.
-- [ ] Reusing an idempotency key yields the original response.
-- [ ] A claim cannot consume another UID's entitlement.
-- [ ] Address-book edits do not affect claim snapshots.
-- [ ] `PROCESSING` addresses and options cannot change.
-- [ ] Lost or incorrect encryption keys fail safely without logging plaintext.
-- [ ] Waiting, processing, shipped, completed, expired, cancelled, and revoked
+- [x] Concurrent claim requests yield one claim.
+- [x] Reusing an idempotency key yields the original response.
+- [x] A claim cannot consume another UID's entitlement.
+- [x] Address-book edits do not affect claim snapshots.
+- [x] `PROCESSING` addresses and options cannot change.
+- [x] Lost or incorrect encryption keys fail safely without logging plaintext.
+- [x] Waiting, processing, shipped, completed, expired, cancelled, and revoked
       projections match the specification.
 
 ## 12. Milestone 6: fulfillment and tracking
@@ -592,8 +592,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: M0 foundation through M4 gift campaigns and entitlements complete
-Next milestone: M5 encrypted addresses and claims (not started)
+Implementation: M0 foundation through M5 encrypted addresses and claims complete
+Next milestone: M6 fulfillment and tracking (not started)
 Blocking user decision: none
 ```
 

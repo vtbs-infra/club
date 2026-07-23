@@ -589,17 +589,200 @@ export const entitlements = pgTable(
   ],
 );
 
+const encryptedColumns = {
+  ciphertext: text('ciphertext').notNull(),
+  initializationVector: text('initialization_vector').notNull(),
+  authenticationTag: text('authentication_tag').notNull(),
+  keyVersion: integer('key_version').notNull(),
+};
+
+export const addresses = pgTable(
+  'addresses',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    isDefault: boolean('is_default').default(false).notNull(),
+    ...encryptedColumns,
+    ...timestamps,
+  },
+  (table) => [
+    index('addresses_user_created_idx').on(table.userId, table.createdAt),
+    uniqueIndex('addresses_user_default_unique')
+      .on(table.userId)
+      .where(sql`${table.isDefault} = true`),
+    check('addresses_key_version_positive', sql`${table.keyVersion} > 0`),
+  ],
+);
+
+export const claims = pgTable(
+  'claims',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    claimNumber: text('claim_number').notNull(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    creatorId: uuid('creator_id')
+      .notNull()
+      .references(() => creators.id, { onDelete: 'restrict' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    biliUid: text('bili_uid').notNull(),
+    status: text('status').default('SUBMITTED').notNull(),
+    submittedAt: timestamp('submitted_at', { mode: 'date', withTimezone: true }).notNull(),
+    processingAt: timestamp('processing_at', { mode: 'date', withTimezone: true }),
+    shippedAt: timestamp('shipped_at', { mode: 'date', withTimezone: true }),
+    completedAt: timestamp('completed_at', { mode: 'date', withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { mode: 'date', withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    version: integer('version').default(1).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('claims_claim_number_unique').on(table.claimNumber),
+    uniqueIndex('claims_campaign_bili_uid_unique').on(table.campaignId, table.biliUid),
+    index('claims_organization_status_idx').on(table.organizationId, table.status),
+    index('claims_user_updated_idx').on(table.userId, table.updatedAt),
+    check(
+      'claims_status_check',
+      sql`${table.status} in ('SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
+    ),
+    check('claims_version_positive', sql`${table.version} > 0`),
+  ],
+);
+
+export const claimEntitlements = pgTable(
+  'claim_entitlements',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    claimId: uuid('claim_id')
+      .notNull()
+      .references(() => claims.id, { onDelete: 'restrict' }),
+    entitlementId: uuid('entitlement_id')
+      .notNull()
+      .references(() => entitlements.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('claim_entitlements_claim_entitlement_unique').on(
+      table.claimId,
+      table.entitlementId,
+    ),
+    uniqueIndex('claim_entitlements_entitlement_unique').on(table.entitlementId),
+  ],
+);
+
+export const claimAddresses = pgTable(
+  'claim_addresses',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    claimId: uuid('claim_id')
+      .notNull()
+      .references(() => claims.id, { onDelete: 'restrict' }),
+    sourceAddressId: uuid('source_address_id'),
+    ...encryptedColumns,
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('claim_addresses_claim_unique').on(table.claimId),
+    check('claim_addresses_key_version_positive', sql`${table.keyVersion} > 0`),
+  ],
+);
+
+export const claimOptionValues = pgTable(
+  'claim_option_values',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    claimId: uuid('claim_id')
+      .notNull()
+      .references(() => claims.id, { onDelete: 'restrict' }),
+    fieldKey: text('field_key').notNull(),
+    ...encryptedColumns,
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('claim_option_values_claim_key_unique').on(table.claimId, table.fieldKey),
+    check('claim_option_values_key_version_positive', sql`${table.keyVersion} > 0`),
+  ],
+);
+
+export const claimStatusHistory = pgTable(
+  'claim_status_history',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    claimId: uuid('claim_id')
+      .notNull()
+      .references(() => claims.id, { onDelete: 'restrict' }),
+    fromStatus: text('from_status'),
+    toStatus: text('to_status').notNull(),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    reason: text('reason'),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('claim_status_history_claim_created_idx').on(table.claimId, table.createdAt),
+    check(
+      'claim_status_history_from_check',
+      sql`${table.fromStatus} is null or ${table.fromStatus} in ('SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
+    ),
+    check(
+      'claim_status_history_to_check',
+      sql`${table.toStatus} in ('SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
+    ),
+  ],
+);
+
+export const idempotencyRecords = pgTable(
+  'idempotency_records',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    actorUserId: uuid('actor_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    scope: text('scope').notNull(),
+    key: text('key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    responseStatus: integer('response_status'),
+    responseBody: jsonb('response_body').$type<Record<string, unknown> | null>(),
+    expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('idempotency_records_actor_scope_key_unique').on(
+      table.actorUserId,
+      table.scope,
+      table.key,
+    ),
+    index('idempotency_records_expiry_idx').on(table.expiresAt),
+    check('idempotency_records_hash_check', sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
 export const schema = {
   accounts,
+  addresses,
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
+  claimAddresses,
+  claimEntitlements,
+  claimOptionValues,
+  claims,
+  claimStatusHistory,
   creators,
   entitlements,
   giftCampaigns,
   giftPackageItems,
   giftPackages,
   giftTierRules,
+  idempotencyRecords,
   memberCreatorScopes,
   organizationMembers,
   organizations,

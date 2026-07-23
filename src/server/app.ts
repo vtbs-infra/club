@@ -12,6 +12,7 @@ import { AppError } from '../shared/errors/app-error.js';
 import { loadConfig, type AppConfig } from './config/env.js';
 import { SystemClock, type Clock } from './infrastructure/clock/clock.js';
 import { createDatabase, type DatabaseService } from './infrastructure/db/database.js';
+import { EncryptionKeyRing } from './infrastructure/encryption/key-ring.js';
 import { createLoggerOptions } from './infrastructure/logging/logger.js';
 import { LocalStorageDriver } from './infrastructure/storage/local-storage.js';
 import type { StorageDriver } from './infrastructure/storage/storage-driver.js';
@@ -21,10 +22,14 @@ import {
 } from './infrastructure/security/request-security.js';
 import { createAuth, type AppAuth } from './modules/auth/auth.js';
 import authRoutes from './modules/auth/routes.js';
+import { AddressService } from './modules/addresses/address-service.js';
+import addressRoutes from './modules/addresses/routes.js';
 import { createBindingRuntime, type BindingRuntime } from './modules/binding/binding-runtime.js';
 import bindingRoutes from './modules/binding/routes.js';
 import { CampaignService } from './modules/campaigns/campaign-service.js';
 import campaignRoutes from './modules/campaigns/routes.js';
+import { ClaimService } from './modules/claims/claim-service.js';
+import claimRoutes from './modules/claims/routes.js';
 import organizationRoutes from './modules/organizations/routes.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
 import snapshotRoutes from './modules/snapshots/routes.js';
@@ -69,11 +74,14 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const storage = options.storage ?? new LocalStorageDriver(config.storageLocalPath);
   const clock = options.clock ?? new SystemClock();
   const auth = options.auth ?? createAuth({ config, database });
+  const encryption = new EncryptionKeyRing(config);
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
   const bindingRuntime =
     options.bindingRuntime ?? createBindingRuntime({ clock, config, database });
   const campaignService = new CampaignService(database, clock);
+  const addressService = new AddressService(database, encryption);
+  const claimService = new ClaimService(database, encryption);
   const snapshotRuntime =
     options.snapshotRuntime ??
     createSnapshotRuntime({
@@ -150,6 +158,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   await app.register(authRoutes, { auth });
   registerRequestSecurity(app, { auth, clock, config, rateLimiter });
+  await app.register(addressRoutes, { auth, service: addressService });
   await app.register(organizationRoutes, { auth, database });
   await app.register(bindingRoutes, {
     auth,
@@ -158,6 +167,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     service: bindingRuntime.bindings,
   });
   await app.register(campaignRoutes, { auth, service: campaignService });
+  await app.register(claimRoutes, { auth, service: claimService });
   await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
   await app.register(snapshotRoutes, { auth, service: snapshotRuntime.service });
 

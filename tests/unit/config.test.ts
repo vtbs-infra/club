@@ -56,4 +56,23 @@ describe('loadConfig', () => {
       }),
     ).toThrow(/smtp/i);
   });
+
+  it('requires a valid active encryption key in production', () => {
+    expect(() =>
+      loadConfig({
+        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        DATABASE_URL: 'postgres://localhost/club',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow(/addressEncryptionKeyRing/);
+    expect(() =>
+      loadConfig({
+        ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION: '2',
+        ADDRESS_ENCRYPTION_KEY_RING: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        DATABASE_URL: 'postgres://localhost/club',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow(/active version/);
+  });
 });
