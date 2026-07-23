@@ -29,6 +29,13 @@
       "when": 1784732681215,
       "tag": "0003_goofy_gabe_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784738884656,
+      "tag": "0004_fair_warlock",
+      "breakpoints": true
     }
   ]
 }

@@ -87,6 +87,17 @@ describe('application factory', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/live');
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/ready');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/organizations/{orgId}/campaigns',
+      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/campaigns/{campaignId}/publish',
+      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me/entitlements');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/me/campaigns/{campaignId}',
+      );
+      expect(response.json<OpenApiDocument>().paths).not.toHaveProperty('/api/v1/entitlements');
     } finally {
       await storage.cleanup();
     }

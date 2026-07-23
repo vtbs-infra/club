@@ -326,31 +326,31 @@ eligibility.
 
 ### Work
 
-- [ ] Add campaign, package, item, tier-rule, and entitlement migrations.
-- [ ] Enforce one campaign per creator and period.
-- [ ] Implement `DRAFT`, `PUBLISHED`, `CLOSED`, and `ARCHIVED`.
-- [ ] Implement `HIGHEST_ONLY` and `CUMULATIVE` as pure tested domain logic.
-- [ ] Define and validate campaign claim-field schemas.
-- [ ] Freeze eligibility rules, package contents, and claim fields on publish.
-- [ ] Permit audited display corrections and deadline extension only.
-- [ ] Prevent deadline shortening after a claim exists.
-- [ ] Implement one idempotent entitlement-reconciliation service.
-- [ ] Invoke reconciliation on campaign publish and snapshot finalization.
-- [ ] Enforce entitlement uniqueness in PostgreSQL.
-- [ ] Match entitlements to active bindings at query time, not generation time.
-- [ ] Implement audited revocation without deletion or manual grant.
-- [ ] Build campaign editor, package/rule editor, publish flow, progress view, and
+- [x] Add campaign, package, item, tier-rule, and entitlement migrations.
+- [x] Enforce one campaign per creator and period.
+- [x] Implement `DRAFT`, `PUBLISHED`, `CLOSED`, and `ARCHIVED`.
+- [x] Implement `HIGHEST_ONLY` and `CUMULATIVE` as pure tested domain logic.
+- [x] Define and validate campaign claim-field schemas.
+- [x] Freeze eligibility rules, package contents, and claim fields on publish.
+- [x] Permit audited display corrections and deadline extension only.
+- [x] Prevent deadline shortening after a claim exists.
+- [x] Implement one idempotent entitlement-reconciliation service.
+- [x] Invoke reconciliation on campaign publish and snapshot finalization.
+- [x] Enforce entitlement uniqueness in PostgreSQL.
+- [x] Match entitlements to active bindings at query time, not generation time.
+- [x] Implement audited revocation without deletion or manual grant.
+- [x] Build campaign editor, package/rule editor, publish flow, progress view, and
       recipient gift-card queries.
 
 ### Exit criteria
 
-- [ ] Publishing before or after snapshot finalization produces identical
+- [x] Publishing before or after snapshot finalization produces identical
       entitlements.
-- [ ] Repeated reconciliation is a no-op after the first successful result.
-- [ ] Users who bind after finalization see historical entitlement.
-- [ ] Tier behavior is exhaustively tested.
-- [ ] Published eligibility rules cannot be mutated.
-- [ ] There is no manual entitlement-grant path.
+- [x] Repeated reconciliation is a no-op after the first successful result.
+- [x] Users who bind after finalization see historical entitlement.
+- [x] Tier behavior is exhaustively tested.
+- [x] Published eligibility rules cannot be mutated.
+- [x] There is no manual entitlement-grant path.
 
 ## 11. Milestone 5: encrypted addresses and claims
 
@@ -592,8 +592,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: M0 foundation through M3 month-end snapshots complete
-Next milestone: M4 gift campaigns and entitlement reconciliation (not started)
+Implementation: M0 foundation through M4 gift campaigns and entitlements complete
+Next milestone: M5 encrypted addresses and claims (not started)
 Blocking user decision: none
 ```
 

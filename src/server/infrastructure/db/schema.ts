@@ -439,12 +439,167 @@ export const snapshotMembers = pgTable(
   ],
 );
 
+export interface CampaignClaimField {
+  readonly key: string;
+  readonly label: string;
+  readonly options?: readonly string[];
+  readonly required: boolean;
+  readonly type: 'TEXT' | 'LONG_TEXT' | 'SELECT';
+}
+
+export const giftCampaigns = pgTable(
+  'gift_campaigns',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    creatorId: uuid('creator_id')
+      .notNull()
+      .references(() => creators.id, { onDelete: 'restrict' }),
+    periodStart: date('period_start', { mode: 'string' }).notNull(),
+    title: text('title').notNull(),
+    description: text('description').default('').notNull(),
+    coverFileId: uuid('cover_file_id'),
+    claimStartAt: timestamp('claim_start_at', { mode: 'date', withTimezone: true }).notNull(),
+    claimDeadlineAt: timestamp('claim_deadline_at', { mode: 'date', withTimezone: true }).notNull(),
+    fulfillmentMode: text('fulfillment_mode').notNull(),
+    claimFormSchema: jsonb('claim_form_schema').$type<readonly CampaignClaimField[]>().notNull(),
+    status: text('status').default('DRAFT').notNull(),
+    publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
+    closedAt: timestamp('closed_at', { mode: 'date', withTimezone: true }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('gift_campaigns_creator_period_unique').on(table.creatorId, table.periodStart),
+    index('gift_campaigns_organization_status_idx').on(table.organizationId, table.status),
+    check(
+      'gift_campaigns_status_check',
+      sql`${table.status} in ('DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED')`,
+    ),
+    check(
+      'gift_campaigns_fulfillment_mode_check',
+      sql`${table.fulfillmentMode} in ('HIGHEST_ONLY', 'CUMULATIVE')`,
+    ),
+    check(
+      'gift_campaigns_claim_window_check',
+      sql`${table.claimDeadlineAt} > ${table.claimStartAt}`,
+    ),
+  ],
+);
+
+export const giftPackages = pgTable(
+  'gift_packages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    description: text('description').default('').notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('gift_packages_campaign_name_unique').on(table.campaignId, table.name),
+    index('gift_packages_campaign_sort_idx').on(table.campaignId, table.sortOrder),
+  ],
+);
+
+export const giftPackageItems = pgTable(
+  'gift_package_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    giftPackageId: uuid('gift_package_id')
+      .notNull()
+      .references(() => giftPackages.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    description: text('description').default('').notNull(),
+    quantity: integer('quantity').default(1).notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index('gift_package_items_package_sort_idx').on(table.giftPackageId, table.sortOrder),
+    check('gift_package_items_quantity_positive', sql`${table.quantity} > 0`),
+  ],
+);
+
+export const giftTierRules = pgTable(
+  'gift_tier_rules',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
+    tier: text('tier').notNull(),
+    giftPackageId: uuid('gift_package_id')
+      .notNull()
+      .references(() => giftPackages.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('gift_tier_rules_campaign_tier_unique').on(table.campaignId, table.tier),
+    check('gift_tier_rules_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
+  ],
+);
+
+export const entitlements = pgTable(
+  'entitlements',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    creatorId: uuid('creator_id')
+      .notNull()
+      .references(() => creators.id, { onDelete: 'restrict' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
+    snapshotMemberId: uuid('snapshot_member_id')
+      .notNull()
+      .references(() => snapshotMembers.id, { onDelete: 'restrict' }),
+    giftPackageId: uuid('gift_package_id')
+      .notNull()
+      .references(() => giftPackages.id, { onDelete: 'restrict' }),
+    biliUid: text('bili_uid').notNull(),
+    tier: text('tier').notNull(),
+    revokedAt: timestamp('revoked_at', { mode: 'date', withTimezone: true }),
+    revokedBy: uuid('revoked_by').references(() => users.id, { onDelete: 'set null' }),
+    revokeReason: text('revoke_reason'),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('entitlements_campaign_member_package_unique').on(
+      table.campaignId,
+      table.snapshotMemberId,
+      table.giftPackageId,
+    ),
+    index('entitlements_bili_uid_idx').on(table.biliUid),
+    index('entitlements_campaign_revoked_idx').on(table.campaignId, table.revokedAt),
+    check('entitlements_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
+    check(
+      'entitlements_revocation_check',
+      sql`(${table.revokedAt} is null and ${table.revokedBy} is null and ${table.revokeReason} is null) or (${table.revokedAt} is not null and ${table.revokedBy} is not null and length(${table.revokeReason}) >= 3)`,
+    ),
+  ],
+);
+
 export const schema = {
   accounts,
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
   creators,
+  entitlements,
+  giftCampaigns,
+  giftPackageItems,
+  giftPackages,
+  giftTierRules,
   memberCreatorScopes,
   organizationMembers,
   organizations,

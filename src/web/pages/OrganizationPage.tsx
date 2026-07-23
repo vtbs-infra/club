@@ -48,6 +48,11 @@ function OrganizationDetails({ membership, organizationId }: OrganizationDetails
         </div>
         <span className="role-chip">{membership.role}</span>
       </div>
+      <div className="button-row">
+        <Link className="button button-small" to={`/organizations/${organizationId}/campaigns`}>
+          Gift campaigns
+        </Link>
+      </div>
       <div className="workspace-grid">
         <section className="panel">
           <p className="panel-label">CREATORS</p>

@@ -1,6 +1,6 @@
 import type { AppConfig } from '../../config/env.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
-import type { DatabaseService } from '../../infrastructure/db/database.js';
+import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import { FakeGuardRosterSource } from '../bilibili/fake-guard-roster-source.js';
 import type { GuardRosterSource } from '../bilibili/guard-roster-source.js';
@@ -20,6 +20,7 @@ export function createSnapshotRuntime(input: {
   readonly config: AppConfig;
   readonly database: DatabaseService;
   readonly maxDurationMs?: number;
+  readonly onFinalized?: (runId: string, executor: AppDatabase) => Promise<unknown>;
   readonly source?: GuardRosterSource;
   readonly storage: StorageDriver;
 }): SnapshotRuntime {
@@ -34,6 +35,7 @@ export function createSnapshotRuntime(input: {
     source,
     input.clock,
     input.maxDurationMs,
+    input.onFinalized,
   );
   let interval: ReturnType<typeof setInterval> | null = null;
   let ticking = false;
