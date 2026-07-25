@@ -52,6 +52,12 @@ function OrganizationDetails({ membership, organizationId }: OrganizationDetails
         <Link className="button button-small" to={`/organizations/${organizationId}/campaigns`}>
           Gift campaigns
         </Link>
+        <Link
+          className="button button-secondary button-small"
+          to={`/organizations/${organizationId}/fulfillment`}
+        >
+          Fulfillment
+        </Link>
       </div>
       <div className="workspace-grid">
         <section className="panel">

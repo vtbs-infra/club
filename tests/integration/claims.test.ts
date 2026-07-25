@@ -22,14 +22,19 @@ import {
   organizations,
   snapshotMembers,
   snapshotRuns,
+  shipmentItems,
+  shipments,
   users,
   verificationRooms,
 } from '../../src/server/infrastructure/db/schema.js';
 import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/key-ring.js';
 import type { AddressPayload } from '../../src/server/modules/addresses/address-domain.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
+import type { AuthSession } from '../../src/server/modules/auth/auth.js';
 import { CampaignService } from '../../src/server/modules/campaigns/campaign-service.js';
 import { ClaimService } from '../../src/server/modules/claims/claim-service.js';
+import { FakeTrackingProvider } from '../../src/server/modules/fulfillment/fake-tracking-provider.js';
+import { FulfillmentService } from '../../src/server/modules/fulfillment/fulfillment-service.js';
 import { createTestConfig } from '../helpers/test-config.js';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -52,6 +57,8 @@ integration('encrypted addresses and claims', () => {
   let addressService: AddressService;
   let campaignService: CampaignService;
   let claimService: ClaimService;
+  let fulfillmentService: FulfillmentService;
+  let fulfillmentSession: AuthSession;
   let userId: string;
   let organizationId: string;
   let creatorId: string;
@@ -65,6 +72,11 @@ integration('encrypted addresses and claims', () => {
     addressService = new AddressService(database, keyRing);
     campaignService = new CampaignService(database, new SystemClock());
     claimService = new ClaimService(database, keyRing);
+    fulfillmentService = new FulfillmentService(
+      database,
+      keyRing,
+      new FakeTrackingProvider(new SystemClock()),
+    );
     await database.orm.execute(sql`
       TRUNCATE TABLE
         audit_logs,
@@ -113,6 +125,24 @@ integration('encrypted addresses and claims', () => {
       role: 'OWNER',
       userId,
     });
+    const [fulfillmentUser] = await database.orm
+      .insert(users)
+      .values({ email: 'fulfillment@example.com', name: 'Fulfillment User' })
+      .returning();
+    await database.orm.insert(organizationMembers).values({
+      organizationId,
+      role: 'FULFILLMENT',
+      userId: fulfillmentUser!.id,
+    });
+    fulfillmentSession = {
+      session: { userId: fulfillmentUser!.id },
+      user: {
+        email: fulfillmentUser!.email,
+        id: fulfillmentUser!.id,
+        name: fulfillmentUser!.name,
+        platformRole: 'USER',
+      },
+    } as unknown as AuthSession;
     const [creator] = await database.orm
       .insert(creators)
       .values({
@@ -155,7 +185,12 @@ integration('encrypted addresses and claims', () => {
     if (database) await database.close();
   });
 
-  async function createEligibleCampaign(input: { deadline?: Date; title: string }) {
+  async function createEligibleCampaign(input: {
+    cumulative?: boolean;
+    deadline?: Date;
+    tier?: 'CAPTAIN' | 'ADMIRAL';
+    title: string;
+  }) {
     const month = String(periodIndex++).padStart(2, '0');
     const periodStart = `2026-${month}-01`;
     const [run] = await database.orm
@@ -176,10 +211,10 @@ integration('encrypted addresses and claims', () => {
     await database.orm.insert(snapshotMembers).values({
       biliUid: 'claim-recipient-uid',
       displayNameAtSnapshot: 'Recipient',
-      rawTier: '3',
+      rawTier: input.tier === 'ADMIRAL' ? '2' : '3',
       snapshotRunId: run!.id,
       sourcePosition: 1,
-      tier: 'CAPTAIN',
+      tier: input.tier ?? 'CAPTAIN',
     });
     const campaign = await campaignService.create(
       organizationId,
@@ -192,7 +227,7 @@ integration('encrypted addresses and claims', () => {
         claimStartAt: new Date('2026-01-01T00:00:00.000Z'),
         creatorId,
         description: 'Encrypted claim integration',
-        fulfillmentMode: 'HIGHEST_ONLY',
+        fulfillmentMode: input.cumulative ? 'CUMULATIVE' : 'HIGHEST_ONLY',
         periodStart,
         title: input.title,
       },
@@ -209,8 +244,21 @@ integration('encrypted addresses and claims', () => {
               key: 'captain',
               name: `${input.title} package`,
             },
+            ...(input.cumulative
+              ? [
+                  {
+                    description: '',
+                    items: [{ description: '', name: `${input.title} bonus`, quantity: 1 }],
+                    key: 'admiral',
+                    name: `${input.title} admiral package`,
+                  },
+                ]
+              : []),
           ],
-          tierRules: [{ packageKey: 'captain', tier: 'CAPTAIN' }],
+          tierRules: [
+            { packageKey: 'captain', tier: 'CAPTAIN' },
+            ...(input.cumulative ? [{ packageKey: 'admiral', tier: 'ADMIRAL' as const }] : []),
+          ],
         },
       },
       { actorUserId: userId },
@@ -348,11 +396,26 @@ integration('encrypted addresses and claims', () => {
     expect((await campaignService.getForUser(userId, campaign.campaignId)).displayState).toBe(
       'PROCESSING',
     );
-    const shipped = await claimService.operatorTransition(
+    await expect(
+      claimService.operatorTransition(
+        claim.id,
+        { target: 'SHIPPED', version: processing.version },
+        { actorUserId: userId },
+      ),
+    ).rejects.toMatchObject({ code: 'CLAIM_SHIPMENT_ITEMS_INCOMPLETE' });
+    await fulfillmentService.createShipment(
       claim.id,
-      { target: 'SHIPPED', version: processing.version },
+      {
+        carrierCode: 'manual',
+        shipmentKey: 'frozen-box',
+        trackingNumber: 'FROZEN1',
+        trackingUrl: 'https://tracking.example.test/frozen',
+      },
       { actorUserId: userId },
     );
+    const shipped = (await claimService.listForUser(userId)).find(
+      (candidate) => candidate.id === claim.id,
+    )!;
     await claimService.userTransition(
       userId,
       claim.id,
@@ -472,5 +535,161 @@ integration('encrypted addresses and claims', () => {
       expect(error).toMatchObject({ code: 'CLAIM_ADDRESS_DECRYPTION_FAILED' });
       expect(error.message).not.toContain(originalAddress.recipientName);
     }
+  });
+
+  it('supports multiple shipments and ships only after every package is assigned', async () => {
+    const campaign = await createEligibleCampaign({
+      cumulative: true,
+      tier: 'ADMIRAL',
+      title: 'Multi shipment gift',
+    });
+    const submitted = await claimService.submit(
+      userId,
+      campaign.campaignId,
+      { addressId, optionValues: { size: 'M' } },
+      'multi-shipment-claim',
+      { actorUserId: userId },
+    );
+    const processing = await claimService.operatorTransition(
+      submitted.id,
+      { target: 'PROCESSING', version: submitted.version },
+      { actorUserId: userId },
+    );
+    await expect(
+      fulfillmentService.assertClaimAccess(fulfillmentSession, submitted.id, 'fulfillment.manage'),
+    ).resolves.toMatchObject({ organizationId });
+    await expect(
+      fulfillmentService.assertOrganizationAccess(
+        fulfillmentSession,
+        organizationId,
+        'claim.process',
+      ),
+    ).resolves.toBeDefined();
+    await expect(
+      fulfillmentService.assertOrganizationAccess(
+        fulfillmentSession,
+        organizationId,
+        'campaign.manage',
+      ),
+    ).rejects.toMatchObject({ code: 'FULFILLMENT_ACCESS_DENIED' });
+    const links = await database.orm
+      .select({ id: claimEntitlements.id })
+      .from(claimEntitlements)
+      .where(eq(claimEntitlements.claimId, submitted.id));
+    const firstShipment = await fulfillmentService.createShipment(
+      submitted.id,
+      {
+        carrierCode: 'unsupported-carrier',
+        claimEntitlementIds: [links[0]!.id],
+        shipmentKey: 'parcel-a',
+        trackingNumber: 'MULTI4',
+        trackingUrl: 'https://carrier.example.test/a',
+      },
+      { actorUserId: userId },
+    );
+    expect(firstShipment.shipment.trackingUrl).toBe('https://carrier.example.test/a');
+    expect(
+      (await claimService.listForUser(userId)).find((claim) => claim.id === submitted.id)?.status,
+    ).toBe('PROCESSING');
+    const secondShipment = await fulfillmentService.createShipment(
+      submitted.id,
+      {
+        carrierCode: 'manual',
+        claimEntitlementIds: [links[1]!.id],
+        shipmentKey: 'parcel-b',
+        trackingNumber: 'MULTI7',
+      },
+      { actorUserId: userId },
+    );
+    expect(
+      (await claimService.listForUser(userId)).find((claim) => claim.id === submitted.id)?.status,
+    ).toBe('SHIPPED');
+    expect(await fulfillmentService.listForUser(userId, submitted.id)).toHaveLength(2);
+    await expect(
+      database.orm
+        .delete(shipmentItems)
+        .where(eq(shipmentItems.shipmentId, firstShipment.shipment.id)),
+    ).rejects.toThrow();
+    const delivered = await fulfillmentService.refreshShipment(secondShipment.shipment.id, {
+      actorUserId: userId,
+    });
+    expect(delivered.status).toBe('DELIVERED');
+    const shippedClaim = (await claimService.listForUser(userId)).find(
+      (claim) => claim.id === submitted.id,
+    )!;
+    const completed = await claimService.userTransition(
+      userId,
+      submitted.id,
+      { target: 'COMPLETED', version: shippedClaim.version },
+      { actorUserId: userId },
+    );
+    expect(completed.status).toBe('COMPLETED');
+    expect(processing.status).toBe('PROCESSING');
+  });
+
+  it('imports shipment rows independently and replays by claim and shipment identity', async () => {
+    const validCampaign = await createEligibleCampaign({ title: 'CSV fulfillment gift' });
+    const submitted = await claimService.submit(
+      userId,
+      validCampaign.campaignId,
+      { addressId, optionValues: { size: 'S' } },
+      'csv-claim-key',
+      { actorUserId: userId },
+    );
+    await claimService.operatorTransition(
+      submitted.id,
+      { target: 'PROCESSING', version: submitted.version },
+      { actorUserId: userId },
+    );
+    const header = fulfillmentService.exportTemplate().split('\r\n')[0]!;
+    const csv = `${header}\r\n1,${submitted.claimNumber},csv-box,manual,CSV123,,\r\n1,CLM-MISSING,bad-box,manual,BAD123,,\r\n`;
+    const first = await fulfillmentService.importCsv(organizationId, [], csv, {
+      actorUserId: userId,
+    });
+    expect(first.results.map((row) => row.status)).toEqual(['IMPORTED', 'ERROR']);
+    const second = await fulfillmentService.importCsv(organizationId, [], csv, {
+      actorUserId: userId,
+    });
+    expect(second.results.map((row) => row.status)).toEqual(['UNCHANGED', 'ERROR']);
+    const [total] = await database.orm
+      .select({ value: count() })
+      .from(shipments)
+      .where(eq(shipments.claimId, submitted.id));
+    expect(total!.value).toBe(1);
+  });
+
+  it('exports every decrypted address with an audit record and no tracking dependency', async () => {
+    const campaign = await createEligibleCampaign({ title: 'Address export gift' });
+    const submitted = await claimService.submit(
+      userId,
+      campaign.campaignId,
+      { addressId, optionValues: { size: 'L' } },
+      'export-claim-key',
+      { actorUserId: userId },
+    );
+    await claimService.operatorTransition(
+      submitted.id,
+      { target: 'PROCESSING', version: submitted.version },
+      { actorUserId: userId },
+    );
+    const manualService = new FulfillmentService(database, keyRing, null);
+    const csv = await manualService.exportClaims(
+      organizationId,
+      [],
+      { campaignId: campaign.campaignId },
+      { actorUserId: userId },
+    );
+    expect(csv).toContain(originalAddress.recipientName);
+    expect(csv).toContain(submitted.claimNumber);
+    const auditRows = await database.orm
+      .select()
+      .from(auditLogs)
+      .where(
+        and(
+          eq(auditLogs.action, 'fulfillment.address-exported'),
+          eq(auditLogs.targetId, submitted.id),
+        ),
+      );
+    expect(auditRows).toHaveLength(1);
   });
 });

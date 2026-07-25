@@ -17,13 +17,21 @@ describe('structured logger', () => {
     const logger = pino(createLoggerOptions('info'), destination);
 
     logger.info({
-      account: { address: 'secret street', password: 'hunter2', phone: '13800000000' },
+      account: {
+        address: 'secret street',
+        csv: 'recipient,phone',
+        password: 'hunter2',
+        phone: '13800000000',
+        trackingNumber: 'TRACK-SECRET',
+      },
       req: { headers: { authorization: 'Bearer secret', cookie: 'session=secret' } },
     });
 
     expect(output).not.toContain('hunter2');
     expect(output).not.toContain('13800000000');
     expect(output).not.toContain('secret street');
+    expect(output).not.toContain('TRACK-SECRET');
+    expect(output).not.toContain('recipient,phone');
     expect(output).not.toContain('Bearer secret');
     expect(output).not.toContain('session=secret');
     expect(output).toContain('[REDACTED]');

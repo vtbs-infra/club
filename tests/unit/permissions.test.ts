@@ -35,6 +35,7 @@ const expected: Record<(typeof ORGANIZATION_ROLES)[number], readonly Organizatio
     'organization.read',
     'creator.read',
     'claim.read',
+    'claim.process',
     'fulfillment.manage',
     'recipient-address.read',
   ],

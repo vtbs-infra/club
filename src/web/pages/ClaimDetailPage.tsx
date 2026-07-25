@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 
 import { getAddresses } from '../api/addresses';
 import { getMyCampaign } from '../api/campaigns';
+import { getClaimShipments } from '../api/fulfillment';
 import {
   cancelClaim,
   confirmClaimReceipt,
@@ -36,6 +37,10 @@ function ClaimDetailCard({ claim }: { readonly claim: ClaimDetail }) {
     queryKey: ['me', 'campaigns', claim.campaignId],
   });
   const addresses = useQuery({ queryFn: getAddresses, queryKey: ['me', 'addresses'] });
+  const shipments = useQuery({
+    queryFn: () => getClaimShipments(claim.id),
+    queryKey: ['me', 'claims', claim.id, 'shipments'],
+  });
   const [addressId, setAddressId] = useState('');
   const [options, setOptions] = useState<Record<string, string>>({ ...claim.optionValues });
   const [cancelReason, setCancelReason] = useState('No longer needed');
@@ -81,6 +86,38 @@ function ClaimDetailCard({ claim }: { readonly claim: ClaimDetail }) {
             {claim.packages.map((item) => (
               <li key={item.entitlementId}>
                 <strong>{item.giftPackage.name}</strong>
+              </li>
+            ))}
+          </ul>
+          <p className="panel-label">SHIPMENTS</p>
+          {shipments.isPending ? <p className="muted">Loading tracking…</p> : null}
+          {!shipments.data?.length ? (
+            <p className="muted">No shipment has been created yet.</p>
+          ) : null}
+          <ul className="record-list">
+            {shipments.data?.map((shipment) => (
+              <li key={shipment.id}>
+                <div>
+                  <strong>{shipment.shipmentNumber}</strong>
+                  <span>
+                    {shipment.carrierCode} · {shipment.trackingNumber}
+                  </span>
+                  <small>{shipment.status}</small>
+                </div>
+                {shipment.trackingUrl ? (
+                  <a href={shipment.trackingUrl} rel="noreferrer" target="_blank">
+                    Track package
+                  </a>
+                ) : null}
+                <ol className="timeline compact-timeline">
+                  {shipment.events.map((event) => (
+                    <li key={event.id}>
+                      <strong>{event.status}</strong>
+                      <span>{new Date(event.occurredAt).toLocaleString()}</span>
+                      <small>{event.description}</small>
+                    </li>
+                  ))}
+                </ol>
               </li>
             ))}
           </ul>

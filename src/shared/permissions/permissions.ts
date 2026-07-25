@@ -54,6 +54,7 @@ export const ORGANIZATION_PERMISSION_MATRIX: Readonly<
     'organization.read',
     'creator.read',
     'claim.read',
+    'claim.process',
     'fulfillment.manage',
     'recipient-address.read',
   ]),

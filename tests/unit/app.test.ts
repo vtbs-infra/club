@@ -105,6 +105,15 @@ describe('application factory', () => {
       expect(response.json<OpenApiDocument>().paths).toHaveProperty(
         '/api/v1/organizations/{orgId}/claims/batch-processing',
       );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/organizations/{orgId}/fulfillment/claims',
+      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/claims/{claimId}/shipments',
+      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/organizations/{orgId}/shipments/import',
+      );
       expect(response.json<OpenApiDocument>().paths).not.toHaveProperty('/api/v1/entitlements');
     } finally {
       await storage.cleanup();

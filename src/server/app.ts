@@ -30,6 +30,11 @@ import { CampaignService } from './modules/campaigns/campaign-service.js';
 import campaignRoutes from './modules/campaigns/routes.js';
 import { ClaimService } from './modules/claims/claim-service.js';
 import claimRoutes from './modules/claims/routes.js';
+import {
+  createFulfillmentRuntime,
+  type FulfillmentRuntime,
+} from './modules/fulfillment/fulfillment-runtime.js';
+import fulfillmentRoutes from './modules/fulfillment/routes.js';
 import organizationRoutes from './modules/organizations/routes.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
 import snapshotRoutes from './modules/snapshots/routes.js';
@@ -48,6 +53,7 @@ export interface BuildAppOptions {
   readonly clock?: Clock;
   readonly config?: AppConfig;
   readonly database?: DatabaseService;
+  readonly fulfillmentRuntime?: FulfillmentRuntime;
   readonly loggerStream?: DestinationStream;
   readonly rateLimiter?: InMemoryRateLimiter;
   readonly serveStatic?: boolean;
@@ -82,6 +88,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const campaignService = new CampaignService(database, clock);
   const addressService = new AddressService(database, encryption);
   const claimService = new ClaimService(database, encryption);
+  const fulfillmentRuntime =
+    options.fulfillmentRuntime ?? createFulfillmentRuntime({ clock, config, database, encryption });
   const snapshotRuntime =
     options.snapshotRuntime ??
     createSnapshotRuntime({
@@ -111,11 +119,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
   }
   app.addHook('onClose', async () => bindingRuntime.close());
   app.addHook('onClose', () => snapshotRuntime.close());
+  app.addHook('onClose', () => fulfillmentRuntime.close());
   if (options.startBackground ?? config.nodeEnv !== 'test') {
     app.addHook('onReady', async () => {
       try {
         await bindingRuntime.start();
         await snapshotRuntime.start();
+        await fulfillmentRuntime.start();
       } catch (error) {
         app.log.error({ err: error }, 'binding runtime startup failed');
       }
@@ -168,6 +178,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
   await app.register(campaignRoutes, { auth, service: campaignService });
   await app.register(claimRoutes, { auth, service: claimService });
+  await app.register(fulfillmentRoutes, { auth, service: fulfillmentRuntime.service });
   await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
   await app.register(snapshotRoutes, { auth, service: snapshotRuntime.service });
 
