@@ -262,10 +262,18 @@ export async function buildApp(options: BuildAppOptions = {}) {
       const index = await readFile(join(webRoot, 'index.html'), 'utf8');
       let themedIndex = index;
       if (/<html\b/.test(index)) {
-        const appearance = await appearanceService.get();
+        let activeTheme = config.uiTheme;
+        try {
+          activeTheme = (await appearanceService.get()).activeTheme;
+        } catch (error) {
+          request.log.warn(
+            { err: error },
+            'appearance override unavailable; serving deployment theme',
+          );
+        }
         themedIndex = /data-ui-theme="[^"]*"/.test(index)
-          ? index.replace(/data-ui-theme="[^"]*"/, `data-ui-theme="${appearance.activeTheme}"`)
-          : index.replace(/<html\b/, `<html data-ui-theme="${appearance.activeTheme}"`);
+          ? index.replace(/data-ui-theme="[^"]*"/, `data-ui-theme="${activeTheme}"`)
+          : index.replace(/<html\b/, `<html data-ui-theme="${activeTheme}"`);
       }
       return reply
         .header('cache-control', 'no-store')

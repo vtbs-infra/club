@@ -14,6 +14,12 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 let baseUrl: string;
 let storage: TemporaryStorage;
 
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript({
+    content: "window.localStorage.setItem('club-language', 'en');",
+  });
+});
+
 test.beforeAll(async () => {
   const database: DatabaseService = {
     close: () => Promise.resolve(),
@@ -39,6 +45,7 @@ test.afterAll(async () => {
 
 test('serves the production React shell and liveness API', async ({ page, request }) => {
   await page.goto(baseUrl);
+  await expect(page.locator('html')).toHaveAttribute('data-ui-theme', 'archive');
   await expect(page.getByRole('heading', { name: /Community gifts/ })).toBeVisible();
   await page.getByRole('link', { name: 'Create account' }).first().click();
   await expect(page.getByRole('heading', { name: 'Join your community team.' })).toBeVisible();
