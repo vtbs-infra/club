@@ -61,9 +61,9 @@ function historyTimestamp(value: unknown): Date | null {
 
 function historyMessages(value: unknown): PublicWebHistoryMessage[] {
   if (!isRecord(value) || !isRecord(value.data)) return [];
-  const admin = Array.isArray(value.data.admin) ? value.data.admin : [];
-  const room = Array.isArray(value.data.room) ? value.data.room : [];
-  return [...admin, ...room].filter(isRecord);
+  const admin: unknown[] = Array.isArray(value.data.admin) ? (value.data.admin as unknown[]) : [];
+  const room: unknown[] = Array.isArray(value.data.room) ? (value.data.room as unknown[]) : [];
+  return admin.concat(room).filter(isRecord);
 }
 
 export function normalizePublicWebDanmaku(
@@ -166,10 +166,11 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
     }
     await this.initializeClient();
     const room = await this.client.liveRoomInit({ id: requestedRoomId });
-    if (room.code !== 0 || !room.data?.room_id) {
+    const roomData: unknown = room.data;
+    const canonicalRoomId = Number(isRecord(roomData) ? roomData.room_id : Number.NaN);
+    if (room.code !== 0 || !Number.isSafeInteger(canonicalRoomId) || canonicalRoomId <= 0) {
       throw new Error(`Bilibili room lookup failed with code ${room.code}.`);
     }
-    const canonicalRoomId = room.data.room_id;
     const danmaku = await this.client.xliveGetDanmuInfo({ id: canonicalRoomId });
     const danmakuData: unknown = danmaku.data;
     if (danmaku.code !== 0 || !isDanmakuConfiguration(danmakuData)) {
