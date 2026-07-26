@@ -387,6 +387,42 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     expect(binding).toBeUndefined();
   });
 
+  it('rejects replayed proof messages from before challenge creation', async () => {
+    await register('Erin', 'erin@example.com');
+    const erinCookie = await signIn('erin@example.com');
+    const issued = await issue(erinCookie, '192.0.2.41');
+    expect(issued.statusCode, issued.body).toBe(201);
+    const challenge = issued.json<ChallengeResponse>();
+    const roomId = challenge.room.link.split('/').at(-1)!;
+    const [stored] = await database.orm
+      .select({ createdAt: bindingChallenges.createdAt })
+      .from(bindingChallenges)
+      .where(eq(bindingChallenges.id, challenge.id))
+      .limit(1);
+    if (!stored) throw new Error('Binding challenge was not persisted.');
+
+    await source.emitMessage({
+      biliDisplayName: 'Replayed history user',
+      biliUid: '555555555',
+      eventId: 'pre-challenge-history-event',
+      message: challenge.code,
+      occurredAt: new Date(stored.createdAt.getTime() - 10_000),
+      roomId,
+    });
+    const state = await app.inject({
+      headers: { cookie: erinCookie },
+      method: 'GET',
+      url: '/api/v1/me/bilibili-challenges/current',
+    });
+    expect(state.json()).toMatchObject({ status: 'ACTIVE' });
+    const [binding] = await database.orm
+      .select({ id: bilibiliBindings.id })
+      .from(bilibiliBindings)
+      .where(eq(bilibiliBindings.biliUid, '555555555'))
+      .limit(1);
+    expect(binding).toBeUndefined();
+  });
+
   it('lets a platform administrator remove a binding with an audited reason', async () => {
     const issued = await issue(bobCookie, '192.0.2.50');
     expect(issued.statusCode, issued.body).toBe(201);

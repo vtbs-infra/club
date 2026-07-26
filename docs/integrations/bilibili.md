@@ -11,8 +11,10 @@ interfaces are stable.
 M2 uses `bilibili-live-danmaku` 0.7.16 behind
 `PublicWebLiveMessageSource`. The package is MIT-licensed, implemented for
 browser and server JavaScript, and exposes the room lookup, danmaku-token, WebSocket,
-heartbeat, zlib, and Brotli behavior needed by the adapter. Its source and API
-examples are available in the
+heartbeat, zlib, and Brotli behavior needed by the adapter. The adapter also polls
+the public recent-message endpoint while a room is needed because messages sent to
+an offline room can appear in recent history without being delivered through the
+anonymous WebSocket connection. Its source and API examples are available in the
 [`Minteea/bilibili-live-danmaku`](https://github.com/Minteea/bilibili-live-danmaku)
 repository.
 
@@ -35,7 +37,9 @@ The following was exercised from Node.js 24 against a currently live room on
 3. Request the room's current danmaku host list and authentication token.
 4. Connect to the selected `wss://<host>/sub` endpoint with protocol version 3.
 5. Receive `CONNECT_SUCCESS`, followed by a `DANMU_MSG` event.
-6. Confirm, without retaining the observed user data, that the message carried
+6. Poll recent room messages every two seconds as a fallback and deduplicate
+   provider entries with deterministic event IDs.
+7. Confirm, without retaining the observed user data, that the message carried
    a positive numeric UID and string message content.
 
 The installed client sends application heartbeat packets on the live protocol.
@@ -76,6 +80,10 @@ UIDs are discarded.
 
 - One `RoomConnectionManager` entry exists per room needed by an unexpired
   challenge.
+- Recent-message polling runs only for the lifetime of that managed connection.
+- A recent message must have occurred after the matching challenge was created;
+  the one-second comparison tolerance accounts for provider timestamps that omit
+  milliseconds.
 - Authentication failure, network close, and decoding failure mark the room
   unhealthy and use bounded exponential reconnect delays.
 - A short idle grace period avoids reconnect churn between adjacent challenges.

@@ -1,6 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 
 import { signOut } from '../api/identity';
+import { useI18n } from '../i18n/context';
 
 interface SiteHeaderProperties {
   readonly authenticated?: boolean;
@@ -9,6 +10,7 @@ interface SiteHeaderProperties {
 
 export function SiteHeader({ authenticated = false, platformAdmin = false }: SiteHeaderProperties) {
   const navigate = useNavigate();
+  const { language, toggleLanguage } = useI18n();
 
   return (
     <header className="nav">
@@ -19,6 +21,14 @@ export function SiteHeader({ authenticated = false, platformAdmin = false }: Sit
         <span>Club</span>
       </Link>
       <nav className="nav-links" aria-label="Primary navigation">
+        <button
+          aria-label={language === 'zh-CN' ? '切换到英文' : 'Switch to Chinese'}
+          className="language-toggle"
+          onClick={toggleLanguage}
+          type="button"
+        >
+          {language === 'zh-CN' ? 'EN' : '中文'}
+        </button>
         {authenticated ? (
           <>
             <NavLink to="/organizations">Organizations</NavLink>
