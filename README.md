@@ -1,8 +1,14 @@
 # Club
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Club is an open-source platform for Vtubers, streamers, and their
 organizations to manage Bilibili guard-gift eligibility, claims, fulfillment,
 and shipment tracking.
+
+The web interface starts in Simplified Chinese by default. Use the `EN/中文`
+button in the global navigation to switch languages; the browser remembers the
+selection.
 
 The planned product is implemented end to end: PostgreSQL-backed identity and
 tenancy, append-only audit records, platform-managed Bilibili UID binding,

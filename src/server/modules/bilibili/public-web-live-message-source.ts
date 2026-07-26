@@ -91,11 +91,11 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
       throw new Error('Bilibili room IDs must be positive integers.');
     }
     await this.initializeClient();
-    const room = await this.client.xliveGetInfoByRoom({ room_id: requestedRoomId });
-    if (room.code !== 0 || !room.data?.room_info?.room_id) {
+    const room = await this.client.liveRoomInit({ id: requestedRoomId });
+    if (room.code !== 0 || !room.data?.room_id) {
       throw new Error(`Bilibili room lookup failed with code ${room.code}.`);
     }
-    const canonicalRoomId = room.data.room_info.room_id;
+    const canonicalRoomId = room.data.room_id;
     const danmaku = await this.client.xliveGetDanmuInfo({ id: canonicalRoomId });
     const danmakuData: unknown = danmaku.data;
     if (danmaku.code !== 0 || !isDanmakuConfiguration(danmakuData)) {

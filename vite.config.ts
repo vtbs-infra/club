@@ -10,9 +10,11 @@ export default defineConfig({
     outDir: '../../dist/web',
   },
   server: {
+    host: '0.0.0.0',
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api/auth': 'http://localhost:3000',
+      '/api/v1': 'http://localhost:3000',
       '/health': 'http://localhost:3000',
       '/openapi.json': 'http://localhost:3000',
     },

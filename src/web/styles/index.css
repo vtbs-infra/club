@@ -135,6 +135,19 @@ body::after {
   color: #b8bed2;
   font-size: 14px;
 }
+.language-toggle {
+  min-width: 44px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: #dfe3f3;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+.language-toggle:hover {
+  border-color: rgba(140, 229, 206, 0.45);
+  color: #8ce5ce;
+}
 .nav-links a:not(.button):hover,
 .nav-links a.active {
   color: #f6f7ff;

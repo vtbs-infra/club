@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 
+import { I18nProvider } from '../i18n/I18nProvider';
 import { AccountPage } from '../pages/AccountPage';
 import { AnnouncementsPage } from '../pages/AnnouncementsPage';
 import { AuthPage } from '../pages/AuthPage';
@@ -52,8 +53,10 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <I18nProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </I18nProvider>
   );
 }
