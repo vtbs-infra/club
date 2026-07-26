@@ -69,6 +69,15 @@ export interface GiftCampaignCard {
       readonly name: string;
     };
   }[];
+  readonly claim: { readonly id: string; readonly status: string; readonly version: number } | null;
+  readonly displayState:
+    | 'WAITING_TO_CLAIM'
+    | 'PROCESSING'
+    | 'SHIPPED'
+    | 'COMPLETED'
+    | 'EXPIRED'
+    | 'CANCELLED'
+    | 'REVOKED';
 }
 
 export const getCampaigns = (organizationId: string) =>
@@ -108,3 +117,6 @@ export const transitionCampaign = (campaignId: string, action: 'archive' | 'clos
   });
 
 export const getMyEntitlements = () => apiRequest<GiftCampaignCard[]>('/api/v1/me/entitlements');
+
+export const getMyCampaign = (campaignId: string) =>
+  apiRequest<GiftCampaignCard>(`/api/v1/me/campaigns/${campaignId}`);

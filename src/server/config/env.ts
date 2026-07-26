@@ -13,6 +13,8 @@ const ConfigSchema = Type.Object(
     appUrl: Type.String({ format: 'uri' }),
     databaseUrl: Type.String({ minLength: 1 }),
     authSecret: Type.String({ minLength: 32 }),
+    addressEncryptionActiveKeyVersion: Type.Integer({ minimum: 1 }),
+    addressEncryptionKeyRing: Type.String({ minLength: 1 }),
     bilibiliLiveSource: Type.Union([Type.Literal('fake'), Type.Literal('public-web')]),
     bilibiliRosterSource: Type.Union([Type.Literal('fake'), Type.Literal('public-web')]),
     host: Type.String({ minLength: 1 }),
@@ -49,6 +51,8 @@ export interface AppConfig {
   readonly appUrl: string;
   readonly databaseUrl: string;
   readonly authSecret: string;
+  readonly addressEncryptionActiveKeyVersion: number;
+  readonly addressEncryptionKeyRing: string;
   readonly bilibiliLiveSource: 'fake' | 'public-web';
   readonly bilibiliRosterSource: 'fake' | 'public-web';
   readonly host: string;
@@ -85,6 +89,19 @@ function parseBoolean(value: string | undefined): boolean | string {
   return value;
 }
 
+function validEncryptionKeyRing(value: unknown, activeVersion: unknown): boolean {
+  if (typeof value !== 'string' || typeof activeVersion !== 'number') return false;
+  const versions = new Set<number>();
+  for (const entry of value.split(',')) {
+    const match = /^(\d+):([A-Za-z0-9+/]+={0,2})$/.exec(entry.trim());
+    if (!match || Buffer.from(match[2]!, 'base64').length !== 32) return false;
+    const version = Number(match[1]);
+    if (!Number.isInteger(version) || version < 1 || versions.has(version)) return false;
+    versions.add(version);
+  }
+  return versions.has(activeVersion);
+}
+
 function parseSmtp(env: NodeJS.ProcessEnv): AppConfig['smtp'] | Record<string, unknown> {
   const enabled = [
     env.SMTP_FROM,
@@ -107,11 +124,15 @@ function parseSmtp(env: NodeJS.ProcessEnv): AppConfig['smtp'] | Record<string, u
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const nodeEnv = env.NODE_ENV ?? 'development';
+  const developmentKey = '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
   const candidate = {
     nodeEnv,
     appUrl: env.APP_URL ?? 'http://localhost:3000',
     databaseUrl: env.DATABASE_URL,
     authSecret: env.BETTER_AUTH_SECRET,
+    addressEncryptionActiveKeyVersion: Number(env.ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION ?? '1'),
+    addressEncryptionKeyRing:
+      env.ADDRESS_ENCRYPTION_KEY_RING ?? (nodeEnv === 'production' ? undefined : developmentKey),
     bilibiliLiveSource: env.BILIBILI_LIVE_SOURCE ?? (nodeEnv === 'test' ? 'fake' : 'public-web'),
     bilibiliRosterSource:
       env.BILIBILI_ROSTER_SOURCE ?? (nodeEnv === 'test' ? 'fake' : 'public-web'),
@@ -128,14 +149,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     candidate.smtp === null ||
     (typeof candidate.smtp === 'object' &&
       (candidate.smtp.username === null) === (candidate.smtp.password === null));
-  if (!Value.Check(ConfigSchema, candidate) || !smtpCredentialsMatch) {
+  const encryptionKeysValid = validEncryptionKeyRing(
+    candidate.addressEncryptionKeyRing,
+    candidate.addressEncryptionActiveKeyVersion,
+  );
+  if (!Value.Check(ConfigSchema, candidate) || !smtpCredentialsMatch || !encryptionKeysValid) {
     const details = [...Value.Errors(ConfigSchema, candidate)]
       .map((error) => `${error.path || '/'} ${error.message}`)
       .join('; ');
     const smtpDetails = smtpCredentialsMatch
       ? ''
       : `${details ? '; ' : ''}/smtp username and password must be configured together`;
-    throw new ConfigurationError(`Invalid application configuration: ${details}${smtpDetails}`);
+    const encryptionDetails = encryptionKeysValid
+      ? ''
+      : `${details || smtpDetails ? '; ' : ''}/addressEncryptionKeyRing requires unique versioned 32-byte base64 keys and an active version`;
+    throw new ConfigurationError(
+      `Invalid application configuration: ${details}${smtpDetails}${encryptionDetails}`,
+    );
   }
 
   return Object.freeze(candidate);

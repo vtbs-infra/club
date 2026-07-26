@@ -11,6 +11,7 @@ import {
 import { createTestConfig } from '../helpers/test-config.js';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
+let baseUrl: string;
 let storage: TemporaryStorage;
 
 test.beforeAll(async () => {
@@ -28,7 +29,7 @@ test.beforeAll(async () => {
     storage: storage.driver,
     webRoot: resolve('dist/web'),
   });
-  await app.listen({ host: '127.0.0.1', port: 3000 });
+  baseUrl = await app.listen({ host: '127.0.0.1', port: 0 });
 });
 
 test.afterAll(async () => {
@@ -37,7 +38,7 @@ test.afterAll(async () => {
 });
 
 test('serves the production React shell and liveness API', async ({ page, request }) => {
-  await page.goto('/');
+  await page.goto(baseUrl);
   await expect(page.getByRole('heading', { name: /Community gifts/ })).toBeVisible();
   await page.getByRole('link', { name: 'Create account' }).first().click();
   await expect(page.getByRole('heading', { name: 'Join your community team.' })).toBeVisible();
@@ -45,7 +46,7 @@ test('serves the production React shell and liveness API', async ({ page, reques
   await expect(page.getByLabel('Email')).toBeVisible();
   await expect(page.getByLabel('Password')).toBeVisible();
 
-  const live = await request.get('/health/live');
+  const live = await request.get(`${baseUrl}/health/live`);
   expect(live.ok()).toBe(true);
   await expect(live.json()).resolves.toMatchObject({ status: 'ok', version: '0.1.0' });
 });

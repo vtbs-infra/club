@@ -13,6 +13,11 @@ const REDACTED_PATHS = [
   '*.secret',
   '*.databaseUrl',
   '*.dataEncryptionKeys',
+  '*.addressEncryptionKeyRing',
+  '*.recipientName',
+  '*.detailedAddress',
+  '*.postalCode',
+  '*.userNote',
 ] as const;
 
 export function createLoggerOptions(level: string): LoggerOptions {
