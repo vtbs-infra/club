@@ -23,8 +23,9 @@ export function SiteHeader({ authenticated = false, platformAdmin = false }: Sit
           <>
             <NavLink to="/organizations">Organizations</NavLink>
             <NavLink to="/claims">Claims</NavLink>
+            <NavLink to="/announcements">Notices</NavLink>
             <NavLink to="/account">Account</NavLink>
-            {platformAdmin ? <NavLink to="/platform/verification-rooms">Platform</NavLink> : null}
+            {platformAdmin ? <NavLink to="/platform/operations">Platform</NavLink> : null}
             <button
               className="button button-quiet"
               type="button"

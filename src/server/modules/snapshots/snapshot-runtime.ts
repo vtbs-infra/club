@@ -11,6 +11,7 @@ export interface SnapshotRuntime {
   readonly service: SnapshotService;
   readonly source: GuardRosterSource;
   close(): void;
+  getStatus(): { readonly lastTickAt: Date | null; readonly running: boolean };
   start(): Promise<void>;
   tick(): Promise<void>;
 }
@@ -39,6 +40,7 @@ export function createSnapshotRuntime(input: {
   );
   let interval: ReturnType<typeof setInterval> | null = null;
   let ticking = false;
+  let lastTickAt: Date | null = null;
   const tick = async () => {
     if (ticking) return;
     ticking = true;
@@ -46,6 +48,7 @@ export function createSnapshotRuntime(input: {
       await service.precreateRuns();
       await service.runDue();
     } finally {
+      lastTickAt = input.clock.now();
       ticking = false;
     }
   };
@@ -56,6 +59,7 @@ export function createSnapshotRuntime(input: {
       if (interval) clearInterval(interval);
       interval = null;
     },
+    getStatus: () => ({ lastTickAt, running: interval !== null }),
     async start() {
       if (interval) return;
       await input.storage.cleanupStaleTemporaryObjects(

@@ -428,27 +428,27 @@ Goal: complete in-product communication and make the single process observable.
 
 ### Work
 
-- [ ] Add announcements and read-receipt migrations.
-- [ ] Implement platform, organization, creator, and campaign visibility rules.
-- [ ] Implement pinning, severity, publish time, and expiry.
-- [ ] Build recipient notice center and unread state.
-- [ ] Prioritize expiring gifts, shipment changes, unread creator notices, and
+- [x] Add announcements and read-receipt migrations.
+- [x] Implement platform, organization, creator, and campaign visibility rules.
+- [x] Implement pinning, severity, publish time, and expiry.
+- [x] Build recipient notice center and unread state.
+- [x] Prioritize expiring gifts, shipment changes, unread creator notices, and
       pinned platform notices on the dashboard.
-- [ ] Build platform and organization announcement editors.
-- [ ] Build audit-log views with strict address and credential redaction.
-- [ ] Build system status for database, storage, scheduler, verification rooms,
+- [x] Build platform and organization announcement editors.
+- [x] Build audit-log views with strict address and credential redaction.
+- [x] Build system status for database, storage, scheduler, verification rooms,
       snapshots, and optional tracking provider.
-- [ ] Expose only sanitized health detail to ordinary organization roles.
-- [ ] Add integrity warnings for missing raw snapshot objects.
+- [x] Expose only sanitized health detail to ordinary organization roles.
+- [x] Add integrity warnings for missing raw snapshot objects.
 
 ### Exit criteria
 
-- [ ] Every announcement scope has tested recipient visibility.
-- [ ] Cross-organization announcement leakage is impossible.
-- [ ] Read state works without real-time push infrastructure.
-- [ ] Operators can diagnose failed captures and room connections without
+- [x] Every announcement scope has tested recipient visibility.
+- [x] Cross-organization announcement leakage is impossible.
+- [x] Read state works without real-time push infrastructure.
+- [x] Operators can diagnose failed captures and room connections without
       reading application logs.
-- [ ] System status does not reveal secrets.
+- [x] System status does not reveal secrets.
 
 ## 14. Milestone 8: hardening, recovery, and release
 
@@ -592,8 +592,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: M0 foundation through M6 fulfillment and tracking complete
-Next milestone: M7 announcements and operational visibility (not started)
+Implementation: M0 foundation through M7 announcements and operational visibility complete
+Next milestone: M8 hardening, recovery, and release (not started)
 Blocking user decision: none
 ```
 

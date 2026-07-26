@@ -58,6 +58,20 @@ function OrganizationDetails({ membership, organizationId }: OrganizationDetails
         >
           Fulfillment
         </Link>
+        <Link
+          className="button button-secondary button-small"
+          to={`/organizations/${organizationId}/operations`}
+        >
+          Operations
+        </Link>
+        {membership.role === 'OWNER' || membership.role === 'ADMIN' ? (
+          <Link
+            className="button button-secondary button-small"
+            to={`/organizations/${organizationId}/announcements`}
+          >
+            Announcements
+          </Link>
+        ) : null}
       </div>
       <div className="workspace-grid">
         <section className="panel">
