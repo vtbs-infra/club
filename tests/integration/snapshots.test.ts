@@ -365,4 +365,38 @@ integration('month-end snapshot capture', () => {
       failureCode: 'CAPTURE_TIMEOUT',
     });
   });
+
+  it('rolls back finalized members when termination happens during finalization', async () => {
+    const [creator] = await database.orm
+      .insert(creators)
+      .values({
+        bilibiliUid: 'termination-creator',
+        displayName: 'Termination Creator',
+        organizationId,
+        roomId: 'termination-room',
+        timezone: 'Asia/Shanghai',
+      })
+      .returning({ id: creators.id });
+    const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));
+    const source = new FakeGuardRosterSource();
+    source.setScenario(buildFakeRosterScenario([member('termination-member', 1)]));
+    const service = new SnapshotService(database, storage.driver, source, clock, 120_000, () =>
+      Promise.reject(new Error('simulated termination during finalization')),
+    );
+    await service.precreateRuns();
+    clock.current = new Date('2026-07-31T15:59:00.000Z');
+    const run = await julyRun(creator!.id);
+    await service.capture(run.id);
+    const detail = await service.getDetail(run.id);
+    expect(detail.run.status).toBe('FAILED');
+    expect(detail.attempts[0]).toMatchObject({
+      consistencyStatus: 'INCONSISTENT',
+      failureCode: 'SOURCE_FAILURE',
+    });
+    const [members] = await database.orm
+      .select({ value: count() })
+      .from(snapshotMembers)
+      .where(eq(snapshotMembers.snapshotRunId, run.id));
+    expect(members?.value).toBe(0);
+  });
 });

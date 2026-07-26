@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Readable } from 'node:stream';
 
 import { InvalidStorageKeyError } from '../../src/server/infrastructure/storage/local-storage.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
@@ -68,6 +69,32 @@ describe('LocalStorageDriver', () => {
       await expect(
         temporary.driver.open('private/snapshots/page-1.json.gz'),
       ).resolves.toBeDefined();
+    } finally {
+      await temporary.cleanup();
+    }
+  });
+
+  it('leaves no visible object when the process input stream fails mid-write', async () => {
+    const temporary = await createTemporaryStorage();
+    try {
+      const interrupted = new Readable({
+        read() {
+          this.push('partial snapshot bytes');
+          this.destroy(new Error('simulated process termination'));
+        },
+      });
+      await expect(
+        temporary.driver.put({
+          data: interrupted,
+          key: 'private/snapshots/interrupted/page-1.json.gz',
+        }),
+      ).rejects.toThrow('simulated process termination');
+      await expect(
+        temporary.driver.open('private/snapshots/interrupted/page-1.json.gz'),
+      ).rejects.toThrow();
+      expect(
+        await temporary.driver.cleanupStaleTemporaryObjects(new Date(Date.now() + 1_000)),
+      ).toBe(0);
     } finally {
       await temporary.cleanup();
     }
