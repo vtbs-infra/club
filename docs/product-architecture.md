@@ -87,7 +87,7 @@ club-app (one active Node.js process)
   - business modules
   |
   +--> PostgreSQL
-  +--> private local storage or configured S3-compatible storage
+  +--> private local storage
   +--> Bilibili APIs and live WebSocket endpoints
   +--> optional tracking providers
 ```
@@ -983,20 +983,20 @@ interface StorageDriver {
 }
 ```
 
-The default local driver stores gift images, announcement attachments, raw
-snapshot pages, and temporary exports on a persistent volume. An S3-compatible
-driver is configurable but MinIO is not a required service.
+The current local driver stores raw snapshot pages and temporary health/export
+objects on a persistent volume. Gift images, announcement attachments, and an
+S3-compatible driver are not part of this release.
 
 Logical namespaces are:
 
 ```text
-public/gifts/
 private/snapshots/
-private/exports/
 temporary/
 ```
 
-Private objects are returned only through permission-checked API routes.
+Private raw objects are never mounted by the web server. Permission-checked
+snapshot APIs expose normalized metadata and integrity results, not object
+bytes.
 
 ## 21. Security and audit
 
@@ -1004,10 +1004,11 @@ Session security includes HTTP-only cookies, Secure cookies in production,
 SameSite configuration, PostgreSQL-backed sessions, rate limits, Origin checks,
 and CSRF protection.
 
-Application-level AES-256-GCM encryption covers recipient addresses, Bilibili
-credentials, and tracking-provider secrets. Records store ciphertext, IV,
-authentication tag, and key version; master keys live only in deployment
-configuration. Key rotation must be possible by retaining a key ring.
+Application-level AES-256-GCM encryption covers recipient addresses. Records
+store ciphertext, IV, authentication tag, and key version; master keys live
+only in deployment configuration. The current anonymous Bilibili adapters and
+manual tracking mode do not store provider credentials. Key rotation remains
+possible by retaining a versioned key ring.
 
 All organization data access checks both organization membership and optional
 creator scope. Full address decryption is limited to fulfillment-capable roles.
@@ -1015,9 +1016,9 @@ creator scope. Full address decryption is limited to fulfillment-capable roles.
 Audit events are append-only and include actor, organization, creator where
 applicable, action, target, before/after summary, request ID, timestamp, IP, and
 reason when required. Audit is mandatory for binding changes, permissions,
-integration credentials, snapshot finalization and approval, campaign publish,
+snapshot finalization and approval, campaign publish,
 entitlement revocation, address access/export, claim transitions, shipments,
-announcement publishing, and raw-evidence downloads.
+and announcement publishing.
 
 Structured logs redact cookies, authorization headers, challenge codes, phone
 numbers, addresses, integration credentials, and database URLs.
@@ -1033,20 +1034,20 @@ Core configuration:
 ```text
 APP_URL
 DATABASE_URL
-AUTH_SECRET
-DATA_ENCRYPTION_KEYS
-DEFAULT_TIMEZONE=Asia/Shanghai
-MAX_SNAPSHOT_CAPTURE_SECONDS=120
+BETTER_AUTH_SECRET
+ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION=1
+ADDRESS_ENCRYPTION_KEY_RING
 STORAGE_DRIVER=local
 STORAGE_LOCAL_PATH=/data/club
 LOG_LEVEL=info
 TRUST_PROXY=false
-SMTP_URL (optional)
+SMTP_HOST/SMTP_PORT/SMTP_SECURE/SMTP_FROM (optional group)
+SMTP_USERNAME/SMTP_PASSWORD (optional pair)
 ```
 
-Organization-specific Bilibili and tracking credentials are entered through the
-application and encrypted in PostgreSQL rather than stored as generic
-environment variables.
+The current public-web Bilibili adapters are anonymous and in-memory. Manual
+tracking needs no provider credential; the deterministic fake provider is for
+tests and development.
 
 Health endpoints are:
 
@@ -1056,12 +1057,12 @@ GET /health/ready
 ```
 
 The system-status UI reports database and storage state, application version,
-last scheduler pass, next month-end cutoff, verification-room connections,
-recent snapshot attempts, failed work, and tracking-provider health.
+last scheduler pass, verification-room connections, snapshot status and failed
+work, storage integrity warnings, and tracking-provider health.
 
 Backups must include PostgreSQL, the private storage volume or bucket,
-`AUTH_SECRET`, all data-encryption keys, and deployment configuration. Restore
-tests must prove that re-login, address decryption, snapshot hashes, gift assets,
+`BETTER_AUTH_SECRET`, all address-encryption keys, and deployment configuration.
+Restore tests must prove that re-login, address decryption, snapshot hashes,
 claims, and shipments remain usable.
 
 ## 23. Verification requirements

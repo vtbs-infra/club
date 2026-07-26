@@ -4,17 +4,20 @@ Club is an open-source platform for Vtubers, streamers, and their
 organizations to manage Bilibili guard-gift eligibility, claims, fulfillment,
 and shipment tracking.
 
-Milestones 0 through 3 are implemented. The application now includes its
-validated runtime foundation, PostgreSQL-backed identity and tenancy, append-only
-audit records, platform-managed verification rooms, and one-time-code Bilibili
-UID binding, exact month-end roster scheduling, immutable monthly snapshots,
-private gzip evidence, and late-capture approval. The approved product and
-architecture baseline is documented in:
+The planned product is implemented end to end: PostgreSQL-backed identity and
+tenancy, append-only audit records, platform-managed Bilibili UID binding,
+month-end snapshots and immutable evidence, campaigns and historical
+eligibility, encrypted addresses and claims, fulfillment and shipment tracking,
+announcements, and sanitized operational diagnostics. The product and
+operational baseline is documented in:
 
 - [Product and architecture specification](docs/product-architecture.md)
 - [Implementation plan](docs/implementation-plan.md)
+- [Operations and recovery guide](docs/operations.md)
+- [Release checklist](docs/release.md)
+- [Acceptance evidence](docs/acceptance.md)
 
-Future implementation work must read both documents before changing the
+Future changes must read both product documents before changing the
 repository. The specification is the source of truth for product behavior and
 architecture; the implementation plan defines delivery order and verification.
 
@@ -58,8 +61,8 @@ pnpm dev
 ```
 
 `BETTER_AUTH_SECRET` is required and must contain at least 32 characters. Set it
-to a generated secret in every deployment; do not use the development value
-from `compose.yaml` in production.
+to a generated secret in every deployment; Compose refuses to start when the
+required production secrets are absent.
 
 The development frontend listens on `http://localhost:5173` and proxies API and
 health requests to Fastify on port 3000. Production builds are served by the
@@ -145,10 +148,29 @@ Playwright Chromium browser once before local E2E runs with
 
 ## Docker Compose
 
-`docker compose up --build` starts the single application process, PostgreSQL,
-and the persistent private-storage volume. Apply migrations explicitly before
-first use or after an upgrade:
+Copy `.env.example` to `.env`, replace every required secret, and keep the file
+outside source control. Build the image, start PostgreSQL, apply migrations, and
+then start the single application process:
 
 ```text
-docker compose run --rm app pnpm db:migrate
+docker compose build
+docker compose up -d postgres
+docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
+docker compose up -d app
+docker compose ps
 ```
+
+Open `APP_URL` and confirm `/health/ready` reports `ok`. Create the first
+administrator with:
+
+```text
+docker compose run --rm -e CLUB_ADMIN_PASSWORD app \
+  node dist/server/server/cli.js admin:create \
+  --email admin@example.com --name "Platform Admin"
+```
+
+The complete first-deployment, organization onboarding, Bilibili setup,
+backup/restore, key rotation, and upgrade procedures are in
+[`docs/operations.md`](docs/operations.md). Do not run more than one `app`
+replica: schedulers and room connections intentionally live in the single
+application process.

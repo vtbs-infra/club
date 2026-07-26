@@ -18,6 +18,7 @@ import {
   claimStatusHistory,
   creators,
   entitlements,
+  idempotencyRecords,
   organizationMembers,
   organizations,
   snapshotMembers,
@@ -427,6 +428,55 @@ integration('encrypted addresses and claims', () => {
     );
   });
 
+  it('rolls back claim and idempotency state when submission is terminated', async () => {
+    const campaign = await createEligibleCampaign({ title: 'Interrupted claim' });
+    await database.orm.execute(sql`
+      create function reject_test_claim_insert() returns trigger as $$
+      begin
+        raise exception 'simulated process termination';
+      end;
+      $$ language plpgsql
+    `);
+    await database.orm.execute(sql`
+      create trigger reject_test_claim_insert
+      before insert on claims
+      for each row execute function reject_test_claim_insert()
+    `);
+    try {
+      await expect(
+        claimService.submit(
+          userId,
+          campaign.campaignId,
+          { addressId, optionValues: { size: 'M' } },
+          'interrupted-claim-key',
+          { actorUserId: userId },
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await database.orm.execute(sql`drop trigger reject_test_claim_insert on claims`);
+      await database.orm.execute(sql`drop function reject_test_claim_insert()`);
+    }
+    const [claimsAfterFailure] = await database.orm
+      .select({ value: count() })
+      .from(claims)
+      .where(eq(claims.campaignId, campaign.campaignId));
+    const [keysAfterFailure] = await database.orm
+      .select({ value: count() })
+      .from(idempotencyRecords)
+      .where(eq(idempotencyRecords.key, 'interrupted-claim-key'));
+    expect(claimsAfterFailure?.value).toBe(0);
+    expect(keysAfterFailure?.value).toBe(0);
+    await expect(
+      claimService.submit(
+        userId,
+        campaign.campaignId,
+        { addressId, optionValues: { size: 'M' } },
+        'interrupted-claim-key',
+        { actorUserId: userId },
+      ),
+    ).resolves.toMatchObject({ status: 'SUBMITTED' });
+  });
+
   it('cancels and resubmits the same claim record before the database deadline', async () => {
     const campaign = await createEligibleCampaign({ title: 'Resubmission gift' });
     const submitted = await claimService.submit(
@@ -642,11 +692,21 @@ integration('encrypted addresses and claims', () => {
       { actorUserId: userId },
     );
     const header = fulfillmentService.exportTemplate().split('\r\n')[0]!;
-    const csv = `${header}\r\n1,${submitted.claimNumber},csv-box,manual,CSV123,,\r\n1,CLM-MISSING,bad-box,manual,BAD123,,\r\n`;
+    const validRow = `1,${submitted.claimNumber},csv-box,manual,CSV123,,`;
+    const csv = `${header}\r\n${validRow}\r\n1,CLM-MISSING,bad-box,manual,BAD123,,\r\n`;
+    const interrupted = await fulfillmentService.importCsv(
+      organizationId,
+      [],
+      `${header}\r\n${validRow}\r\n`,
+      {
+        actorUserId: userId,
+      },
+    );
+    expect(interrupted.results.map((row) => row.status)).toEqual(['IMPORTED']);
     const first = await fulfillmentService.importCsv(organizationId, [], csv, {
       actorUserId: userId,
     });
-    expect(first.results.map((row) => row.status)).toEqual(['IMPORTED', 'ERROR']);
+    expect(first.results.map((row) => row.status)).toEqual(['UNCHANGED', 'ERROR']);
     const second = await fulfillmentService.importCsv(organizationId, [], csv, {
       actorUserId: userId,
     });

@@ -118,6 +118,24 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   app.addHook('onSend', async (request, reply) => {
     void reply.header('x-request-id', request.id);
+    void reply.header('x-content-type-options', 'nosniff');
+    void reply.header('x-frame-options', 'DENY');
+    void reply.header('referrer-policy', 'no-referrer');
+    void reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+    void reply.header(
+      'content-security-policy',
+      "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; img-src 'self' data: https:; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+    );
+    if (
+      request.url.startsWith('/api/') ||
+      request.url.startsWith('/health/') ||
+      request.url === '/openapi.json'
+    ) {
+      void reply.header('cache-control', 'no-store');
+    }
+    if (config.nodeEnv === 'production') {
+      void reply.header('strict-transport-security', 'max-age=31536000; includeSubDomains');
+    }
   });
 
   if (ownsDatabase) {
