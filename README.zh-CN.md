@@ -51,6 +51,8 @@ Compose 提供的 PostgreSQL 仅在 `127.0.0.1:55432` 暴露给本机工具，�
 
 `BETTER_AUTH_SECRET` 必须设置且不少于 32 个字符。每次部署都应使用随机生成的密钥；缺少必要生产密钥时，Compose 会拒绝启动。
 
+`CLUB_UI_THEME` 用于选择部署时的全站界面。可选值为 `moe`、`neon`、`archive`（方案 3，默认）和 `pixel`。部署后，平台管理员可以在 `/platform/appearance` 发布另一套全站界面；普通访客不能选择个人主题。恢复部署默认方案会移除管理员覆盖设置。
+
 开发前端地址为 `http://localhost:5173`，它会把 API 和健康检查请求代理到 3000 端口的 Fastify。生产构建由单个 Fastify 进程同时提供前端和 API：
 
 ```text

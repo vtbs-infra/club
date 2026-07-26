@@ -57,6 +57,13 @@
       "when": 1785022481454,
       "tag": "0007_yummy_victor_mancha",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785046290332,
+      "tag": "0008_petite_wither",
+      "breakpoints": true
     }
   ]
 }

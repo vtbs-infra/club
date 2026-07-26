@@ -70,6 +70,12 @@ pnpm dev
 to a generated secret in every deployment; Compose refuses to start when the
 required production secrets are absent.
 
+`CLUB_UI_THEME` selects the deployment-wide interface. Supported values are
+`moe`, `neon`, `archive` (scheme 3, the default), and `pixel`. After deployment,
+a platform administrator can publish a different global interface from
+`/platform/appearance`; visitors cannot choose a personal theme. Restoring the
+deployment default removes the administrator override.
+
 The development frontend listens on `http://localhost:5173` and proxies API and
 health requests to Fastify on port 3000. Production builds are served by the
 single Fastify process:

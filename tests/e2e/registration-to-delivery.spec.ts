@@ -46,6 +46,12 @@ const operatorEmail = 'e2e-operator@example.com';
 const recipientEmail = 'e2e-recipient@example.com';
 const password = 'correct-horse-battery-staple';
 
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript({
+    content: "window.localStorage.setItem('club-language', 'en');",
+  });
+});
+
 test.beforeAll(async () => {
   database = createDatabase(databaseUrl!);
   storage = await createTemporaryStorage();

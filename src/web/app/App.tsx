@@ -4,6 +4,7 @@ import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { I18nProvider } from '../i18n/I18nProvider';
 import { AccountPage } from '../pages/AccountPage';
 import { AnnouncementsPage } from '../pages/AnnouncementsPage';
+import { AppearancePage } from '../pages/AppearancePage';
 import { AuthPage } from '../pages/AuthPage';
 import { CampaignsPage } from '../pages/CampaignsPage';
 import { ClaimDetailPage } from '../pages/ClaimDetailPage';
@@ -18,6 +19,7 @@ import { OrganizationOperationsPage, PlatformOperationsPage } from '../pages/Ope
 import { PlatformAnnouncementsPage } from '../pages/PlatformAnnouncementsPage';
 import { SnapshotsPage } from '../pages/SnapshotsPage';
 import { VerificationRoomsPage } from '../pages/VerificationRoomsPage';
+import { ThemeProvider } from '../theme/ThemeProvider';
 
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
@@ -47,6 +49,7 @@ const router = createBrowserRouter([
   },
   { element: <VerificationRoomsPage />, path: '/platform/verification-rooms' },
   { element: <PlatformAnnouncementsPage />, path: '/platform/announcements' },
+  { element: <AppearancePage />, path: '/platform/appearance' },
   { element: <PlatformOperationsPage />, path: '/platform/operations' },
   { element: <FoundationPage />, path: '*' },
 ]);
@@ -55,7 +58,9 @@ export function App() {
   return (
     <I18nProvider>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <ThemeProvider>
+          <RouterProvider router={router} />
+        </ThemeProvider>
       </QueryClientProvider>
     </I18nProvider>
   );
