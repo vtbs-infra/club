@@ -6,6 +6,17 @@ import { englishToChinese } from './translations';
 const storageKey = 'club-language';
 const originalText = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Map<string, string>>();
+const chineseToEnglish: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(
+    Object.entries(englishToChinese).map(([english, chinese]) => [chinese, english]),
+  ),
+  公告: 'Announcements',
+  我的: 'My account',
+  礼物: 'Gifts',
+  登录: 'Sign in',
+  舰长礼物计划: 'Captain Gift Program',
+  首页: 'Home',
+};
 
 function initialLanguage(): Language {
   try {
@@ -15,26 +26,31 @@ function initialLanguage(): Language {
   }
 }
 
-function chineseValue(value: string): string {
+function localizedValue(value: string, language: Language): string {
   const whitespace = /^(\s*)(.*?)(\s*)$/s.exec(value);
   if (!whitespace) return value;
   const [, leading, content, trailing] = whitespace;
   if (!content) return value;
-  const translated = englishToChinese[content];
+  const translated = language === 'zh-CN' ? englishToChinese[content] : chineseToEnglish[content];
   return translated === undefined ? value : `${leading}${translated}${trailing}`;
 }
 
 function translateNode(node: Node, language: Language): void {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node as Text;
-    if (language === 'en') {
-      const original = originalText.get(text);
-      if (original !== undefined && original !== text.data) text.data = original;
-      return;
+    let source = originalText.get(text) ?? text.data;
+    const knownValues = new Set([
+      source,
+      localizedValue(source, 'en'),
+      localizedValue(source, 'zh-CN'),
+    ]);
+    if (!knownValues.has(text.data)) {
+      source = text.data;
+      originalText.set(text, source);
     }
-    const translated = chineseValue(text.data);
+    const translated = localizedValue(source, language);
     if (translated !== text.data) {
-      originalText.set(text, text.data);
+      if (!originalText.has(text)) originalText.set(text, source);
       text.data = translated;
     }
     return;
@@ -43,15 +59,20 @@ function translateNode(node: Node, language: Language): void {
   for (const attribute of ['aria-label', 'placeholder', 'title'] as const) {
     const value = node.getAttribute(attribute);
     if (!value) continue;
-    if (language === 'en') {
-      const original = originalAttributes.get(node)?.get(attribute);
-      if (original !== undefined && original !== value) node.setAttribute(attribute, original);
-      continue;
+    const attributes = originalAttributes.get(node) ?? new Map<string, string>();
+    let source = attributes.get(attribute) ?? value;
+    const knownValues = new Set([
+      source,
+      localizedValue(source, 'en'),
+      localizedValue(source, 'zh-CN'),
+    ]);
+    if (!knownValues.has(value)) {
+      source = value;
+      attributes.set(attribute, source);
     }
-    const translated = chineseValue(value);
+    const translated = localizedValue(source, language);
     if (translated !== value) {
-      const attributes = originalAttributes.get(node) ?? new Map<string, string>();
-      attributes.set(attribute, value);
+      if (!attributes.has(attribute)) attributes.set(attribute, source);
       originalAttributes.set(node, attributes);
       node.setAttribute(attribute, translated);
     }

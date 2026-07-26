@@ -76,6 +76,32 @@ a platform administrator can publish a different global interface from
 `/platform/appearance`; visitors cannot choose a personal theme. Restoring the
 deployment default removes the administrator override.
 
+## Fan portal homepage
+
+The public homepage is a recipient-facing gift portal. It does not expose
+database, storage, or deployment status. It combines published campaigns and
+platform announcements with the signed-in user's UID binding, pending gift,
+address, and delivery state.
+
+Platform administrators manage it at `/platform/site` with a controlled block
+editor:
+
+- edit site identity, hero, image/text, process, card, banner, gallery, and CTA
+  blocks;
+- reorder or hide blocks and choose anonymous/authenticated visibility;
+- preview desktop and mobile layouts, save a draft, and publish explicitly;
+- restore a historical version as a new draft, with save, publish, and restore
+  actions recorded in the audit log;
+- upload JPEG, PNG, or WebP images up to 5 MB. The server validates the image,
+  removes metadata, limits the longest edge to 2400 pixels, and creates WebP
+  display and thumbnail variants.
+
+Homepage content cannot contain arbitrary HTML, JavaScript, CSS, external
+fonts, or unsafe links. A new installation serves the built-in Chinese gift
+portal template until an administrator publishes the first version. Homepage
+images live in the public-brand area under `STORAGE_LOCAL_PATH`; include the
+entire storage directory in backups alongside private snapshot objects.
+
 The development frontend listens on `http://localhost:5173` and proxies API and
 health requests to Fastify on port 3000. Production builds are served by the
 single Fastify process:
@@ -186,3 +212,12 @@ backup/restore, key rotation, and upgrade procedures are in
 [`docs/operations.md`](docs/operations.md). Do not run more than one `app`
 replica: schedulers and room connections intentionally live in the single
 application process.
+
+## Third-party notices
+
+Club remains marked `UNLICENSED` as a project. The required contributor, source,
+and Parity Public License 7.0.0 notice for
+[`zclkkk/bilive-rec`](https://github.com/zclkkk/bilive-rec) is included in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). The verbatim license is kept
+in [`LICENSES/bilive-rec-Parity-7.0.0.txt`](LICENSES/bilive-rec-Parity-7.0.0.txt);
+both are copied into the runtime Docker image.

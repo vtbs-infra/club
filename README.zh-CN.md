@@ -53,6 +53,20 @@ Compose 提供的 PostgreSQL 仅在 `127.0.0.1:55432` 暴露给本机工具，�
 
 `CLUB_UI_THEME` 用于选择部署时的全站界面。可选值为 `moe`、`neon`、`archive`（方案 3，默认）和 `pixel`。部署后，平台管理员可以在 `/platform/appearance` 发布另一套全站界面；普通访客不能选择个人主题。恢复部署默认方案会移除管理员覆盖设置。
 
+## 粉丝门户首页
+
+公开首页是面向粉丝的礼物门户，不显示数据库、存储或部署状态。它会自动组合当前已发布活动、平台公告，以及登录用户的 UID 绑定、待领取礼物、地址和物流状态。
+
+平台管理员可在 `/platform/site` 使用受控模块编辑器维护首页：
+
+- 编辑站点名称、Hero、图文、流程、卡片、Banner、画廊和行动按钮；
+- 调整模块顺序、显示状态和未登录/已登录可见范围；
+- 在桌面或手机画布中预览，保存草稿后再发布；
+- 恢复历史版本为新草稿，所有保存、发布和恢复操作都会进入审计记录；
+- 上传 JPEG、PNG 或 WebP 图片。单张上限为 5 MB，服务端会校验实际图片内容、去除元数据、限制最大边长为 2400 像素，并生成 WebP 原图和缩略图。
+
+首页配置不接受任意 HTML、JavaScript、CSS、外部字体或不受控链接。新部署在首次发布前会显示内置中文礼物门户模板。首页图片保存在 `STORAGE_LOCAL_PATH` 下的公开品牌资源区域，因此备份时必须与私有快照文件一起保存完整存储目录。
+
 开发前端地址为 `http://localhost:5173`，它会把 API 和健康检查请求代理到 3000 端口的 Fastify。生产构建由单个 Fastify 进程同时提供前端和 API：
 
 ```text
@@ -131,3 +145,12 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD app \
 ```
 
 首次部署、组织引导、哔哩哔哩设置、备份恢复、密钥轮换和升级流程详见 [`docs/operations.md`](docs/operations.md)。不要运行多个 `app` 副本：调度器和直播间连接有意与单个应用进程共同运行。
+
+## 第三方许可证声明
+
+Club 项目自身仍标记为 `UNLICENSED`。项目已在
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 中完整保留
+[`zclkkk/bilive-rec`](https://github.com/zclkkk/bilive-rec) 的贡献者、源码地址和
+Parity Public License 7.0.0 声明；许可证原文另存于
+[`LICENSES/bilive-rec-Parity-7.0.0.txt`](LICENSES/bilive-rec-Parity-7.0.0.txt)。
+两份文件都会复制进运行时 Docker 镜像。
