@@ -27,10 +27,16 @@ export const englishToChinese: Readonly<Record<string, string>> = {
   'An organization owner or platform administrator can add your account.':
     '组织所有者或平台管理员可以将你的账户加入组织。',
   Announcements: '公告',
+  Appearance: '外观',
+  'Appearance settings could not be saved. Refresh and try again.':
+    '外观设置保存失败，请刷新后重试。',
+  'Administrator override': '管理员覆盖设置',
   'Announcements could not be loaded.': '公告加载失败。',
   'Announcements.': '公告',
   'Approve late': '批准迟到快照',
   Archive: '归档',
+  'Captain Gift Archive': '舰长礼物档案馆',
+  'Choose the global interface.': '选择全站界面',
   'Assigning room…': '正在分配直播间…',
   Attempt: '尝试',
   'Attempt evidence': '尝试证据',
@@ -351,6 +357,31 @@ export const englishToChinese: Readonly<Record<string, string>> = {
   'Your account could not be loaded.': '账户加载失败。',
   'Your claimed gifts will appear here.': '已领取的礼物会显示在这里。',
   'Your claims': '你的领取记录',
+  'Dark glass, live telemetry, and neon command-center energy.':
+    '深色玻璃质感、实时数据与霓虹控制台氛围。',
+  'Deployment default': '部署默认方案',
+  'Every visitor sees the published design. Only a platform administrator can change it after deployment.':
+    '所有访客都会看到已发布的设计，部署后只有平台管理员可以更改。',
+  'Hyper-Energy Supply Station': '超元气补给站',
+  'Live Room Console': '直播间控制台',
+  'Loading appearance settings…': '正在加载外观设置…',
+  'Pixel Supply Ship': '像素补给舰',
+  'PLATFORM APPEARANCE': '平台外观',
+  'Published interface': '当前已发布界面',
+  'Publish selected interface': '发布所选界面',
+  'Publishing…': '正在发布…',
+  'Restore deployment default': '恢复部署默认方案',
+  'Restoring…': '正在恢复…',
+  Selected: '已选择',
+  'Select scheme': '选择方案',
+  'Selecting a card is only a preview choice. The global interface changes after you publish.':
+    '选择卡片仅用于确认方案，点击发布后全站界面才会更改。',
+  'Soft candy colors, friendly cards, and a fan-first gift experience.':
+    '柔和糖果配色、亲切卡片与面向粉丝的礼物体验。',
+  'Warm paper, catalog structure, and a refined archival character.':
+    '温润纸张、目录结构与精致的档案气质。',
+  'Crisp pixels, playful status blocks, and a compact supply-ship HUD.':
+    '清晰像素、趣味状态块与紧凑的补给舰界面。',
   'Your Club identity': '你的 Club 身份',
   'Your organizations.': '你的组织',
   'YOUR PACKAGES': '你的礼包',

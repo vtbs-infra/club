@@ -36,6 +36,27 @@ export const users = pgTable(
   ],
 );
 
+export const platformAppearance = pgTable(
+  'platform_appearance',
+  {
+    id: text('id').primaryKey(),
+    theme: text('theme').notNull(),
+    version: integer('version').default(1).notNull(),
+    updatedByUserId: uuid('updated_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    ...timestamps,
+  },
+  (table) => [
+    check('platform_appearance_singleton_check', sql`${table.id} = 'global'`),
+    check(
+      'platform_appearance_theme_check',
+      sql`${table.theme} in ('moe', 'neon', 'archive', 'pixel')`,
+    ),
+    check('platform_appearance_version_check', sql`${table.version} >= 1`),
+  ],
+);
+
 export const sessions = pgTable(
   'sessions',
   {
@@ -958,6 +979,7 @@ export const schema = {
   memberCreatorScopes,
   organizationMembers,
   organizations,
+  platformAppearance,
   sessions,
   shipmentItems,
   shipments,

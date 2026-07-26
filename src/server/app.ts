@@ -22,6 +22,8 @@ import {
 } from './infrastructure/security/request-security.js';
 import { createAuth, type AppAuth } from './modules/auth/auth.js';
 import authRoutes from './modules/auth/routes.js';
+import { AppearanceService } from './modules/appearance/appearance-service.js';
+import appearanceRoutes from './modules/appearance/routes.js';
 import { AddressService } from './modules/addresses/address-service.js';
 import addressRoutes from './modules/addresses/routes.js';
 import { createBindingRuntime, type BindingRuntime } from './modules/binding/binding-runtime.js';
@@ -52,6 +54,7 @@ const APPLICATION_VERSION = '0.1.0';
 
 export interface BuildAppOptions {
   readonly auth?: AppAuth;
+  readonly appearanceService?: AppearanceService;
   readonly bindingRuntime?: BindingRuntime;
   readonly challengeLimiter?: InMemoryRateLimiter;
   readonly clock?: Clock;
@@ -84,6 +87,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const storage = options.storage ?? new LocalStorageDriver(config.storageLocalPath);
   const clock = options.clock ?? new SystemClock();
   const auth = options.auth ?? createAuth({ config, database });
+  const appearanceService = options.appearanceService ?? new AppearanceService(database, config);
   const encryption = new EncryptionKeyRing(config);
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
@@ -191,6 +195,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
 
   await app.register(authRoutes, { auth });
+  await app.register(appearanceRoutes, { auth, service: appearanceService });
   registerRequestSecurity(app, { auth, clock, config, rateLimiter });
   await app.register(addressRoutes, { auth, service: addressService });
   await app.register(organizationRoutes, { auth, database });
@@ -255,7 +260,17 @@ export async function buildApp(options: BuildAppOptions = {}) {
     const acceptsHtml = request.headers.accept?.includes('text/html') ?? false;
     if (shouldServeStatic && request.method === 'GET' && acceptsHtml && !isApiPath(pathname)) {
       const index = await readFile(join(webRoot, 'index.html'), 'utf8');
-      return reply.type('text/html; charset=utf-8').send(index);
+      let themedIndex = index;
+      if (/<html\b/.test(index)) {
+        const appearance = await appearanceService.get();
+        themedIndex = /data-ui-theme="[^"]*"/.test(index)
+          ? index.replace(/data-ui-theme="[^"]*"/, `data-ui-theme="${appearance.activeTheme}"`)
+          : index.replace(/<html\b/, `<html data-ui-theme="${appearance.activeTheme}"`);
+      }
+      return reply
+        .header('cache-control', 'no-store')
+        .type('text/html; charset=utf-8')
+        .send(themedIndex);
     }
 
     return reply.status(404).send({

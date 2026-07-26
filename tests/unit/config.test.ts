@@ -16,6 +16,7 @@ describe('loadConfig', () => {
     expect(config.trustProxy).toBe(true);
     expect(config.storageDriver).toBe('local');
     expect(config.trackingProvider).toBe('none');
+    expect(config.uiTheme).toBe('archive');
   });
 
   it('rejects missing database configuration without leaking a URL', () => {
@@ -40,6 +41,23 @@ describe('loadConfig', () => {
         TRACKING_PROVIDER: 'live-unknown',
       }),
     ).toThrow(/trackingProvider/);
+  });
+
+  it('accepts only supported UI themes', () => {
+    expect(
+      loadConfig({
+        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        CLUB_UI_THEME: 'archive',
+        DATABASE_URL: 'postgres://localhost/club',
+      }).uiTheme,
+    ).toBe('archive');
+    expect(() =>
+      loadConfig({
+        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        CLUB_UI_THEME: 'custom-css',
+        DATABASE_URL: 'postgres://localhost/club',
+      }),
+    ).toThrow(/uiTheme/);
   });
 
   it('enables mail only when the SMTP configuration is complete', () => {
