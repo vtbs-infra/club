@@ -257,6 +257,9 @@ export class BindingService {
             and(
               eq(bindingChallenges.codeDigest, digestBindingCode(code, this.codeSecret)),
               eq(bindingChallenges.status, 'ACTIVE'),
+              // The recent-message endpoint reports whole seconds, so allow the remainder of
+              // that second while still rejecting messages from before challenge creation.
+              lte(bindingChallenges.createdAt, new Date(event.occurredAt.getTime() + 1_000)),
               gt(bindingChallenges.expiresAt, this.clock.now()),
               eq(verificationRooms.biliRoomId, event.roomId),
             ),
