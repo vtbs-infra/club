@@ -10,6 +10,11 @@ export interface FulfillmentRuntime {
   readonly provider: TrackingProvider | null;
   readonly service: FulfillmentService;
   close(): void;
+  getStatus(): {
+    readonly configured: boolean;
+    readonly lastTickAt: Date | null;
+    readonly running: boolean;
+  };
   start(): Promise<void>;
   tick(): Promise<void>;
 }
@@ -30,12 +35,14 @@ export function createFulfillmentRuntime(input: {
   const service = new FulfillmentService(input.database, input.encryption, provider);
   let interval: ReturnType<typeof setInterval> | null = null;
   let ticking = false;
+  let lastTickAt: Date | null = null;
   const tick = async () => {
     if (ticking || !provider) return;
     ticking = true;
     try {
       await service.refreshDue();
     } finally {
+      lastTickAt = input.clock.now();
       ticking = false;
     }
   };
@@ -46,6 +53,11 @@ export function createFulfillmentRuntime(input: {
       if (interval) clearInterval(interval);
       interval = null;
     },
+    getStatus: () => ({
+      configured: provider !== null,
+      lastTickAt,
+      running: interval !== null,
+    }),
     async start() {
       if (!provider || interval) return;
       await tick();

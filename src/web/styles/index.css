@@ -914,6 +914,150 @@ h2 {
   margin-top: 0.75rem;
 }
 
+.priority-link {
+  display: grid;
+  flex: 1;
+  gap: 0.35rem;
+}
+
+.priority-link .role-chip {
+  margin-bottom: 0.2rem;
+}
+
+.priority-link small {
+  color: #9299b1;
+}
+
+.announcement-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.announcement-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.6rem;
+}
+
+.announcement-card p {
+  margin: 0;
+  color: #cdd2e2;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.announcement-unread {
+  border-color: rgba(140, 229, 206, 0.42);
+}
+
+.severity-warning {
+  border-left: 4px solid #efb365;
+}
+
+.severity-critical {
+  border-left: 4px solid #ef8d8d;
+}
+
+.announcement-form select,
+.announcement-form textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 11px;
+  color: #f4f5fb;
+  background: rgba(6, 9, 18, 0.72);
+}
+
+.announcement-form .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.announcement-form .checkbox-label input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.operations-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.65fr) minmax(0, 1.35fr);
+  gap: 1.25rem;
+  align-items: start;
+  margin-top: 3rem;
+}
+
+.operations-layout > form {
+  position: sticky;
+  top: 1.5rem;
+}
+
+.manager-list {
+  margin-top: 0;
+}
+
+.status-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-top: 3rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.status-summary div {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  background: rgba(15, 20, 36, 0.95);
+}
+
+.status-summary span {
+  color: #9299b1;
+  font-size: 0.75rem;
+}
+
+.status-summary strong {
+  color: #edf0ff;
+}
+
+.operations-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.operations-panel {
+  margin-top: 1.25rem;
+  padding: 1.8rem;
+}
+
+.operations-grid .operations-panel {
+  margin-top: 0;
+}
+
+.compact-details {
+  margin-top: 1rem;
+  padding: 0;
+}
+
+.compact-details > div {
+  grid-template-columns: 1fr auto;
+}
+
+.audit-timeline {
+  margin-top: 1rem;
+}
+
+.audit-timeline small {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 720px) {
   .shell {
     width: min(100% - 28px, 1180px);
@@ -944,7 +1088,9 @@ h2 {
   .campaign-create,
   .gift-detail-grid,
   .fulfillment-layout,
-  .address-fields {
+  .address-fields,
+  .operations-layout,
+  .operations-grid {
     grid-template-columns: 1fr;
   }
   .auth-layout {
@@ -967,6 +1113,9 @@ h2 {
     flex-direction: column;
   }
   .platform-grid > .auth-form {
+    position: static;
+  }
+  .operations-layout > form {
     position: static;
   }
   .tier-editor {

@@ -30,6 +30,10 @@ import { CampaignService } from './modules/campaigns/campaign-service.js';
 import campaignRoutes from './modules/campaigns/routes.js';
 import { ClaimService } from './modules/claims/claim-service.js';
 import claimRoutes from './modules/claims/routes.js';
+import { AnnouncementService } from './modules/announcements/announcement-service.js';
+import announcementRoutes from './modules/announcements/routes.js';
+import { AuditQueryService } from './modules/audit/audit-query-service.js';
+import auditRoutes from './modules/audit/routes.js';
 import {
   createFulfillmentRuntime,
   type FulfillmentRuntime,
@@ -88,6 +92,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const campaignService = new CampaignService(database, clock);
   const addressService = new AddressService(database, encryption);
   const claimService = new ClaimService(database, encryption);
+  const announcementService = new AnnouncementService(database);
+  const auditQueryService = new AuditQueryService(database);
   const fulfillmentRuntime =
     options.fulfillmentRuntime ?? createFulfillmentRuntime({ clock, config, database, encryption });
   const snapshotRuntime =
@@ -181,10 +187,23 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(fulfillmentRoutes, { auth, service: fulfillmentRuntime.service });
   await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
   await app.register(snapshotRoutes, { auth, service: snapshotRuntime.service });
+  await app.register(announcementRoutes, {
+    auth,
+    database,
+    service: announcementService,
+  });
+  await app.register(auditRoutes, {
+    auth,
+    database,
+    service: auditQueryService,
+  });
 
   await app.register(systemStatusRoutes, {
+    auth,
     clock,
     database,
+    fulfillmentRuntime,
+    snapshotRuntime,
     storage,
     version: APPLICATION_VERSION,
   });

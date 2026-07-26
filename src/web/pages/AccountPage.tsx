@@ -2,6 +2,7 @@ import { AuthenticatedPage } from '../components/AuthenticatedPage';
 import { BilibiliBindingPanel } from '../components/BilibiliBindingPanel';
 import { AddressBookPanel } from '../components/AddressBookPanel';
 import { GiftCardsPanel } from '../components/GiftCardsPanel';
+import { AnnouncementPanel } from '../components/AnnouncementPanel';
 
 export function AccountPage() {
   return (
@@ -24,6 +25,7 @@ export function AccountPage() {
               <strong>{identity.memberships.length}</strong>
             </div>
           </div>
+          <AnnouncementPanel />
           <BilibiliBindingPanel />
           <AddressBookPanel />
           <GiftCardsPanel />
