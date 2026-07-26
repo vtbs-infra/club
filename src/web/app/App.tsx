@@ -7,6 +7,7 @@ import { CampaignsPage } from '../pages/CampaignsPage';
 import { ClaimDetailPage } from '../pages/ClaimDetailPage';
 import { ClaimsPage } from '../pages/ClaimsPage';
 import { FoundationPage } from '../pages/FoundationPage';
+import { FulfillmentPage } from '../pages/FulfillmentPage';
 import { GiftDetailPage } from '../pages/GiftDetailPage';
 import { OrganizationPage } from '../pages/OrganizationPage';
 import { OrganizationsPage } from '../pages/OrganizationsPage';
@@ -25,6 +26,7 @@ const router = createBrowserRouter([
   { element: <OrganizationsPage />, path: '/organizations' },
   { element: <OrganizationPage />, path: '/organizations/:organizationId' },
   { element: <CampaignsPage />, path: '/organizations/:organizationId/campaigns' },
+  { element: <FulfillmentPage />, path: '/organizations/:organizationId/fulfillment' },
   {
     element: <SnapshotsPage />,
     path: '/organizations/:organizationId/creators/:creatorId/snapshots',

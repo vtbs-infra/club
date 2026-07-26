@@ -18,6 +18,8 @@ const REDACTED_PATHS = [
   '*.detailedAddress',
   '*.postalCode',
   '*.userNote',
+  '*.trackingNumber',
+  '*.csv',
 ] as const;
 
 export function createLoggerOptions(level: string): LoggerOptions {

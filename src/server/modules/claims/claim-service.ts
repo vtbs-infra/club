@@ -20,6 +20,8 @@ import {
   idempotencyRecords,
   memberCreatorScopes,
   organizationMembers,
+  shipmentItems,
+  shipments,
   type CampaignClaimField,
 } from '../../infrastructure/db/schema.js';
 import type {
@@ -739,6 +741,44 @@ export class ClaimService {
           'A cancellation reason is required.',
           400,
         );
+      }
+      if (input.target === 'CANCELLED') {
+        const [shipment] = await transaction
+          .select({ id: shipments.id })
+          .from(shipments)
+          .where(eq(shipments.claimId, claim.id))
+          .limit(1);
+        if (shipment) {
+          throw new AppError(
+            'CLAIM_ALREADY_SHIPPING',
+            'A claim with shipments cannot be cancelled.',
+            409,
+          );
+        }
+      }
+      if (input.target === 'SHIPPED') {
+        const links = await transaction
+          .select({ id: claimEntitlements.id })
+          .from(claimEntitlements)
+          .where(eq(claimEntitlements.claimId, claim.id));
+        const assigned = links.length
+          ? await transaction
+              .select({ id: shipmentItems.claimEntitlementId })
+              .from(shipmentItems)
+              .where(
+                inArray(
+                  shipmentItems.claimEntitlementId,
+                  links.map((link) => link.id),
+                ),
+              )
+          : [];
+        if (!links.length || assigned.length !== links.length) {
+          throw new AppError(
+            'CLAIM_SHIPMENT_ITEMS_INCOMPLETE',
+            'Every claimed package must be assigned to a shipment before marking shipped.',
+            409,
+          );
+        }
       }
       const now = await this.databaseNow(transaction);
       const [updated] = await transaction

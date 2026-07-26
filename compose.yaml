@@ -16,6 +16,7 @@ services:
       PORT: 3000
       STORAGE_DRIVER: local
       STORAGE_LOCAL_PATH: /data/club
+      TRACKING_PROVIDER: ${TRACKING_PROVIDER:-none}
       TRUST_PROXY: 'false'
     ports:
       - '3000:3000'

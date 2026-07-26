@@ -739,6 +739,101 @@ export const claimStatusHistory = pgTable(
   ],
 );
 
+export const shipments = pgTable(
+  'shipments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shipmentNumber: text('shipment_number').notNull(),
+    shipmentKey: text('shipment_key').notNull(),
+    claimId: uuid('claim_id')
+      .notNull()
+      .references(() => claims.id, { onDelete: 'restrict' }),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    creatorId: uuid('creator_id')
+      .notNull()
+      .references(() => creators.id, { onDelete: 'restrict' }),
+    carrierCode: text('carrier_code').notNull(),
+    trackingNumber: text('tracking_number').notNull(),
+    trackingUrl: text('tracking_url'),
+    status: text('status').default('LABEL_CREATED').notNull(),
+    deliveredAt: timestamp('delivered_at', { mode: 'date', withTimezone: true }),
+    lastTrackingRefreshAt: timestamp('last_tracking_refresh_at', {
+      mode: 'date',
+      withTimezone: true,
+    }),
+    nextTrackingRefreshAt: timestamp('next_tracking_refresh_at', {
+      mode: 'date',
+      withTimezone: true,
+    }),
+    exceptionMessage: text('exception_message'),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('shipments_shipment_number_unique').on(table.shipmentNumber),
+    uniqueIndex('shipments_claim_key_unique').on(table.claimId, table.shipmentKey),
+    index('shipments_organization_status_idx').on(table.organizationId, table.status),
+    index('shipments_tracking_due_idx').on(table.nextTrackingRefreshAt),
+    check(
+      'shipments_status_check',
+      sql`${table.status} in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION')`,
+    ),
+    check(
+      'shipments_tracking_identity_check',
+      sql`length(${table.shipmentKey}) between 1 and 120 and length(${table.carrierCode}) between 1 and 80 and length(${table.trackingNumber}) between 1 and 160`,
+    ),
+  ],
+);
+
+export const shipmentItems = pgTable(
+  'shipment_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shipmentId: uuid('shipment_id')
+      .notNull()
+      .references(() => shipments.id, { onDelete: 'restrict' }),
+    claimEntitlementId: uuid('claim_entitlement_id')
+      .notNull()
+      .references(() => claimEntitlements.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('shipment_items_shipment_entitlement_unique').on(
+      table.shipmentId,
+      table.claimEntitlementId,
+    ),
+    uniqueIndex('shipment_items_claim_entitlement_unique').on(table.claimEntitlementId),
+  ],
+);
+
+export const trackingEvents = pgTable(
+  'tracking_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shipmentId: uuid('shipment_id')
+      .notNull()
+      .references(() => shipments.id, { onDelete: 'restrict' }),
+    providerEventId: text('provider_event_id').notNull(),
+    status: text('status').notNull(),
+    description: text('description').notNull(),
+    location: text('location'),
+    occurredAt: timestamp('occurred_at', { mode: 'date', withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('tracking_events_shipment_provider_unique').on(
+      table.shipmentId,
+      table.providerEventId,
+    ),
+    index('tracking_events_shipment_occurred_idx').on(table.shipmentId, table.occurredAt),
+    check(
+      'tracking_events_status_check',
+      sql`${table.status} in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION')`,
+    ),
+  ],
+);
+
 export const idempotencyRecords = pgTable(
   'idempotency_records',
   {
@@ -787,11 +882,14 @@ export const schema = {
   organizationMembers,
   organizations,
   sessions,
+  shipmentItems,
+  shipments,
   snapshotAttemptMembers,
   snapshotAttempts,
   snapshotMembers,
   snapshotPages,
   snapshotRuns,
+  trackingEvents,
   users,
   verifications,
   verificationRooms,

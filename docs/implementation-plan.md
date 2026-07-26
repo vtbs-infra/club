@@ -394,33 +394,33 @@ Goal: give organization staff a complete, auditable shipping workflow.
 
 ### Work
 
-- [ ] Add shipment, shipment-item, and tracking-event migrations.
-- [ ] Restrict decrypted address access to fulfillment-capable roles.
-- [ ] Add claim filters by creator, period, campaign, and state.
-- [ ] Implement batch transition to `PROCESSING`.
-- [ ] Implement a versioned CSV export format with stable claim numbers.
-- [ ] Implement a downloadable import template.
-- [ ] Implement per-row validated shipment import with partial-success results.
-- [ ] Support multiple shipments per claim.
-- [ ] Implement manual carrier, tracking number, and tracking URL.
-- [ ] Define `TrackingProvider` and a deterministic fake.
-- [ ] If a concrete provider is selected, verify its current API and implement it
+- [x] Add shipment, shipment-item, and tracking-event migrations.
+- [x] Restrict decrypted address access to fulfillment-capable roles.
+- [x] Add claim filters by creator, period, campaign, and state.
+- [x] Implement batch transition to `PROCESSING`.
+- [x] Implement a versioned CSV export format with stable claim numbers.
+- [x] Implement a downloadable import template.
+- [x] Implement per-row validated shipment import with partial-success results.
+- [x] Support multiple shipments per claim.
+- [x] Implement manual carrier, tracking number, and tracking URL.
+- [x] Define `TrackingProvider` and a deterministic fake.
+- [x] If a concrete provider is selected, verify its current API and implement it
       behind the adapter; otherwise ship manual URLs as the core behavior.
-- [ ] Add due-tracking refresh to the in-process scheduler only when a provider
+- [x] Add due-tracking refresh to the in-process scheduler only when a provider
       is configured.
-- [ ] Implement user receipt confirmation and audited operator completion.
-- [ ] Build fulfillment list, export/import, shipment detail, exception view,
+- [x] Implement user receipt confirmation and audited operator completion.
+- [x] Build fulfillment list, export/import, shipment detail, exception view,
       and recipient tracking page.
 
 ### Exit criteria
 
-- [ ] A fulfillment user can process and ship without broader administration
+- [x] A fulfillment user can process and ship without broader administration
       permission.
-- [ ] Every address export is audited.
-- [ ] A malformed CSV row does not roll back valid independent rows.
-- [ ] Re-import is idempotent by claim/shipment identity.
-- [ ] Unsupported carriers remain usable through manual tracking links.
-- [ ] Shipment state cannot bypass the claim state machine.
+- [x] Every address export is audited.
+- [x] A malformed CSV row does not roll back valid independent rows.
+- [x] Re-import is idempotent by claim/shipment identity.
+- [x] Unsupported carriers remain usable through manual tracking links.
+- [x] Shipment state cannot bypass the claim state machine.
 
 ## 13. Milestone 7: announcements and operational visibility
 
@@ -592,8 +592,8 @@ Current checkpoint:
 ```text
 Specification: complete
 Implementation plan: complete
-Implementation: M0 foundation through M5 encrypted addresses and claims complete
-Next milestone: M6 fulfillment and tracking (not started)
+Implementation: M0 foundation through M6 fulfillment and tracking complete
+Next milestone: M7 announcements and operational visibility (not started)
 Blocking user decision: none
 ```
 
