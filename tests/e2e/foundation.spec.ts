@@ -53,9 +53,7 @@ test('serves the production React shell and liveness API', async ({ page, reques
   await expect(live.json()).resolves.toMatchObject({ status: 'ok', version: '0.1.0' });
 });
 
-test('lands a recipient on the fixed mobile dashboard without a workspace picker', async ({
-  page,
-}) => {
+test('lands a recipient on the mobile dashboard', async ({ page }) => {
   await page.setViewportSize({ height: 844, width: 390 });
   await page.route('**/api/v1/me**', async (route) => {
     const url = new URL(route.request().url());

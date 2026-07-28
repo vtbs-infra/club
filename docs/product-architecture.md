@@ -1,178 +1,250 @@
-# Club product and architecture
+# Product and architecture
 
-This document is the normative description of the creator-first application.
-The decision record that authorized the cutover is
-[`creator-first-rebuild.md`](creator-first-rebuild.md).
+Club coordinates Bilibili identity verification, monthly guard rosters, gift
+claims, creator fulfillment, announcements, and shipment tracking in one
+self-hosted application.
 
-## Product boundary
-
-Club owns one complete workflow:
+## Product flow
 
 ```text
-platform-fixed Bilibili verification room
-  -> proven viewer UID
-  -> immutable month-end creator roster
-  -> optional creator gift release
+verification room message
+  -> active Bilibili UID binding
+  -> monthly creator roster
+  -> monthly gift release
   -> UID gift order
-  -> frozen claimant, address, and options
-  -> creator processing and shipment
+  -> submitted claim
+  -> processing and shipment
   -> tracking and completion
 ```
 
-The application has exactly three mutually exclusive roles: `USER`, `CREATOR`,
-and `PLATFORM_ADMIN`. A creator account owns exactly one creator profile. There
-is no organization or membership layer and no separate operating role.
+The roster and gift-release branches meet during reconciliation. Either one can
+arrive first.
 
-## Monthly roster semantics
+## Account model
 
-For each active creator and calendar month:
+An account has one of these roles:
 
-- cutoff is the last day at `23:59:00` in the creator's configured IANA
-  timezone;
-- the capture start time determines punctuality and month attribution;
-- pages may cross midnight and may observe provider drift;
-- all pages plus a first-page recheck must form a consistent capture;
-- raw pages are gzip-compressed in object storage;
-- `snapshot_pages` stores object key, SHA-256, sizes, item count, and fetch time;
-- `ON_TIME + CONSISTENT` finalizes automatically;
-- `LATE + CONSISTENT` waits for platform-administrator approval;
-- inconsistent captures fail and are never manually edited;
-- a finalized run and its members are immutable.
+| Role             | Scope                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `USER`           | Personal Bilibili binding, addresses, announcements, and gift orders                                         |
+| `CREATOR`        | One creator profile, its releases, rosters, announcements, orders, and shipments                             |
+| `PLATFORM_ADMIN` | Creator registration, verification rooms, all roster runs, platform announcements, audit, and runtime status |
 
-Every active creator gets a monthly run even if no gift will be published.
+Public registration creates a `USER`. A platform administrator assigns an
+existing user account to a new creator profile. Creator API authorization
+resolves that profile from the authenticated session.
 
-## Gift-release reconciliation
+## Bilibili identity binding
 
-A creator can create zero or one gift release for a month. A release contains a
-claim window, highest-only or cumulative tier behavior, one or more packages,
-package items, tier rules, optional claim fields, and an optional gift cover.
+The platform administrator configures one or more verification rooms. A user
+starts a challenge and receives a short-lived one-time code plus the room link.
+The binding runtime listens only to enabled platform rooms needed by active
+challenges.
 
-The same idempotent reconciliation runs when either event occurs:
+When a matching message arrives, Club validates the room, message time, code
+digest, sender UID, and challenge state in one transaction. The resulting
+binding associates the account with the observed UID. Challenge history and
+binding changes are retained for audit.
 
-1. a release becomes `PUBLISHED`; or
-2. a matching snapshot becomes `FINALIZED`.
+An active binding controls which UID gift orders a user can see. Order
+submission validates the binding again before freezing the claimant.
 
-It creates one `gift_order` per finalized roster member and snapshots the
-package content into `gift_order_items`. A month with no release produces no
-gift order and no warning. Published release business content and package
-rules are immutable.
+## Monthly roster
 
-An unsubmitted order belongs to `bili_uid`, not a platform account. An active
-binding makes it visible. Submission verifies that binding again, stores
-`user_id`, encrypts an independent address copy and option values, and advances
-the order atomically.
+Each enabled creator has a roster run for each calendar month. The run stores
+the creator timezone and these fixed timestamps:
 
-Order transitions:
+- `scheduled_cutoff_at`: the last day of the month at `23:59:00`;
+- `on_time_window_end_at`: one minute after the scheduled cutoff;
+- `period_start`: the first calendar day of the qualification month.
+
+The capture start time determines punctuality:
+
+- `ON_TIME`: started within the scheduled one-minute window;
+- `LATE`: started outside that window.
+
+An attempt fetches every declared roster page and re-fetches page one. The
+attempt is consistent when page metadata, member identity, rank, tier, counts,
+and the page-one comparison agree. Consistent on-time attempts finalize
+automatically. Consistent late attempts enter `PENDING_APPROVAL`; a platform
+administrator approves or rejects the captured result as one unit.
+
+Finalization copies normalized members into `snapshot_members`. Finalized runs,
+members, attempt evidence, and stored page references are immutable.
+
+## Gift releases
+
+A creator can create one release for a qualification month. A release defines:
+
+- claim start and deadline;
+- qualification behavior for guard tiers;
+- packages and package items;
+- tier-to-package rules;
+- optional recipient input fields;
+- an optional cover image.
+
+Draft releases are editable. Publishing validates the complete definition and
+freezes its business content. Closing a release stops future reconciliation
+while preserving existing orders and their claim windows.
+
+Creators publish releases only for months in which they want to send gifts.
+
+## Reconciliation and UID ownership
+
+Reconciliation runs after either event:
+
+1. a release becomes `PUBLISHED`;
+2. its matching roster becomes `FINALIZED`.
+
+When both records exist, Club creates one order for every qualified roster UID
+and snapshots the applicable package items into `gift_order_items`. Unique
+constraints and idempotent service logic make repeated reconciliation safe.
+
+Before submission, `gift_orders.bili_uid` is the ownership key and `user_id`
+remains empty. This supports accounts that register or bind after the roster
+was finalized. The active binding reveals the order to the matching user.
+
+Submission runs atomically:
+
+1. validate the active UID binding and claim window;
+2. validate the selected address and requested option values;
+3. freeze the account ID;
+4. encrypt an independent address copy and option-value payloads;
+5. append the status transition.
+
+Address-book edits after submission do not modify the frozen order.
+
+## Order and shipment state
+
+Primary order flow:
 
 ```text
 CLAIMABLE -> SUBMITTED -> PROCESSING -> SHIPPED -> COMPLETED
-CLAIMABLE -> EXPIRED
-SUBMITTED | PROCESSING -> CANCELLED
-SUBMITTED -> SHIPPED
 ```
 
-The direct `SUBMITTED -> SHIPPED` path records the implied processing step.
-Both service logic and PostgreSQL triggers reject invalid transitions.
+Shipping directly from `SUBMITTED` appends the implied `PROCESSING` transition
+before `SHIPPED`.
+
+Terminal branches:
+
+```text
+CLAIMABLE -> EXPIRED
+SUBMITTED | PROCESSING -> CANCELLED
+```
+
+Shipping records a carrier, tracking number, tracking link, shipment items, and
+timestamps. One order may use multiple shipments when its items are dispatched
+separately. The order advances to `SHIPPED` when all items have been shipped.
+Tracking-provider events are append-only and can complete delivered orders.
+
+Service validation and PostgreSQL triggers enforce state transitions,
+shipment-item identity, frozen fulfillment data, and tracking history.
 
 ## Announcements
 
-Announcement scopes are only:
+Platform announcements are available to authenticated users. Creator
+announcements are available to users who have a current or historical gift
+order from that creator.
 
-- `PLATFORM`: visible to authenticated users;
-- `CREATOR`: visible to users with a current or historical gift order from that
-  creator.
-
-Creators manage only their own announcements. Platform administrators manage
-platform announcements. Draft deletion and optimistic version updates are
-audited.
+Announcements use draft and publication lifecycle fields, optimistic version
+updates, read tracking, and audit records. Creators manage announcements for
+their own profile; platform administrators manage platform announcements.
 
 ## Runtime architecture
 
-The supported topology is one Node.js process plus PostgreSQL and local object
-storage:
-
 ```text
-React/Vite browser
-       |
+React application
+      |
 Fastify modular monolith
-  | Better Auth
-  | creator/session guards
-  | binding room manager
-  | roster scheduler
-  | tracking scheduler
-  | Drizzle services
-       |
-PostgreSQL 17 + local object storage
+  |-- Better Auth and role guards
+  |-- Bilibili binding runtime
+  |-- monthly roster scheduler
+  |-- gift and shipping services
+  |-- tracking refresh runtime
+  |-- announcements and audit
+      |
+PostgreSQL 17
+local object storage
 ```
 
-The modules are:
+The supported deployment runs one application process. That process owns the
+room connections and periodic schedulers. PostgreSQL stores transactional
+state; object storage holds compressed provider evidence and gift images.
 
-- `auth`, `creators`;
+Server modules:
+
+- `auth`, `creators`, `addresses`;
 - `verification-rooms`, `binding`, `bilibili`;
 - `snapshots`;
 - `gifts`;
-- `addresses`;
-- `announcements`;
-- `fulfillment` for tracking-provider runtime only;
-- `audit`, `system-status`.
+- `fulfillment`;
+- `announcements`, `audit`, `system-status`.
 
-There is no Redis, external queue, event bus, microservice split, SSR, or
-multi-instance room lease. Background work is retryable and idempotent but
-runs inside the single application process.
+Background runtimes start with Fastify and stop during graceful shutdown:
+
+- binding runtime restores active challenges and manages room connections;
+- snapshot runtime pre-creates monthly runs, recovers interrupted attempts, and
+  checks due work every 30 seconds;
+- fulfillment runtime refreshes eligible tracking records.
 
 ## Data model
 
-| Area | Tables |
-| --- | --- |
-| Auth | `users`, `sessions`, `accounts`, `verifications` |
-| Creator | `creators` |
-| Bilibili proof | `verification_rooms`, `binding_challenges`, `bilibili_bindings` |
-| Roster evidence | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`, `snapshot_members` |
-| Gift release | `gift_releases`, `gift_packages`, `gift_package_items`, `gift_tier_rules` |
-| Gift order | `gift_orders`, `gift_order_items`, `gift_order_addresses`, `gift_order_option_values`, `gift_order_status_history` |
-| Shipping | `shipments`, `shipment_items`, `tracking_events` |
-| Communication | `announcements`, `announcement_reads` |
-| Control | `audit_logs`, `idempotency_records` |
+| Area             | Tables                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Authentication   | `users`, `sessions`, `accounts`, `verifications`                                                                   |
+| Creators         | `creators`                                                                                                         |
+| UID verification | `verification_rooms`, `binding_challenges`, `bilibili_bindings`                                                    |
+| Roster capture   | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`, `snapshot_members`             |
+| Gift definition  | `gift_releases`, `gift_packages`, `gift_package_items`, `gift_tier_rules`                                          |
+| Gift orders      | `gift_orders`, `gift_order_items`, `gift_order_addresses`, `gift_order_option_values`, `gift_order_status_history` |
+| Addresses        | `addresses`                                                                                                        |
+| Shipping         | `shipments`, `shipment_items`, `tracking_events`                                                                   |
+| Announcements    | `announcements`, `announcement_reads`                                                                              |
+| Control          | `audit_logs`, `idempotency_records`                                                                                |
 
-Database triggers protect append-only evidence, frozen fulfillment data,
-published gift configuration, gift-order state, shipment identity and state,
-announcement identity/version, and completed idempotency responses.
+The migration in `migrations/` creates the schema and its integrity triggers.
+Drizzle schema definitions live in
+`src/server/infrastructure/db/schema.ts`.
 
-## HTTP boundary
+## HTTP API
 
-Public/authenticated recipient APIs live under `/api/v1/me`. Creator APIs live
-under `/api/v1/creator`; their creator is always resolved from the session.
-Administrator APIs live under `/api/v1/admin` and use explicit creator IDs
-where needed.
+| Namespace                 | Consumer                                 |
+| ------------------------- | ---------------------------------------- |
+| `/api/auth/*`             | Better Auth                              |
+| `/api/v1/me/*`            | Recipient account and personal workflows |
+| `/api/v1/creator/*`       | Creator profile workflows                |
+| `/api/v1/admin/*`         | Platform administration                  |
+| `/api/v1/gift-releases/*` | Public authenticated gift-cover delivery |
+| `/health/live`            | Process liveness                         |
+| `/health/ready`           | Database and storage readiness           |
+| `/openapi.json`           | Generated OpenAPI 3.1 document           |
 
-There are deliberately no `/organizations`, `/campaigns`, `/claims`,
-`/entitlements`, `/platform/site`, or `/platform/appearance` compatibility
-routes.
+Request and response schemas use TypeBox. State-changing API requests pass
+Origin validation and rate limiting. Business mutations record audit context
+where applicable. Error responses include a stable code and request ID.
 
-All mutation requests are schema validated, Origin checked, rate limited, and
-audited where they cross a business boundary. Full OpenAPI is available at
-`/openapi.json`.
+## Storage and encryption
 
-## Storage and secrets
+Object storage keys are private by default. Roster responses are written
+atomically as gzip-compressed JSON and referenced by object key, SHA-256 digest,
+byte sizes, item count, and fetch time. Gift covers use an authenticated upload
+service and a dedicated read endpoint.
 
-Address records and frozen order data use versioned AES-256-GCM keys. Removing
-an old key makes historical records unreadable, so the full key ring is part of
-every backup.
+Addresses and recipient-provided option values use AES-256-GCM records with a
+versioned key ring. New records use
+`ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION`; all referenced key versions remain in
+`ADDRESS_ENCRYPTION_KEY_RING`.
 
-Roster page JSON is compressed before entering storage. It is not served by a
-generic static route. Gift covers use a dedicated, creator-authorized upload
-endpoint and a read-only delivery endpoint.
+## Web application
 
-## Web information architecture
+The React application defines three route areas:
 
-The recipient dashboard order is fixed:
+- recipient: `/dashboard`, `/gifts`, `/announcements`, `/account`;
+- creator: `/creator`, `/creator/releases`, `/creator/orders`,
+  `/creator/announcements`, `/creator/settings`;
+- administrator: `/admin`, `/admin/creators`, `/admin/rosters`,
+  `/admin/verification`, `/admin/announcements`, `/admin/system`.
 
-1. built-in banner;
-2. five relevant announcements;
-3. one contextual action;
-4. gift cards.
-
-Recipient, creator, and administrator shells have separate navigation. There
-is one fixed responsive design system. Runtime themes, page/block editors,
-generic assets, deployment appearance settings, and creator visual branding
-do not exist in this version.
+`/app` routes an authenticated account to its role home. Protected layouts
+verify the session role before rendering an area. TanStack Query owns server
+state, and React Router owns browser navigation.

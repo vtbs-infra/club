@@ -106,8 +106,6 @@ describe('application factory', () => {
       expect(response.json<OpenApiDocument>().paths).toHaveProperty(
         '/api/v1/admin/verification-rooms',
       );
-      expect(response.json<OpenApiDocument>().paths).not.toHaveProperty('/api/v1/organizations');
-      expect(response.json<OpenApiDocument>().paths).not.toHaveProperty('/api/v1/platform/site');
     } finally {
       await storage.cleanup();
     }

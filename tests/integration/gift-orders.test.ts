@@ -86,7 +86,7 @@ function releaseDraft(eligibilityMonth: string): ReleaseDraftInput {
   };
 }
 
-integration('creator-first gift order lifecycle', () => {
+integration('gift order lifecycle', () => {
   let admin: ReturnType<typeof postgres>;
   let database: DatabaseService;
   let databaseName: string;

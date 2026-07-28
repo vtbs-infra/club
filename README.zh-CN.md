@@ -4,63 +4,57 @@
 
 [English](README.md) | 简体中文
 
-Club 是一个面向 Vtuber、主播及其观众的自托管舰长礼物领取与发货平台。它把 B站
-UID 验证、月末大航海名单快照、礼物单自动生成、用户领取、主播发货和物流查询串成
-一个完整闭环。
+Club 是一个面向 Vtuber、主播及其观众的自托管 B站舰长礼物平台。平台通过固定验证
+直播间完成观众 UID 绑定，按月保存大航海名单，自动生成礼物单，并支持收货信息
+填写、主播发货和物流查询。
 
-## 产品模型
+## 工作流程
 
-Club 只有三种互斥身份：
+1. 观众注册账号，在平台配置的验证直播间发送一次性验证码，完成 B站 UID 绑定。
+2. 每月最后一天 `23:59:00`，Club 按各主播配置的时区抓取当时有效的大航海名单。
+3. 主播在需要发放礼物的月份创建并发布一份礼物。
+4. 已定稿名单和同月已发布礼物同时存在后，系统为每个符合条件的 B站 UID 生成礼物
+   单。
+5. 观众选择收货地址、填写礼物选项并提交领取。
+6. 主播处理礼物单、录入物流信息，并将订单推进至完成。
 
-- `USER`：普通用户，绑定 B站 UID、管理地址、领取礼物和查询物流；
-- `CREATOR`：主播，拥有且只拥有一个主播档案，自行发布礼物并处理发货；
-- `PLATFORM_ADMIN`：平台管理员，注册主播、管理验证直播间、名单同步和平台公告。
+名单抓取与礼物发布分别进行。主播可以先发布礼物，也可以在名单定稿后发布；系统会
+幂等生成相同的礼物单。没有发布礼物的月份不会产生礼物单。
 
-系统没有组织、组织成员、运营人员、独立履约人员或组合身份。公开注册始终创建普通
-用户；平台管理员从已有普通用户中注册主播。
+## 账号与界面
 
-每个启用的主播都会按自身时区在每月最后一天 `23:59:00` 创建名单抓取任务，无论
-该月是否发礼物。抓取从开始时刻归属当月，分页过程中得到的公开接口结果会经过完整
-性校验，压缩原始响应写入对象存储，数据库只保留索引、摘要与 SHA-256。准时且一致
-的名单自动定稿；延迟但一致的名单需要平台管理员确认；定稿成员不可修改。
+每个账号具有一种身份：
 
-名单快照和礼物发布彼此独立：
+| 身份             | 职责                                               | 入口         |
+| ---------------- | -------------------------------------------------- | ------------ |
+| `USER`           | 绑定 B站 UID、管理地址、领取礼物、查询物流         | `/dashboard` |
+| `CREATOR`        | 管理一个主播档案、发布礼物、发布公告、处理发货     | `/creator`   |
+| `PLATFORM_ADMIN` | 配置主播、验证直播间、名单任务、平台公告和系统状态 | `/admin`     |
 
-- 主播可以整月不发礼物，此时不会产生草稿、警告、占位卡片或礼物单；
+公开注册创建 `USER` 账号。平台管理员可以把已有普通用户账号分配给一个主播档案。
+
+普通用户仪表盘展示 Banner、近期相关公告、当前操作提示和礼物卡片。主播工作台与
+平台管理后台分别使用面向任务的导航。Web 界面同时适配桌面和手机宽度。
+
+## 名单与礼物规则
+
+- 每个启用的主播每个自然月对应一个名单任务；
+- 抓取开始时间决定是否位于计划的一分钟窗口内；
+- 准时且一致的抓取结果自动定稿；
+- 延迟但一致的抓取结果等待平台管理员确认；
+- 已定稿成员及其原始证据保持不可变；
 - 每位主播每个资格月最多发布一份礼物；
-- “已发布礼物”和“已定稿名单”同时存在时，系统才幂等生成礼物单；
-- 先发布礼物或先定稿名单都会得到相同结果；
-- 礼物单在领取前属于 B站 UID，用户提交领取时才冻结平台账号、地址和选项。
+- 礼物发布后，礼包内容、等级规则和领取字段保持不可变；
+- 未提交的礼物单与 B站 UID 关联；
+- 提交领取时冻结用户账号、地址、礼包内容和选项值。
 
-## 使用界面
+礼物单状态：
 
-普通用户登录后默认进入 `/dashboard`，看到固定 Banner、最近五条相关公告、当前最
-需要处理的动作和礼物卡片。礼物状态只有：
-
-`待领取 → 已提交 → 处理中 → 已发货 → 已完成`
-
-以及终态 `已过期`、`已取消`。领取流程在同一页面完成礼物确认、地址选择或新增、
-礼物选项与最终确认。
-
-主播工作台位于 `/creator`：
-
-- 概览
-- 礼物发布
-- 礼物单
-- 主播公告
-- 设置
-
-平台管理位于 `/admin`：
-
-- 概览
-- 主播
-- 名单同步
-- 验证直播间
-- 平台公告
-- 系统
-
-当前版本使用唯一固定响应式视觉系统，不提供主题、外观、页面编辑器、品牌资源库或
-主播视觉自定义。
+```text
+待领取 -> 已提交 -> 处理中 -> 已发货 -> 已完成
+待领取 -> 已过期
+已提交 | 处理中 -> 已取消
+```
 
 ## 技术架构
 
@@ -69,16 +63,23 @@ Club 是 TypeScript 模块化单体：
 - React、React Router、TanStack Query、Vite；
 - Fastify、TypeBox/OpenAPI、Better Auth、Drizzle ORM、Pino；
 - PostgreSQL 17；
-- 本地原子对象存储，保存压缩名单证据和礼物图片；
+- 本地对象存储，用于保存压缩名单证据和礼物图片；
 - Vitest、Playwright；
 - 单应用实例的 Docker Compose 部署。
 
-生产进程同时提供前端与 `/api/v1` API。主播接口从登录会话解析唯一主播档案，不接
-受浏览器传入的主播 ID；平台管理员接口才使用显式主播 ID。
+生产环境由同一个 Fastify 进程提供 Web 页面、`/api/v1` HTTP API、名单调度、
+B站直播间连接和物流刷新。
 
 ## 本地开发
 
-要求 Node.js `>=24 <25`、pnpm `11.9.0`、Docker Engine 与 Compose v2。
+环境要求：
+
+- Node.js `>=24 <25`
+- pnpm `11.9.0`
+- Docker Engine
+- Docker Compose v2
+
+安装依赖并创建本地配置：
 
 ```powershell
 corepack enable
@@ -86,13 +87,10 @@ pnpm install
 Copy-Item .env.example .env
 ```
 
-编辑 `.env`，至少替换：
+在 `.env` 中设置数据库密码和两个数据库 URL，生成不少于 32 个字符的随机认证密钥，
+并配置一个 32 字节 base64 地址加密密钥。
 
-- `POSTGRES_PASSWORD`，并同步修改两个数据库 URL；
-- `BETTER_AUTH_SECRET`，不少于 32 个随机字符；
-- `ADDRESS_ENCRYPTION_KEY_RING`，格式为 `1:<32 字节 base64 密钥>`。
-
-然后启动数据库、迁移和开发服务器：
+启动 PostgreSQL、执行迁移并启动开发服务：
 
 ```powershell
 docker compose up -d postgres
@@ -100,7 +98,8 @@ pnpm db:migrate
 pnpm dev
 ```
 
-前端默认位于 <http://localhost:5173>，API 位于 <http://localhost:3000>。
+Vite 开发服务器位于 <http://localhost:5173>，Fastify 位于
+<http://localhost:3000>。
 
 创建首个平台管理员：
 
@@ -112,15 +111,16 @@ Remove-Item Env:CLUB_ADMIN_PASSWORD
 
 ## Docker Compose
 
-应用不会隐式执行数据库迁移。首次部署或更新代码时：
+构建镜像、启动 PostgreSQL、执行迁移并启动 Club：
 
 ```powershell
+docker compose build app
 docker compose up -d postgres
 docker compose run --rm app pnpm db:migrate
-docker compose up -d --build app
+docker compose up -d app
 ```
 
-检查：
+检查运行状态：
 
 ```powershell
 docker compose ps
@@ -128,49 +128,42 @@ Invoke-RestMethod http://localhost:3000/health/live
 Invoke-RestMethod http://localhost:3000/health/ready
 ```
 
-首个平台管理员也可以在容器内创建：
+使用容器镜像创建首个平台管理员：
 
 ```powershell
-docker compose exec -e CLUB_ADMIN_PASSWORD=replace-me app `
+docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
   pnpm club admin:create --email admin@example.com --name Admin
 ```
 
-首次登录后：
+进入 Web 界面后的配置顺序：
 
-1. 普通用户先通过注册页创建账号；
-2. 平台管理员在“主播”页将该账号注册为主播，并填写主播 B站 UID、直播间和时区；
-3. 在“验证直播间”中至少启用一个平台固定直播间；
-4. 主播在自己的工作台创建并发布礼物；不发礼物的月份无需任何操作。
+1. 注册一个普通用户账号；
+2. 在 `/admin/creators` 将该账号分配给主播档案；
+3. 在 `/admin/verification` 配置并启用验证直播间；
+4. 在管理员仪表盘确认名单调度与直播间连接状态。
 
 ## 配置
 
-| 变量                                    | 默认值                  | 说明                               |
-| --------------------------------------- | ----------------------- | ---------------------------------- |
-| `APP_URL`                               | `http://localhost:3000` | 公开来源地址，也是 Origin 校验基准 |
-| `DATABASE_URL`                          | 必填                    | 当前进程连接 PostgreSQL 的 URL     |
-| `BETTER_AUTH_SECRET`                    | 必填                    | Better Auth 密钥，至少 32 字符     |
-| `ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION` | `1`                     | 当前地址加密密钥版本               |
-| `ADDRESS_ENCRYPTION_KEY_RING`           | 生产必填                | `版本:base64`，多个版本用逗号分隔  |
-| `BILIBILI_LIVE_SOURCE`                  | `public-web`            | `public-web` 或测试用 `fake`       |
-| `BILIBILI_ROSTER_SOURCE`                | `public-web`            | `public-web` 或测试用 `fake`       |
-| `STORAGE_LOCAL_PATH`                    | `./data/club`           | 私有对象和礼物图片目录             |
-| `TRACKING_PROVIDER`                     | `none`                  | `none` 或开发测试用 `fake`         |
-| `TRUST_PROXY`                           | `false`                 | 仅在可信反向代理后启用             |
-| `SMTP_*`                                | 未启用                  | 完整配置后启用邮件验证与密码重置   |
+| 变量                                    | 默认值                  | 用途                            |
+| --------------------------------------- | ----------------------- | ------------------------------- |
+| `APP_URL`                               | `http://localhost:3000` | 公开访问地址和请求来源校验基准  |
+| `DATABASE_URL`                          | 必填                    | 当前进程使用的 PostgreSQL 连接  |
+| `BETTER_AUTH_SECRET`                    | 必填                    | 认证密钥，不少于 32 个字符      |
+| `ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION` | `1`                     | 新加密记录使用的密钥版本        |
+| `ADDRESS_ENCRYPTION_KEY_RING`           | 生产环境必填            | 逗号分隔的 `版本:base64` 密钥   |
+| `BILIBILI_LIVE_SOURCE`                  | `public-web`            | 直播消息适配器                  |
+| `BILIBILI_ROSTER_SOURCE`                | `public-web`            | 大航海名单适配器                |
+| `STORAGE_LOCAL_PATH`                    | `./data/club`           | 名单证据和礼物图片目录          |
+| `TRACKING_PROVIDER`                     | `none`                  | 物流集成；测试环境可使用 `fake` |
+| `LOG_LEVEL`                             | `info`                  | Pino 日志级别                   |
+| `TRUST_PROXY`                           | `false`                 | 受控反向代理环境中的代理信任    |
+| `SMTP_*`                                | 未设置                  | 邮件验证与密码重置服务          |
 
-不存在 `CLUB_UI_THEME` 或其他运行时 UI 自定义配置。
+Compose 还会使用 `POSTGRES_PASSWORD`、`POSTGRES_HOST_PORT`、
+`COMPOSE_DATABASE_URL` 和 `CLUB_PORT`。完整模板见
+[.env.example](.env.example)。
 
-## 数据与安全边界
-
-- 地址簿、领取地址快照和礼物选项使用 AES-256-GCM 加密；
-- 提交领取后，地址簿修改不会改变礼物单中的冻结地址；
-- 名单原始分页响应压缩后写入存储，PostgreSQL 保存对象键、哈希、数量和时间；
-- 审计日志、名单证据、冻结领取数据、状态历史和物流事件由数据库触发器保护；
-- 礼物单与物流状态机同时在服务层和数据库边界校验；
-- 所有状态修改 API 校验 Origin 并限流；
-- 备份必须同时包含 PostgreSQL、对象存储、认证密钥和完整地址密钥环。
-
-## 常用验证
+## 质量检查
 
 ```powershell
 pnpm check
@@ -181,23 +174,15 @@ pnpm build
 pnpm test:e2e
 ```
 
-## 当前约束
-
-- 仅支持一个活动应用实例；
-- B站 `public-web` 来源不是稳定官方契约，可能受接口变化或风控影响；
-- 不提供手工名单、手工资格或手工礼物单入口；
-- 不包含采购、支付、库存、仓库管理或自动购买快递面单；
-- 默认物流为主播手动录入，实时查询通过可替换 Provider 接入；
-- 当前未提供原生移动应用，Web 界面支持移动宽度。
-
 ## 文档
 
-- [重构决策与验收上下文](docs/creator-first-rebuild.md)
 - [产品与架构](docs/product-architecture.md)
 - [运维](docs/operations.md)
-- [B站公开接口集成记录](docs/integrations/bilibili.md)
-- [验收矩阵](docs/acceptance.md)
+- [B站集成](docs/integrations/bilibili.md)
+- [验收](docs/acceptance.md)
 - [发布清单](docs/release.md)
+
+运行实例通过 `/openapi.json` 提供生成的 OpenAPI 文档。
 
 ## 许可证
 

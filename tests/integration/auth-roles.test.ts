@@ -278,12 +278,5 @@ integration('exclusive platform roles and creator ownership', () => {
     });
     expect(ownReleases.json<unknown[]>()).toHaveLength(1);
     expect(otherReleases.json<unknown[]>()).toHaveLength(0);
-
-    const removedRoute = await app.inject({
-      headers: { cookie: adminCookie },
-      method: 'GET',
-      url: '/api/v1/organizations',
-    });
-    expect(removedRoute.statusCode).toBe(404);
   });
 });

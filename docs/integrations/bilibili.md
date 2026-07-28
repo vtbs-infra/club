@@ -1,69 +1,68 @@
-# Bilibili integration notes
+# Bilibili integration
 
-Last verified: 2026-07-22
+Club uses two Bilibili adapter boundaries:
 
-This document records the external behavior used by Club's Bilibili adapters.
-It is an implementation record, not a claim that undocumented Bilibili
-interfaces are stable.
+- `LiveMessageSource` supplies messages for UID verification;
+- `GuardRosterSource` supplies paginated monthly guard rosters.
 
-## Live-message source selected for UID verification
+The production configuration uses the `public-web` implementations. Tests use
+deterministic `fake` implementations.
 
-M2 uses `bilibili-live-danmaku` 0.7.16 behind
-`PublicWebLiveMessageSource`. The package is MIT-licensed, implemented for
-browser and server JavaScript, and exposes the room lookup, danmaku-token, WebSocket,
-heartbeat, zlib, and Brotli behavior needed by the adapter. The adapter also polls
-the public recent-message endpoint while a room is needed because messages sent to
-an offline room can appear in recent history without being delivered through the
-anonymous WebSocket connection. Its source and API examples are available in the
-[`Minteea/bilibili-live-danmaku`](https://github.com/Minteea/bilibili-live-danmaku)
-repository.
+```text
+BILIBILI_LIVE_SOURCE=public-web
+BILIBILI_ROSTER_SOURCE=public-web
+```
 
-Bilibili also documents an official open platform with live-room long-connection
-capabilities. That route requires an approved developer application and
-platform credentials, which are not part of Club's default self-hosted setup.
-The selected adapter therefore uses the public web-room flow without a Bilibili
-account. A future official adapter can implement the same `LiveMessageSource`
-boundary without changing binding logic. See the
-[Bilibili Open Platform](https://open.bilibili.com/doc).
+The public-web interfaces are undocumented provider contracts and may change.
+Provider response types remain inside the adapters so the binding, snapshot,
+and API modules depend only on normalized Club types.
 
-## Verified connection behavior
+## UID verification flow
 
-The following was exercised from Node.js 24 against a currently live room on
-2026-07-22:
+1. A platform administrator configures and enables a verification room.
+2. A user requests a binding challenge.
+3. Club returns a one-time code and the configured room link.
+4. The room manager starts or reuses one connection for that room.
+5. The user sends the code as a live-room message.
+6. The adapter emits the sender UID and normalized message.
+7. The binding service consumes the matching challenge and activates the UID
+   binding in one transaction.
 
-1. Initialize anonymous web cookies in memory.
-2. Resolve a supplied short or canonical room ID through the live-room info
-   endpoint.
-3. Request the room's current danmaku host list and authentication token.
-4. Connect to the selected `wss://<host>/sub` endpoint with protocol version 3.
-5. Receive `CONNECT_SUCCESS`, followed by a `DANMU_MSG` event.
-6. Poll recent room messages every two seconds as a fallback and deduplicate
-   provider entries with deterministic event IDs.
-7. Confirm, without retaining the observed user data, that the message carried
-   a positive numeric UID and string message content.
+Users do not provide a room ID or UID during the challenge. The observed
+message sender is the UID authority.
 
-The installed client sends application heartbeat packets on the live protocol.
-Club owns reconnection above the client so provider failures cannot escape the
-adapter or crash the HTTP service.
+## Live-message adapter
 
-## Credentials and persistence
+`PublicWebLiveMessageSource` uses `bilibili-live-danmaku` 0.7.16 for room
+resolution, danmaku token retrieval, WebSocket framing, heartbeat, zlib, and
+Brotli support. Package source and examples are available from
+[`Minteea/bilibili-live-danmaku`](https://github.com/Minteea/bilibili-live-danmaku).
 
-- No Bilibili username, account cookie, access key, or anchor identity code is
-  required by this adapter.
-- Anonymous device cookies and the current room token are created at runtime and
-  kept only in memory.
-- The deployment needs outbound HTTPS and WebSocket access to Bilibili.
-- Room IDs and owner UIDs are platform configuration; users cannot submit either
-  value when requesting a challenge.
+The adapter:
 
-## Normalized event contract
+1. initializes anonymous web cookies in memory;
+2. resolves short or canonical room IDs;
+3. obtains the room host list and authentication token;
+4. connects to a `wss://<host>/sub` endpoint with protocol version 3;
+5. listens for `DANMU_MSG`;
+6. polls recent messages while the room is required;
+7. deduplicates WebSocket and recent-message events.
 
-Provider messages are converted inside the adapter to:
+Recent-message polling covers messages that appear in room history without
+being delivered to the anonymous WebSocket connection. Polling runs only while
+an active challenge requires that room.
+
+The adapter does not persist Bilibili cookies or tokens. The deployment needs
+outbound HTTPS and WebSocket access to Bilibili.
+
+## Normalized message
+
+Provider events become:
 
 ```json
 {
-  "eventId": "<provider message id or deterministic SHA-256 fallback>",
-  "roomId": "<configured room id>",
+  "eventId": "<provider ID or deterministic SHA-256 fallback>",
+  "roomId": "<configured room ID>",
   "biliUid": "<positive decimal UID>",
   "biliDisplayName": "<display name or null>",
   "message": "<text>",
@@ -71,58 +70,124 @@ Provider messages are converted inside the adapter to:
 }
 ```
 
-The binding module never imports the provider package or reads its raw array
-layout. `DANMU_MSG.info[1]` is normalized as message text and
-`DANMU_MSG.info[2][0]` as the sender UID. Missing, zero, unsafe, or nonnumeric
-UIDs are discarded.
+`DANMU_MSG.info[1]` supplies message text and `DANMU_MSG.info[2][0]` supplies
+the sender UID. The adapter discards missing, zero, unsafe, and nonnumeric UID
+values.
 
-## Reconnect and failure assumptions
+A recent message must occur after the challenge was created. A one-second
+tolerance accounts for provider timestamps without millisecond precision.
+Challenge matching also validates the configured room and keyed code digest.
 
-- One `RoomConnectionManager` entry exists per room needed by an unexpired
-  challenge.
-- Recent-message polling runs only for the lifetime of that managed connection.
-- A recent message must have occurred after the matching challenge was created;
-  the one-second comparison tolerance accounts for provider timestamps that omit
-  milliseconds.
-- Authentication failure, network close, and decoding failure mark the room
-  unhealthy and use bounded exponential reconnect delays.
-- A short idle grace period avoids reconnect churn between adjacent challenges.
-- Startup reloads unexpired challenges and reconciles the required room set.
-- HTTP startup and liveness remain available when Bilibili is unavailable.
-- CI uses `FakeLiveMessageSource`; live Bilibili calls are never required.
+## Room connection lifecycle
 
-## Known limitations and re-verification triggers
+`RoomConnectionManager` maintains one connection per required room.
 
-The web-room endpoints and raw message arrays are not a supported public
-contract. They can change without notice or apply regional/risk-control blocks.
-Re-verify this document and the sanitized contract fixture when upgrading the
-package, when connection tests start failing, or when Bilibili changes room
-authentication. Do not move provider response fields into domain or API types.
+- New challenges add room demand.
+- Challenge consumption, cancellation, or expiry removes demand.
+- A short idle grace period keeps adjacent challenges from reconnecting.
+- Network close, authentication failure, and decoding failure mark the room
+  unhealthy.
+- Reconnect uses bounded exponential delay.
+- Process startup reloads unexpired challenges and reconstructs room demand.
+- Provider failures remain isolated from HTTP liveness.
 
-## Guard-roster source selected for monthly snapshots
+Room state is visible from `/admin/verification` and
+`/api/v1/admin/system`.
 
-M3 uses the public web-room endpoint
-`/xlive/app-room/v2/guardTab/topListNew` behind `PublicWebGuardRosterSource`.
-The endpoint was probed on 2026-07-22 with the same anonymous in-memory cookie
-initialization used by the live-message adapter. A non-empty public room returned
-all declared pages successfully with a maximum page size of 30.
+## Monthly guard roster
 
-The response exposes `info.num` (declared member total), `info.page` (declared
-page count), and `info.now` (current page). `top3` is repeated on every response;
-page one normalization includes it once, while `list` begins at rank four and
-continues across pages. Members normalize from `uinfo.uid`, `uinfo.base.name`,
-`uinfo.guard.level`, and `rank`. Raw levels 1, 2, and 3 map to governor, admiral,
-and captain. Any other level makes the whole attempt inconsistent.
+`PublicWebGuardRosterSource` calls:
 
-The provider supplies neither a server-side snapshot timestamp nor a consistency
-token. Club therefore fetches every declared page with bounded concurrency and
-then re-fetches page one. It rejects total/page drift, key first-page membership
-drift, missing or out-of-order pages, duplicate UIDs, unknown tiers, count
-mismatch, and the 120-second attempt timeout. This is evidence of one complete,
-consistent capture interval, not a claim of atomic provider state.
+```text
+/xlive/app-room/v2/guardTab/topListNew
+```
 
-Each original response byte sequence is SHA-256 hashed, gzip-compressed, and
-stored under `private/snapshots/{runId}/{attemptId}/page-{page}.json.gz`.
-PostgreSQL stores only evidence metadata and normalized members. The sanitized
-provider-shaped fixture is `tests/fixtures/bilibili/guard-roster-page.json`; live
-calls are excluded from CI.
+It uses anonymous in-memory cookies and a page size of 30. The response includes:
+
+- `info.num`: declared member count;
+- `info.page`: declared page count;
+- `info.now`: current page;
+- `top3`: leading ranked members repeated on provider pages;
+- `list`: remaining ranked members.
+
+Page-one normalization includes `top3` once and then appends `list`. Later
+pages use `list`. Member fields normalize from:
+
+| Provider field      | Club field   |
+| ------------------- | ------------ |
+| `uinfo.uid`         | Bilibili UID |
+| `uinfo.base.name`   | Display name |
+| `uinfo.guard.level` | Guard tier   |
+| `rank`              | Roster rank  |
+
+Tier mapping:
+
+| Raw level | Tier     |
+| --------- | -------- |
+| `1`       | Governor |
+| `2`       | Admiral  |
+| `3`       | Captain  |
+
+An unknown level makes the capture attempt inconsistent.
+
+## Capture consistency
+
+The provider does not supply a snapshot token. Club therefore treats a roster
+as a bounded capture interval:
+
+1. fetch page one and read declared page and member counts;
+2. fetch every declared page with bounded concurrency;
+3. re-fetch page one;
+4. compare provider metadata and the leading member set;
+5. normalize and validate the complete member set.
+
+An attempt fails consistency when it detects:
+
+- page-count or member-count drift;
+- a changed leading-page member set;
+- missing or out-of-order pages;
+- duplicate UIDs;
+- unknown guard tiers;
+- normalized count mismatch;
+- a capture duration over 120 seconds.
+
+Only a consistent attempt can become the finalized monthly roster.
+
+## Evidence storage
+
+Each original response byte sequence is:
+
+1. hashed with SHA-256;
+2. compressed with gzip;
+3. written atomically to
+   `private/snapshots/{runId}/{attemptId}/page-{page}.json.gz`.
+
+PostgreSQL stores the object key, digest, byte sizes, item count, fetch time,
+provider metadata, normalized attempt members, and finalized members. The
+object-storage volume and PostgreSQL database form one evidence set for backup
+and restore.
+
+## Verification and maintenance
+
+Automated coverage includes:
+
+- normalized live-message fixtures;
+- recent-message timestamps and stable event IDs;
+- connection reuse, failure isolation, and reconnect;
+- challenge replay, expiry, conflict, and restart behavior;
+- sanitized roster fixtures;
+- page consistency and timeout handling;
+- immutable finalized roster evidence.
+
+The roster fixture is
+`tests/fixtures/bilibili/guard-roster-page.json`. CI uses fake providers and
+does not require live Bilibili access.
+
+When the provider changes room authentication, response fields, compression,
+or risk-control behavior:
+
+1. update the adapter and sanitized fixtures;
+2. run unit and PostgreSQL integration tests;
+3. test a non-sensitive verification room;
+4. confirm stored evidence hashes and normalized counts;
+5. monitor room and roster status after deployment.

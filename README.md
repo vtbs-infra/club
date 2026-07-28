@@ -4,84 +4,95 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Club is a self-hosted Bilibili guard-gift claiming and shipping platform for
-VTubers, streamers, and their viewers. It connects Bilibili UID verification,
-immutable month-end guard rosters, automatic gift-order creation, recipient
-claims, creator-operated shipping, and tracking.
+Club is a self-hosted Bilibili guard-gift platform for VTubers, streamers, and
+their viewers. It verifies viewer UIDs in a platform-managed live room,
+captures monthly guard rosters, creates gift orders, collects delivery details,
+and supports creator-managed shipping and tracking.
 
-## Product model
+## How Club works
 
-There are exactly three mutually exclusive account roles:
+1. A viewer registers an account and binds a Bilibili UID by sending a
+   one-time code in a configured verification room.
+2. At `23:59:00` on the last day of each month, Club captures the active guard
+   roster for every enabled creator in that creator's timezone.
+3. A creator publishes a gift release for a month in which they want to send
+   gifts.
+4. A finalized roster and matching published release produce one gift order
+   for every eligible Bilibili UID.
+5. The viewer selects an address and any requested options, then submits the
+   order.
+6. The creator processes the order, records shipment details, and updates it
+   through delivery.
 
-- `USER`: binds a Bilibili UID, manages addresses, claims gifts, and tracks
-  deliveries;
-- `CREATOR`: owns exactly one creator profile, publishes gifts, and fulfills
-  their own orders;
-- `PLATFORM_ADMIN`: registers creators and manages verification rooms, roster
-  capture, platform announcements, and system health.
+Roster capture and gift publication are independent. A creator can publish a
+gift release before or after the monthly roster is finalized. Reconciliation is
+idempotent and produces the same orders in either sequence. A month without a
+published gift release produces no gift orders.
 
-There are no organizations, memberships, separate operators, fulfillment
-roles, or combined roles. Public registration always creates a `USER`; an
-administrator promotes an existing user to `CREATOR`.
+## Accounts and interfaces
 
-Every active creator receives a roster task at `23:59:00` on the last day of
-each month in that creator's timezone, whether or not a gift is planned. The
-capture start time determines the month. Raw pages are compressed into object
-storage while PostgreSQL stores hashes and metadata. Consistent on-time
-captures finalize automatically; consistent late captures require
-administrator approval; finalized members are immutable.
+Every account has one role:
 
-Roster capture and gift publication are independent. A creator can publish
-nothing for a month. Orders are created idempotently only when a published
-release and finalized roster exist for the same creator and month, regardless
-of which event occurs first. Before submission, an order belongs only to its
-Bilibili UID. Submission freezes the platform user, address, and release
-options.
+| Role             | Responsibilities                                                                                 | Entry        |
+| ---------------- | ------------------------------------------------------------------------------------------------ | ------------ |
+| `USER`           | Bind a Bilibili UID, manage addresses, claim gifts, and follow shipments                         | `/dashboard` |
+| `CREATOR`        | Configure one creator profile, publish gifts, post announcements, and ship orders                | `/creator`   |
+| `PLATFORM_ADMIN` | Configure creators, verification rooms, roster runs, platform announcements, and system settings | `/admin`     |
 
-## Interfaces
+Public registration creates a `USER` account. A platform administrator can
+assign an existing user account to a creator profile.
 
-Recipients land on `/dashboard`, which has a fixed banner, five recent relevant
-announcements, one contextual action, and gift-order cards.
+The recipient dashboard presents a banner, recent relevant announcements, the
+next useful action, and gift cards. Creator and administrator workspaces use
+task-focused navigation. The web interface is responsive and supports desktop
+and mobile-width layouts.
 
-Creator navigation under `/creator`:
+## Gift and roster rules
 
-- Overview
-- Gift releases
-- Gift orders
-- Announcements
-- Settings
+- Each enabled creator has one roster run for every calendar month.
+- The capture start time determines whether the attempt belongs to the
+  scheduled one-minute window.
+- Consistent on-time captures finalize automatically.
+- Consistent late captures wait for platform-administrator approval.
+- Finalized members and their source evidence are immutable.
+- A creator can publish at most one gift release for a month.
+- Published package contents, tier rules, and claim fields are immutable.
+- An unsubmitted gift order is associated with its Bilibili UID.
+- Submitting an order freezes the claimant account, address, selected package
+  contents, and option values.
 
-Administrator navigation under `/admin`:
+Gift-order states:
 
-- Overview
-- Creators
-- Roster sync
-- Verification
-- Platform announcements
-- System
+```text
+CLAIMABLE -> SUBMITTED -> PROCESSING -> SHIPPED -> COMPLETED
+CLAIMABLE -> EXPIRED
+SUBMITTED | PROCESSING -> CANCELLED
+```
 
-This version has one fixed responsive visual system. It has no themes,
-appearance controls, page editor, generic brand-asset library, or per-creator
-visual customization.
-
-## Architecture
+## Technology
 
 Club is a TypeScript modular monolith:
 
 - React, React Router, TanStack Query, and Vite;
 - Fastify, TypeBox/OpenAPI, Better Auth, Drizzle ORM, and Pino;
 - PostgreSQL 17;
-- local atomic object storage for compressed roster evidence and gift images;
+- local object storage for compressed roster evidence and gift images;
 - Vitest and Playwright;
-- a single-app-instance Docker Compose topology.
+- Docker Compose with one application instance.
 
-Creator APIs resolve the one creator profile from the authenticated session and
-never accept a browser-supplied creator ID. Only administrator APIs address
-creators explicitly.
+The production Fastify process serves the web application, `/api/v1` HTTP API,
+background roster scheduler, Bilibili room connections, and tracking refresh.
 
 ## Local development
 
-Requirements: Node.js `>=24 <25`, pnpm `11.9.0`, Docker Engine, and Compose v2.
+Requirements:
+
+- Node.js `>=24 <25`
+- pnpm `11.9.0`
+- Docker Engine
+- Docker Compose v2
+
+Install dependencies and create local configuration:
 
 ```powershell
 corepack enable
@@ -89,9 +100,11 @@ pnpm install
 Copy-Item .env.example .env
 ```
 
-Replace the database password and both database URLs, set a 32-character
-`BETTER_AUTH_SECRET`, and configure a 32-byte base64 address-encryption key.
-Then:
+Set the database password and both database URLs in `.env`. Generate a random
+authentication secret of at least 32 characters and a 32-byte base64 address
+encryption key.
+
+Start PostgreSQL, apply the schema, and launch the development servers:
 
 ```powershell
 docker compose up -d postgres
@@ -99,8 +112,8 @@ pnpm db:migrate
 pnpm dev
 ```
 
-The web app is served at <http://localhost:5173> and the API at
-<http://localhost:3000>.
+The Vite development server is available at <http://localhost:5173>; Fastify is
+available at <http://localhost:3000>.
 
 Create the first platform administrator:
 
@@ -112,37 +125,59 @@ Remove-Item Env:CLUB_ADMIN_PASSWORD
 
 ## Docker Compose
 
-The application does not run migrations implicitly:
+Build the image, start PostgreSQL, apply migrations, and start Club:
 
 ```powershell
+docker compose build app
 docker compose up -d postgres
 docker compose run --rm app pnpm db:migrate
-docker compose up -d --build app
+docker compose up -d app
 ```
 
-After signing in, register an existing ordinary account as a creator under
-`/admin/creators`, and configure at least one fixed verification room under
-`/admin/verification`.
+Verify the deployment:
+
+```powershell
+docker compose ps
+Invoke-RestMethod http://localhost:3000/health/live
+Invoke-RestMethod http://localhost:3000/health/ready
+```
+
+Create the first administrator from the container image:
+
+```powershell
+docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
+  pnpm club admin:create --email admin@example.com --name Admin
+```
+
+The setup sequence in the web interface is:
+
+1. register a recipient account;
+2. assign that account to a creator from `/admin/creators`;
+3. configure and enable a verification room from `/admin/verification`;
+4. confirm roster scheduling and room health from the administrator dashboard.
 
 ## Configuration
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `APP_URL` | `http://localhost:3000` | Public origin and Origin-check baseline |
-| `DATABASE_URL` | required | PostgreSQL URL for the current process |
-| `BETTER_AUTH_SECRET` | required | Better Auth secret, at least 32 characters |
-| `ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION` | `1` | Active address key version |
-| `ADDRESS_ENCRYPTION_KEY_RING` | production required | Comma-separated `version:base64` keys |
-| `BILIBILI_LIVE_SOURCE` | `public-web` | `public-web` or test-only `fake` |
-| `BILIBILI_ROSTER_SOURCE` | `public-web` | `public-web` or test-only `fake` |
-| `STORAGE_LOCAL_PATH` | `./data/club` | Private object and gift-image storage |
-| `TRACKING_PROVIDER` | `none` | `none` or development `fake` |
-| `TRUST_PROXY` | `false` | Enable only behind a trusted reverse proxy |
-| `SMTP_*` | disabled | Enables verification/reset when complete |
+| Variable                                | Default                 | Purpose                                               |
+| --------------------------------------- | ----------------------- | ----------------------------------------------------- |
+| `APP_URL`                               | `http://localhost:3000` | Public origin and request-origin baseline             |
+| `DATABASE_URL`                          | required                | PostgreSQL connection for the running process         |
+| `BETTER_AUTH_SECRET`                    | required                | Authentication secret, at least 32 characters         |
+| `ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION` | `1`                     | Key version used for new encrypted records            |
+| `ADDRESS_ENCRYPTION_KEY_RING`           | production required     | Comma-separated `version:base64` encryption keys      |
+| `BILIBILI_LIVE_SOURCE`                  | `public-web`            | Live-message adapter                                  |
+| `BILIBILI_ROSTER_SOURCE`                | `public-web`            | Guard-roster adapter                                  |
+| `STORAGE_LOCAL_PATH`                    | `./data/club`           | Roster evidence and gift-image storage                |
+| `TRACKING_PROVIDER`                     | `none`                  | Tracking integration; `fake` is available for tests   |
+| `LOG_LEVEL`                             | `info`                  | Pino logging level                                    |
+| `TRUST_PROXY`                           | `false`                 | Proxy trust for deployments behind a controlled proxy |
+| `SMTP_*`                                | unset                   | Email verification and password reset transport       |
 
-There is no `CLUB_UI_THEME` or other runtime UI customization.
+Compose also uses `POSTGRES_PASSWORD`, `POSTGRES_HOST_PORT`,
+`COMPOSE_DATABASE_URL`, and `CLUB_PORT`. See [.env.example](.env.example) for
+the complete template.
 
-## Verification
+## Quality gates
 
 ```powershell
 pnpm check
@@ -153,31 +188,19 @@ pnpm build
 pnpm test:e2e
 ```
 
-## Security and operating boundaries
-
-- Address books, frozen order addresses, and release options use AES-256-GCM.
-- Raw roster pages live in storage; PostgreSQL holds object keys, hashes,
-  counts, and timestamps.
-- Database triggers protect audit logs, finalized roster evidence, frozen
-  claim data, order state, shipments, and tracking history.
-- Backups must include PostgreSQL, object storage, the auth secret, and the
-  complete encryption key ring.
-- Only one active application instance is currently supported.
-- Bilibili `public-web` sources are undocumented public contracts and may
-  change.
-- There is no manual roster, eligibility, or gift-order grant path.
-
 ## Documentation
 
-- [Approved rebuild context](docs/creator-first-rebuild.md)
 - [Product and architecture](docs/product-architecture.md)
 - [Operations](docs/operations.md)
-- [Bilibili integration record](docs/integrations/bilibili.md)
-- [Acceptance matrix](docs/acceptance.md)
+- [Bilibili integration](docs/integrations/bilibili.md)
+- [Acceptance](docs/acceptance.md)
 - [Release checklist](docs/release.md)
+
+The generated OpenAPI document is available from a running instance at
+`/openapi.json`.
 
 ## License
 
-Club is licensed under the
-[Parity Public License 7.0.0](LICENSE), with `zclkkk and Fox-yun` as the
-contributor and this repository as the source-code location.
+Club is licensed under the [Parity Public License 7.0.0](LICENSE), with
+`zclkkk and Fox-yun` as the contributor and this repository as the source-code
+location.

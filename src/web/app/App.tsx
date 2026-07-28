@@ -26,7 +26,7 @@ function NotFoundPage() {
     <main className="not-found">
       <span>404</span>
       <h1>这里没有你要找的页面</h1>
-      <p>链接可能已经失效，或页面已在新版 Club 中移除。</p>
+      <p>请检查访问地址，或返回首页继续使用 Club。</p>
       <Link className="button primary" to="/">
         返回首页
       </Link>
