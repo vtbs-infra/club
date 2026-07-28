@@ -176,6 +176,8 @@ pnpm test:e2e
 - [Acceptance matrix](docs/acceptance.md)
 - [Release checklist](docs/release.md)
 
-The project license is still to be selected by the maintainers. Third-party
-provenance and licenses are retained in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSES](LICENSES).
+## License
+
+Club is licensed under the
+[Parity Public License 7.0.0](LICENSE), with `zclkkk and Fox-yun` as the
+contributor and this repository as the source-code location.

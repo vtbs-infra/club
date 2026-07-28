@@ -199,5 +199,7 @@ pnpm test:e2e
 - [验收矩阵](docs/acceptance.md)
 - [发布清单](docs/release.md)
 
-项目许可证尚待仓库维护者最终选择；第三方来源与许可证保留在
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [LICENSES](LICENSES)。
+## 许可证
+
+Club 采用 [Parity Public License 7.0.0](LICENSE)，授权主体为
+`zclkkk and Fox-yun`，源代码地址为本仓库。

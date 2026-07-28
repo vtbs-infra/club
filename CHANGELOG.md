@@ -14,6 +14,8 @@ Changelog and the project uses semantic versioning.
 - UID-owned gift orders, frozen encrypted claim data, creator shipping, and
   tracking.
 - Separate recipient, creator, and administrator responsive interfaces.
+- Root project licensing under Parity Public License 7.0.0 for contributors
+  zclkkk and Fox-yun.
 
 ### Removed
 
