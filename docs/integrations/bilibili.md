@@ -1,128 +1,225 @@
-# Bilibili integration notes
+# B站集成
 
-Last verified: 2026-07-22
+Club 通过两个适配器边界连接 B站：
 
-This document records the external behavior used by Club's Bilibili adapters.
-It is an implementation record, not a claim that undocumented Bilibili
-interfaces are stable.
+| 接口                | 用途                             |
+| ------------------- | -------------------------------- |
+| `LiveMessageSource` | 接收验证直播间消息，证明用户 UID |
+| `GuardRosterSource` | 获取主播月度大航海名单           |
 
-## Live-message source selected for UID verification
+生产配置使用 `public-web` 实现，测试使用 `fake` 实现：
 
-M2 uses `bilibili-live-danmaku` 0.7.16 behind
-`PublicWebLiveMessageSource`. The package is MIT-licensed, implemented for
-browser and server JavaScript, and exposes the room lookup, danmaku-token, WebSocket,
-heartbeat, zlib, and Brotli behavior needed by the adapter. The adapter also polls
-the public recent-message endpoint while a room is needed because messages sent to
-an offline room can appear in recent history without being delivered through the
-anonymous WebSocket connection. Its source and API examples are available in the
+```text
+BILIBILI_LIVE_SOURCE=public-web
+BILIBILI_ROSTER_SOURCE=public-web
+```
+
+公开 Web 接口可能随 B站调整而变化。Provider 原始结构只存在于适配器内部，业务模块
+使用 Club 规范化后的类型。
+
+## UID 验证
+
+### 完整流程
+
+1. 平台管理员配置并启用验证直播间。
+2. 普通用户创建绑定挑战。
+3. Club 返回一次性验证码和直播间链接。
+4. 房间连接管理器保持该房间处于监听状态。
+5. 用户使用需要绑定的 B站账号发送验证码。
+6. 直播消息适配器输出消息内容和发送者 UID。
+7. 绑定服务在一个事务中消费挑战并激活 UID 绑定。
+
+验证结果以消息发送者为准。挑战请求体不接受用户提供的直播间 ID 或 UID。
+
+### 直播消息连接
+
+`PublicWebLiveMessageSource` 使用 `bilibili-live-danmaku` 0.7.16 完成：
+
+- 短号与真实房间号解析；
+- 弹幕服务器和 Token 获取；
+- WebSocket 协议；
+- 心跳；
+- zlib 与 Brotli 消息解压；
+- `DANMU_MSG` 事件解析。
+
+依赖源码：
 [`Minteea/bilibili-live-danmaku`](https://github.com/Minteea/bilibili-live-danmaku)
-repository.
 
-Bilibili also documents an official open platform with live-room long-connection
-capabilities. That route requires an approved developer application and
-platform credentials, which are not part of Club's default self-hosted setup.
-The selected adapter therefore uses the public web-room flow without a Bilibili
-account. A future official adapter can implement the same `LiveMessageSource`
-boundary without changing binding logic. See the
-[Bilibili Open Platform](https://open.bilibili.com/doc).
+连接步骤：
 
-## Verified connection behavior
+```text
+初始化匿名 Cookie
+  -> 解析直播间
+  -> 获取弹幕服务器与 Token
+  -> 连接 wss://<host>/sub
+  -> 认证
+  -> 心跳与消息接收
+```
 
-The following was exercised from Node.js 24 against a currently live room on
-2026-07-22:
+适配器还会在房间被挑战使用期间轮询近期消息，并用稳定事件 ID 去重。这样可以处理出现
+在直播间消息历史中、但匿名 WebSocket 未收到的消息。
 
-1. Initialize anonymous web cookies in memory.
-2. Resolve a supplied short or canonical room ID through the live-room info
-   endpoint.
-3. Request the room's current danmaku host list and authentication token.
-4. Connect to the selected `wss://<host>/sub` endpoint with protocol version 3.
-5. Receive `CONNECT_SUCCESS`, followed by a `DANMU_MSG` event.
-6. Poll recent room messages every two seconds as a fallback and deduplicate
-   provider entries with deterministic event IDs.
-7. Confirm, without retaining the observed user data, that the message carried
-   a positive numeric UID and string message content.
+匿名 Cookie 和当前房间 Token 只保存在进程内存。部署主机需要访问 B站 HTTPS 与
+WebSocket 服务。
 
-The installed client sends application heartbeat packets on the live protocol.
-Club owns reconnection above the client so provider failures cannot escape the
-adapter or crash the HTTP service.
-
-## Credentials and persistence
-
-- No Bilibili username, account cookie, access key, or anchor identity code is
-  required by this adapter.
-- Anonymous device cookies and the current room token are created at runtime and
-  kept only in memory.
-- The deployment needs outbound HTTPS and WebSocket access to Bilibili.
-- Room IDs and owner UIDs are platform configuration; users cannot submit either
-  value when requesting a challenge.
-
-## Normalized event contract
-
-Provider messages are converted inside the adapter to:
+### 规范化消息
 
 ```json
 {
-  "eventId": "<provider message id or deterministic SHA-256 fallback>",
-  "roomId": "<configured room id>",
-  "biliUid": "<positive decimal UID>",
-  "biliDisplayName": "<display name or null>",
-  "message": "<text>",
+  "eventId": "<Provider ID 或确定性 SHA-256>",
+  "roomId": "<平台配置的直播间 ID>",
+  "biliUid": "<正十进制 UID>",
+  "biliDisplayName": "<显示名称或 null>",
+  "message": "<消息文本>",
   "occurredAt": "<Date>"
 }
 ```
 
-The binding module never imports the provider package or reads its raw array
-layout. `DANMU_MSG.info[1]` is normalized as message text and
-`DANMU_MSG.info[2][0]` as the sender UID. Missing, zero, unsafe, or nonnumeric
-UIDs are discarded.
+字段来源：
 
-## Reconnect and failure assumptions
+- `DANMU_MSG.info[1]`：消息文本；
+- `DANMU_MSG.info[2][0]`：发送者 UID。
 
-- One `RoomConnectionManager` entry exists per room needed by an unexpired
-  challenge.
-- Recent-message polling runs only for the lifetime of that managed connection.
-- A recent message must have occurred after the matching challenge was created;
-  the one-second comparison tolerance accounts for provider timestamps that omit
-  milliseconds.
-- Authentication failure, network close, and decoding failure mark the room
-  unhealthy and use bounded exponential reconnect delays.
-- A short idle grace period avoids reconnect churn between adjacent challenges.
-- Startup reloads unexpired challenges and reconciles the required room set.
-- HTTP startup and liveness remain available when Bilibili is unavailable.
-- CI uses `FakeLiveMessageSource`; live Bilibili calls are never required.
+缺失、为零、超出 JavaScript 安全整数范围或非数字的 UID 会被丢弃。
 
-## Known limitations and re-verification triggers
+近期消息的时间必须晚于挑战创建时间。一秒容差用于处理不包含毫秒的 Provider
+时间戳。
 
-The web-room endpoints and raw message arrays are not a supported public
-contract. They can change without notice or apply regional/risk-control blocks.
-Re-verify this document and the sanitized contract fixture when upgrading the
-package, when connection tests start failing, or when Bilibili changes room
-authentication. Do not move provider response fields into domain or API types.
+### 房间连接生命周期
 
-## Guard-roster source selected for monthly snapshots
+`RoomConnectionManager` 为每个当前需要的房间维护一个连接：
 
-M3 uses the public web-room endpoint
-`/xlive/app-room/v2/guardTab/topListNew` behind `PublicWebGuardRosterSource`.
-The endpoint was probed on 2026-07-22 with the same anonymous in-memory cookie
-initialization used by the live-message adapter. A non-empty public room returned
-all declared pages successfully with a maximum page size of 30.
+- 创建挑战会增加房间需求；
+- 挑战消费、取消或过期会减少房间需求；
+- 短暂空闲宽限期避免相邻挑战反复重连；
+- 连接关闭、认证失败和解码错误会更新房间健康状态；
+- 重连使用有上限的指数退避；
+- 进程启动时读取未过期挑战并恢复房间需求。
 
-The response exposes `info.num` (declared member total), `info.page` (declared
-page count), and `info.now` (current page). `top3` is repeated on every response;
-page one normalization includes it once, while `list` begins at rank four and
-continues across pages. Members normalize from `uinfo.uid`, `uinfo.base.name`,
-`uinfo.guard.level`, and `rank`. Raw levels 1, 2, and 3 map to governor, admiral,
-and captain. Any other level makes the whole attempt inconsistent.
+B站连接故障不会阻止 Fastify 提供 Liveness 接口。
 
-The provider supplies neither a server-side snapshot timestamp nor a consistency
-token. Club therefore fetches every declared page with bounded concurrency and
-then re-fetches page one. It rejects total/page drift, key first-page membership
-drift, missing or out-of-order pages, duplicate UIDs, unknown tiers, count
-mismatch, and the 120-second attempt timeout. This is evidence of one complete,
-consistent capture interval, not a claim of atomic provider state.
+## 月度大航海名单
 
-Each original response byte sequence is SHA-256 hashed, gzip-compressed, and
-stored under `private/snapshots/{runId}/{attemptId}/page-{page}.json.gz`.
-PostgreSQL stores only evidence metadata and normalized members. The sanitized
-provider-shaped fixture is `tests/fixtures/bilibili/guard-roster-page.json`; live
-calls are excluded from CI.
+### Provider 请求
+
+`PublicWebGuardRosterSource` 调用：
+
+```text
+/xlive/app-room/v2/guardTab/topListNew
+```
+
+请求使用匿名内存 Cookie，分页大小为 30。
+
+响应元数据：
+
+| 字段        | 含义                            |
+| ----------- | ------------------------------- |
+| `info.num`  | 声明的成员总数                  |
+| `info.page` | 声明的分页总数                  |
+| `info.now`  | 当前页码                        |
+| `top3`      | Provider 在各页重复返回的前三名 |
+| `list`      | 其余成员                        |
+
+第一页把 `top3` 加入一次，再追加 `list`；后续页面只处理 `list`。
+
+### 成员规范化
+
+| Provider 字段       | Club 字段      |
+| ------------------- | -------------- |
+| `uinfo.uid`         | B站 UID        |
+| `uinfo.base.name`   | 抓取时显示名称 |
+| `uinfo.guard.level` | 大航海等级     |
+| `rank`              | 排名           |
+
+等级映射：
+
+| 原始值 | Club 等级  |
+| ------ | ---------- |
+| `1`    | `GOVERNOR` |
+| `2`    | `ADMIRAL`  |
+| `3`    | `CAPTAIN`  |
+
+出现其他等级值时，整次抓取不会通过一致性校验。
+
+## 分页一致性
+
+Provider 没有返回服务端快照时间或一致性 Token。Club 将一次名单任务定义为有时间上限
+的完整抓取区间：
+
+1. 获取第一页并读取声明总数与页数；
+2. 使用有限并发获取全部声明分页；
+3. 再次获取第一页；
+4. 比较元数据和关键成员集合；
+5. 规范化并验证完整成员列表。
+
+以下情况会使尝试失败：
+
+- 成员总数或分页总数变化；
+- 复查第一页时关键成员发生变化；
+- 缺页或页码顺序错误；
+- UID 重复；
+- 等级未知；
+- 规范化成员数与声明总数不一致；
+- 抓取超过 120 秒。
+
+只有通过完整一致性检查的尝试可以进入名单定稿流程。
+
+## 原始证据
+
+每个 Provider 原始响应按以下顺序处理：
+
+1. 对原始字节计算 SHA-256；
+2. 使用 gzip 压缩；
+3. 原子写入对象存储。
+
+对象路径：
+
+```text
+private/snapshots/{runId}/{attemptId}/page-{page}.json.gz
+```
+
+PostgreSQL 保存：
+
+- 对象键；
+- SHA-256；
+- 原始与压缩字节数；
+- 成员数量；
+- 抓取时间；
+- Provider 分页元数据；
+- 规范化候选成员；
+- 定稿成员。
+
+数据库和对象存储需要作为同一个备份集保存。
+
+## 自动化测试
+
+测试覆盖：
+
+- 直播消息 Fixture 规范化；
+- 近期消息时间与稳定事件 ID；
+- 连接复用、失败隔离与重连；
+- 挑战过期、重放、冲突、解绑和进程重启；
+- 名单 Fixture 规范化；
+- 分页漂移、一致性和超时；
+- 名单定稿与证据不可变约束。
+
+名单 Fixture：
+
+```text
+tests/fixtures/bilibili/guard-roster-page.json
+```
+
+CI 使用 `fake` Provider，不访问真实 B站服务。
+
+## Provider 变更处理
+
+当房间认证、响应字段、压缩方式或风控行为变化时：
+
+1. 在适配器内更新解析与连接逻辑；
+2. 更新脱敏 Fixture；
+3. 运行单元测试和 PostgreSQL 集成测试；
+4. 使用非敏感直播间完成连接与名单测试；
+5. 检查存储证据 SHA-256 和规范化成员数；
+6. 部署后观察验证房间与名单任务状态。
+
+业务服务、数据库和前端 API 类型不应直接引用 Provider 原始响应结构。

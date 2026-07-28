@@ -70,7 +70,7 @@ export function registerRequestSecurity<
 ): void {
   const trustedOrigin = new URL(options.config.appUrl).origin;
   app.decorateRequest('authSession', null);
-  app.decorateRequest('organizationAccess', null);
+  app.decorateRequest('creatorProfile', null);
 
   app.addHook('onRequest', (request) => {
     if (!request.url.startsWith('/api/v1/') || !STATE_CHANGING_METHODS.has(request.method)) {

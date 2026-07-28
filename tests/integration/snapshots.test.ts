@@ -1,4 +1,4 @@
-import { count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
@@ -9,7 +9,6 @@ import {
 import {
   auditLogs,
   creators,
-  organizations,
   snapshotAttemptMembers,
   snapshotAttempts,
   snapshotMembers,
@@ -80,7 +79,6 @@ class AdvancingSource implements GuardRosterSource {
 integration('month-end snapshot capture', () => {
   let database: DatabaseService;
   let storage: TemporaryStorage;
-  let organizationId: string;
   let ownerId: string;
   const creatorIds: string[] = [];
 
@@ -98,10 +96,7 @@ integration('month-end snapshot capture', () => {
         bilibili_bindings,
         binding_challenges,
         verification_rooms,
-        member_creator_scopes,
         creators,
-        organization_members,
-        organizations,
         sessions,
         accounts,
         verifications,
@@ -113,20 +108,23 @@ integration('month-end snapshot capture', () => {
       .values({ email: 'snapshot-owner@example.com', name: 'Snapshot Owner' })
       .returning({ id: users.id });
     ownerId = owner!.id;
-    const [organization] = await database.orm
-      .insert(organizations)
-      .values({ name: 'Snapshot Org', slug: 'snapshot-org' })
-      .returning({ id: organizations.id });
-    organizationId = organization!.id;
     for (let index = 1; index <= 8; index += 1) {
+      const [account] = await database.orm
+        .insert(users)
+        .values({
+          email: `creator-${index}@example.com`,
+          name: `Creator ${index}`,
+          role: 'CREATOR',
+        })
+        .returning({ id: users.id });
       const [creator] = await database.orm
         .insert(creators)
         .values({
           bilibiliUid: `9000${index}`,
           displayName: `Creator ${index}`,
-          organizationId,
           roomId: `8000${index}`,
           timezone: 'Asia/Shanghai',
+          userId: account!.id,
         })
         .returning({ id: creators.id });
       creatorIds.push(creator!.id);
@@ -142,7 +140,9 @@ integration('month-end snapshot capture', () => {
     const [run] = await database.orm
       .select()
       .from(snapshotRuns)
-      .where(eq(snapshotRuns.creatorId, creatorId));
+      .where(
+        and(eq(snapshotRuns.creatorId, creatorId), eq(snapshotRuns.periodStart, '2026-07-01')),
+      );
     return run!;
   }
 
@@ -367,14 +367,22 @@ integration('month-end snapshot capture', () => {
   });
 
   it('rolls back finalized members when termination happens during finalization', async () => {
+    const [account] = await database.orm
+      .insert(users)
+      .values({
+        email: 'termination-creator@example.com',
+        name: 'Termination Creator',
+        role: 'CREATOR',
+      })
+      .returning({ id: users.id });
     const [creator] = await database.orm
       .insert(creators)
       .values({
         bilibiliUid: 'termination-creator',
         displayName: 'Termination Creator',
-        organizationId,
         roomId: 'termination-room',
         timezone: 'Asia/Shanghai',
+        userId: account!.id,
       })
       .returning({ id: creators.id });
     const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));

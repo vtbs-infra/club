@@ -96,39 +96,16 @@ describe('application factory', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/live');
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/ready');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/organizations/{orgId}/campaigns',
-      );
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/campaigns/{campaignId}/publish',
-      );
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me/entitlements');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/me/campaigns/{campaignId}',
-      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me');
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me/addresses');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me/gifts');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/creator/releases');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/creator/orders');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/admin/creators');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/admin/rosters');
       expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/me/campaigns/{campaignId}/claim',
+        '/api/v1/admin/verification-rooms',
       );
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me/claims');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/organizations/{orgId}/claims/batch-processing',
-      );
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/organizations/{orgId}/fulfillment/claims',
-      );
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/claims/{claimId}/shipments',
-      );
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/organizations/{orgId}/shipments/import',
-      );
-      expect(response.json<OpenApiDocument>().paths).not.toHaveProperty('/api/v1/entitlements');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/site/home');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/platform/site/home/draft',
-      );
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/platform/site-assets');
     } finally {
       await storage.cleanup();
     }

@@ -22,42 +22,37 @@ import {
 } from './infrastructure/security/request-security.js';
 import { createAuth, type AppAuth } from './modules/auth/auth.js';
 import authRoutes from './modules/auth/routes.js';
-import { AppearanceService } from './modules/appearance/appearance-service.js';
-import appearanceRoutes from './modules/appearance/routes.js';
 import { AddressService } from './modules/addresses/address-service.js';
 import addressRoutes from './modules/addresses/routes.js';
 import { createBindingRuntime, type BindingRuntime } from './modules/binding/binding-runtime.js';
 import bindingRoutes from './modules/binding/routes.js';
-import { CampaignService } from './modules/campaigns/campaign-service.js';
-import campaignRoutes from './modules/campaigns/routes.js';
-import { ClaimService } from './modules/claims/claim-service.js';
-import claimRoutes from './modules/claims/routes.js';
 import { AnnouncementService } from './modules/announcements/announcement-service.js';
 import announcementRoutes from './modules/announcements/routes.js';
 import { AuditQueryService } from './modules/audit/audit-query-service.js';
 import auditRoutes from './modules/audit/routes.js';
+import { CreatorService } from './modules/creators/creator-service.js';
+import creatorRoutes from './modules/creators/routes.js';
 import {
   createFulfillmentRuntime,
   type FulfillmentRuntime,
 } from './modules/fulfillment/fulfillment-runtime.js';
-import fulfillmentRoutes from './modules/fulfillment/routes.js';
-import organizationRoutes from './modules/organizations/routes.js';
+import { GiftMediaService } from './modules/gifts/gift-media-service.js';
+import giftMediaRoutes from './modules/gifts/gift-media-routes.js';
+import giftOrderRoutes from './modules/gifts/order-routes.js';
+import giftReleaseRoutes from './modules/gifts/release-routes.js';
+import { GiftReleaseService } from './modules/gifts/release-service.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
 import snapshotRoutes from './modules/snapshots/routes.js';
 import {
   createSnapshotRuntime,
   type SnapshotRuntime,
 } from './modules/snapshots/snapshot-runtime.js';
-import siteContentRoutes from './modules/site-content/routes.js';
-import { SiteAssetsService } from './modules/site-content/site-assets-service.js';
-import { SiteContentService } from './modules/site-content/site-content-service.js';
 import verificationRoomRoutes from './modules/verification-rooms/routes.js';
 
 const APPLICATION_VERSION = '0.1.0';
 
 export interface BuildAppOptions {
   readonly auth?: AppAuth;
-  readonly appearanceService?: AppearanceService;
   readonly bindingRuntime?: BindingRuntime;
   readonly challengeLimiter?: InMemoryRateLimiter;
   readonly clock?: Clock;
@@ -90,28 +85,33 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const storage = options.storage ?? new LocalStorageDriver(config.storageLocalPath);
   const clock = options.clock ?? new SystemClock();
   const auth = options.auth ?? createAuth({ config, database });
-  const appearanceService = options.appearanceService ?? new AppearanceService(database, config);
   const encryption = new EncryptionKeyRing(config);
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
   const bindingRuntime =
     options.bindingRuntime ?? createBindingRuntime({ clock, config, database });
-  const campaignService = new CampaignService(database, clock);
   const addressService = new AddressService(database, encryption);
-  const claimService = new ClaimService(database, encryption);
+  const creatorService = new CreatorService(database);
+  const releaseService = new GiftReleaseService(database);
   const announcementService = new AnnouncementService(database);
-  const siteContentService = new SiteContentService(database, clock);
-  const siteAssetsService = new SiteAssetsService(database, storage);
+  const giftMediaService = new GiftMediaService(database, storage);
   const auditQueryService = new AuditQueryService(database);
   const fulfillmentRuntime =
-    options.fulfillmentRuntime ?? createFulfillmentRuntime({ clock, config, database, encryption });
+    options.fulfillmentRuntime ??
+    createFulfillmentRuntime({
+      addresses: addressService,
+      clock,
+      config,
+      database,
+      encryption,
+    });
   const snapshotRuntime =
     options.snapshotRuntime ??
     createSnapshotRuntime({
       clock,
       config,
       database,
-      onFinalized: (runId, executor) => campaignService.reconcileSnapshot(runId, executor),
+      onFinalized: (runId, executor) => releaseService.reconcileSnapshot(runId, executor),
       storage,
     });
   const logger = pino(createLoggerOptions(config.logLevel), options.loggerStream);
@@ -140,7 +140,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       request.url.startsWith('/health/') ||
       request.url === '/openapi.json'
     ) {
-      if (!request.url.startsWith('/api/v1/site-assets/')) {
+      if (!/^\/api\/v1\/gift-releases\/[^/]+\/cover(?:\?|$)/.test(request.url)) {
         void reply.header('cache-control', 'no-store');
       }
     }
@@ -162,7 +162,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await snapshotRuntime.start();
         await fulfillmentRuntime.start();
       } catch (error) {
-        app.log.error({ err: error }, 'binding runtime startup failed');
+        app.log.error({ err: error }, 'background runtime startup failed');
       }
     });
   }
@@ -202,34 +202,31 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
 
   await app.register(authRoutes, { auth });
-  await app.register(appearanceRoutes, { auth, service: appearanceService });
   registerRequestSecurity(app, { auth, clock, config, rateLimiter });
   await app.register(addressRoutes, { auth, service: addressService });
-  await app.register(organizationRoutes, { auth, database });
+  await app.register(creatorRoutes, { auth, database, service: creatorService });
   await app.register(bindingRoutes, {
     auth,
     challengeLimiter,
     clock,
     service: bindingRuntime.bindings,
   });
-  await app.register(campaignRoutes, { auth, service: campaignService });
-  await app.register(claimRoutes, { auth, service: claimService });
-  await app.register(fulfillmentRoutes, { auth, service: fulfillmentRuntime.service });
+  await app.register(giftReleaseRoutes, { auth, database, service: releaseService });
+  await app.register(giftOrderRoutes, {
+    auth,
+    database,
+    service: fulfillmentRuntime.service,
+  });
+  await app.register(giftMediaRoutes, { auth, database, service: giftMediaService });
   await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
-  await app.register(snapshotRoutes, { auth, service: snapshotRuntime.service });
+  await app.register(snapshotRoutes, { auth, database, service: snapshotRuntime.service });
   await app.register(announcementRoutes, {
     auth,
     database,
     service: announcementService,
   });
-  await app.register(siteContentRoutes, {
-    assets: siteAssetsService,
-    auth,
-    service: siteContentService,
-  });
   await app.register(auditRoutes, {
     auth,
-    database,
     service: auditQueryService,
   });
 
@@ -272,25 +269,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     const acceptsHtml = request.headers.accept?.includes('text/html') ?? false;
     if (shouldServeStatic && request.method === 'GET' && acceptsHtml && !isApiPath(pathname)) {
       const index = await readFile(join(webRoot, 'index.html'), 'utf8');
-      let themedIndex = index;
-      if (/<html\b/.test(index)) {
-        let activeTheme = config.uiTheme;
-        try {
-          activeTheme = (await appearanceService.get()).activeTheme;
-        } catch (error) {
-          request.log.warn(
-            { err: error },
-            'appearance override unavailable; serving deployment theme',
-          );
-        }
-        themedIndex = /data-ui-theme="[^"]*"/.test(index)
-          ? index.replace(/data-ui-theme="[^"]*"/, `data-ui-theme="${activeTheme}"`)
-          : index.replace(/<html\b/, `<html data-ui-theme="${activeTheme}"`);
-      }
-      return reply
-        .header('cache-control', 'no-store')
-        .type('text/html; charset=utf-8')
-        .send(themedIndex);
+      return reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(index);
     }
 
     return reply.status(404).send({

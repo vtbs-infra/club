@@ -8,11 +8,10 @@ export interface AuditEvent {
   readonly actorUserId: string | null;
   readonly afterSummary?: Record<string, unknown> | null;
   readonly beforeSummary?: Record<string, unknown> | null;
-  readonly creatorId?: string | null;
-  readonly ipAddress?: string | null;
-  readonly organizationId?: string | null;
-  readonly reason?: string | null;
-  readonly requestId?: string | null;
+  readonly creatorId?: string | null | undefined;
+  readonly ipAddress?: string | null | undefined;
+  readonly reason?: string | null | undefined;
+  readonly requestId?: string | null | undefined;
   readonly targetId: string;
   readonly targetType: string;
 }
@@ -31,11 +30,16 @@ export class AuditService {
       beforeSummary: event.beforeSummary ?? null,
       creatorId: event.creatorId ?? null,
       ipAddress: event.ipAddress ?? null,
-      organizationId: event.organizationId ?? null,
       reason: event.reason ?? null,
       requestId: event.requestId ?? null,
       targetId: event.targetId,
       targetType: event.targetType,
     });
   }
+}
+
+export interface RequestAuditContext {
+  readonly actorUserId: string;
+  readonly ipAddress?: string | null;
+  readonly requestId?: string | null;
 }

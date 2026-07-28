@@ -1,18 +1,20 @@
 import 'fastify';
 
-import type { OrganizationRole } from '../../shared/permissions/permissions.js';
 import type { AuthSession } from '../modules/auth/auth.js';
 
-interface OrganizationAccess {
-  readonly creatorIds: readonly string[];
-  readonly memberId: string;
-  readonly organizationId: string;
-  readonly role: OrganizationRole;
+interface CreatorProfile {
+  readonly id: string;
+  readonly userId: string;
+  readonly bilibiliUid: string;
+  readonly roomId: string;
+  readonly displayName: string;
+  readonly timezone: string;
+  readonly active: boolean;
 }
 
 declare module 'fastify' {
   interface FastifyRequest {
     authSession: AuthSession | null;
-    organizationAccess: OrganizationAccess | null;
+    creatorProfile: CreatorProfile | null;
   }
 }

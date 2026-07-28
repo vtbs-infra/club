@@ -50,13 +50,13 @@ export async function bootstrapPlatformAdmin(
   await input.database.orm.transaction(async (transaction) => {
     await transaction
       .update(users)
-      .set({ emailVerified: true, platformRole: 'PLATFORM_ADMIN', updatedAt: new Date() })
+      .set({ emailVerified: true, role: 'PLATFORM_ADMIN', updatedAt: new Date() })
       .where(eq(users.id, created.id));
     await audit.record(
       {
         action: 'platform-admin.bootstrapped',
         actorUserId: created.id,
-        afterSummary: { platformRole: 'PLATFORM_ADMIN' },
+        afterSummary: { role: 'PLATFORM_ADMIN' },
         targetId: created.id,
         targetType: 'user',
       },

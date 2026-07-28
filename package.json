@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Self-hosted Bilibili guard gift management platform",
-  "license": "UNLICENSED",
+  "license": "Parity-7.0.0",
   "engines": {
     "node": ">=24 <25"
   },

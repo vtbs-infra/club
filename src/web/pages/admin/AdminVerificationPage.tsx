@@ -1,0 +1,237 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+
+import {
+  createVerificationRoom,
+  getVerificationRooms,
+  testVerificationRoom,
+  updateVerificationRoom,
+  type VerificationRoom,
+} from '../../api/client';
+import {
+  EmptyState,
+  ErrorState,
+  InlineNotice,
+  LoadingState,
+  PageHeader,
+  StatusBadge,
+} from '../../components/Ui';
+
+interface RoomForm {
+  biliOwnerUid: string;
+  biliRoomId: string;
+  displayName: string;
+  enabled: boolean;
+  priority: number;
+}
+
+const emptyRoom: RoomForm = {
+  biliOwnerUid: '',
+  biliRoomId: '',
+  displayName: '',
+  enabled: true,
+  priority: 100,
+};
+
+export function AdminVerificationPage() {
+  const queryClient = useQueryClient();
+  const rooms = useQuery({
+    queryFn: getVerificationRooms,
+    queryKey: ['admin', 'verification'],
+  });
+  const [editing, setEditing] = useState<VerificationRoom | null>(null);
+  const [form, setForm] = useState<RoomForm>(emptyRoom);
+  const startEditing = (room: VerificationRoom) => {
+    setEditing(room);
+    setForm({
+      biliOwnerUid: room.biliOwnerUid,
+      biliRoomId: room.biliRoomId,
+      displayName: room.displayName,
+      enabled: room.enabled,
+      priority: room.priority,
+    });
+  };
+  const reset = () => {
+    setEditing(null);
+    setForm(emptyRoom);
+  };
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'verification'] });
+  const save = useMutation({
+    mutationFn: () =>
+      editing
+        ? updateVerificationRoom(editing.id, {
+            biliOwnerUid: form.biliOwnerUid,
+            displayName: form.displayName,
+            enabled: form.enabled,
+            priority: form.priority,
+          })
+        : createVerificationRoom(form),
+    onSuccess: async () => {
+      reset();
+      await refresh();
+    },
+  });
+  const test = useMutation({
+    mutationFn: testVerificationRoom,
+    onSuccess: refresh,
+  });
+  if (rooms.isPending) return <LoadingState label="正在读取验证直播间…" />;
+  if (rooms.isError) return <ErrorState error={rooms.error} />;
+  return (
+    <div className="stack-lg">
+      <PageHeader
+        actions={
+          <button className="button primary" onClick={reset} type="button">
+            添加直播间
+          </button>
+        }
+        eyebrow="BILIBILI VERIFICATION"
+        intro="普通用户只能使用这里启用的固定直播间，不能自行输入房间号。"
+        title="验证直播间"
+      />
+      <div className="split-workspace verification-workspace">
+        <section className="panel list-panel">
+          <div className="section-heading compact">
+            <div>
+              <h2>已配置直播间</h2>
+              <p>优先级数字越小越优先分配。</p>
+            </div>
+          </div>
+          {rooms.data.length === 0 ? (
+            <EmptyState
+              description="至少启用一个房间后，用户才能创建验证码。"
+              title="尚未配置验证直播间"
+            />
+          ) : (
+            <div className="room-list">
+              {rooms.data.map((room) => (
+                <button
+                  className={editing?.id === room.id ? 'room-row selected' : 'room-row'}
+                  key={room.id}
+                  onClick={() => startEditing(room)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{room.displayName}</strong>
+                    <small>
+                      直播间 {room.biliRoomId} · 优先级 {room.priority}
+                    </small>
+                  </span>
+                  <StatusBadge status={room.enabled ? room.healthStatus : 'disabled'}>
+                    {room.enabled
+                      ? room.healthStatus === 'HEALTHY'
+                        ? '健康'
+                        : room.healthStatus === 'UNHEALTHY'
+                          ? '异常'
+                          : '未知'
+                      : '已停用'}
+                  </StatusBadge>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+        <form
+          className="panel editor-panel"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            save.mutate();
+          }}
+        >
+          <div className="section-heading compact">
+            <div>
+              <p className="eyebrow">{editing ? '编辑直播间' : '添加直播间'}</p>
+              <h2>{editing?.displayName ?? '验证连接配置'}</h2>
+            </div>
+            {editing ? (
+              <button className="text-button" onClick={reset} type="button">
+                新建
+              </button>
+            ) : null}
+          </div>
+          <label>
+            显示名称
+            <input
+              maxLength={120}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, displayName: event.target.value }))
+              }
+              placeholder="例如：Club 主验证直播间"
+              required
+              value={form.displayName}
+            />
+          </label>
+          <div className="form-grid">
+            <label>
+              直播间 ID
+              <input
+                disabled={editing !== null}
+                inputMode="numeric"
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, biliRoomId: event.target.value }))
+                }
+                pattern="[0-9]+"
+                required
+                value={form.biliRoomId}
+              />
+            </label>
+            <label>
+              房主 UID
+              <input
+                inputMode="numeric"
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, biliOwnerUid: event.target.value }))
+                }
+                pattern="[0-9]+"
+                required
+                value={form.biliOwnerUid}
+              />
+            </label>
+            <label>
+              分配优先级
+              <input
+                min={0}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, priority: Number(event.target.value) }))
+                }
+                type="number"
+                value={form.priority}
+              />
+            </label>
+          </div>
+          <label className="switch-field">
+            <input
+              checked={form.enabled}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, enabled: event.target.checked }))
+              }
+              type="checkbox"
+            />
+            <span>
+              <strong>允许分配给用户</strong>
+              <small>停用不会删除历史验证记录。</small>
+            </span>
+          </label>
+          {save.isError || test.isError ? (
+            <InlineNotice tone="danger">{save.error?.message ?? test.error?.message}</InlineNotice>
+          ) : null}
+          <div className="form-actions">
+            <button className="button primary" disabled={save.isPending} type="submit">
+              {save.isPending ? '正在保存…' : '保存配置'}
+            </button>
+            {editing ? (
+              <button
+                className="button secondary"
+                disabled={test.isPending}
+                onClick={() => test.mutate(editing.id)}
+                type="button"
+              >
+                {test.isPending ? '正在测试…' : '测试连接'}
+              </button>
+            ) : null}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

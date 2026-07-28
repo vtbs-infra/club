@@ -9,9 +9,6 @@ import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   creators,
-  memberCreatorScopes,
-  organizationMembers,
-  organizations,
   snapshotAttemptMembers,
   snapshotAttempts,
   snapshotMembers,
@@ -20,13 +17,13 @@ import {
 } from '../../infrastructure/db/schema.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import { AuditService } from '../audit/audit-service.js';
+import type { RequestAuditContext } from '../audit/audit-service.js';
 import type {
   GuardRosterMember,
   GuardRosterPage,
   GuardRosterSource,
 } from '../bilibili/guard-roster-source.js';
 import type { AuthSession } from '../auth/auth.js';
-import type { RequestAuditContext } from '../organizations/organization-service.js';
 import {
   calculateMonthlyCutoff,
   classifyPunctuality,
@@ -53,7 +50,6 @@ interface CaptureRun {
   readonly creatorRoomId: string;
   readonly id: string;
   readonly onTimeWindowEndAt: Date;
-  readonly organizationId: string;
   readonly scheduledCutoffAt: Date;
 }
 
@@ -109,27 +105,19 @@ export class SnapshotService {
     const enabled = await this.database.orm
       .select()
       .from(creators)
-      .innerJoin(organizations, eq(organizations.id, creators.organizationId))
-      .where(
-        and(
-          eq(creators.active, true),
-          isNull(creators.archivedAt),
-          isNull(organizations.archivedAt),
-        ),
-      );
+      .where(and(eq(creators.active, true), isNull(creators.archivedAt)));
     let created = 0;
     for (const row of enabled) {
-      for (const periodStart of relevantMonthlyPeriods(this.clock.now(), row.creators.timezone)) {
-        const cutoff = calculateMonthlyCutoff(periodStart, row.creators.timezone);
+      for (const periodStart of relevantMonthlyPeriods(this.clock.now(), row.timezone)) {
+        const cutoff = calculateMonthlyCutoff(periodStart, row.timezone);
         const inserted = await this.database.orm
           .insert(snapshotRuns)
           .values({
-            creatorBilibiliUid: row.creators.bilibiliUid,
-            creatorId: row.creators.id,
-            creatorRoomId: row.creators.roomId,
+            creatorBilibiliUid: row.bilibiliUid,
+            creatorId: row.id,
+            creatorRoomId: row.roomId,
             cutoffTimezone: cutoff.cutoffTimezone,
             onTimeWindowEndAt: cutoff.onTimeWindowEndAt,
-            organizationId: row.creators.organizationId,
             periodStart: cutoff.periodStart,
             scheduledCutoffAt: cutoff.scheduledCutoffAt,
           })
@@ -394,7 +382,6 @@ export class SnapshotService {
               actorUserId: null,
               afterSummary: { attemptId, memberCount: members.length, punctuality },
               creatorId: run.creatorId,
-              organizationId: run.organizationId,
               targetId: run.id,
               targetType: 'snapshot-run',
             },
@@ -491,7 +478,6 @@ export class SnapshotService {
           afterSummary: { attemptId: attempt.id, memberCount: candidates.length },
           creatorId: run.creatorId,
           ipAddress: context.ipAddress,
-          organizationId: run.organizationId,
           requestId: context.requestId,
           targetId: run.id,
           targetType: 'snapshot-run',
@@ -513,7 +499,6 @@ export class SnapshotService {
       actorUserId: context.actorUserId,
       creatorId: run.creatorId,
       ipAddress: context.ipAddress,
-      organizationId: run.organizationId,
       reason: context.reason,
       requestId: context.requestId,
       targetId: run.id,
@@ -528,6 +513,21 @@ export class SnapshotService {
       .from(snapshotRuns)
       .where(eq(snapshotRuns.creatorId, creatorId))
       .orderBy(desc(snapshotRuns.periodStart));
+  }
+
+  public listAll(creatorId?: string) {
+    return this.database.orm
+      .select({
+        creator: {
+          displayName: creators.displayName,
+          id: creators.id,
+        },
+        run: snapshotRuns,
+      })
+      .from(snapshotRuns)
+      .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
+      .where(creatorId ? eq(snapshotRuns.creatorId, creatorId) : undefined)
+      .orderBy(desc(snapshotRuns.periodStart), asc(creators.displayName));
   }
 
   public async getDetail(runId: string) {
@@ -562,55 +562,31 @@ export class SnapshotService {
     session: AuthSession,
     input: { creatorId?: string; runId?: string },
     mode: 'approve' | 'operate' | 'read' = 'read',
-  ): Promise<{ creatorId: string; organizationId: string }> {
+  ): Promise<{ creatorId: string }> {
     let creatorId = input.creatorId;
-    let organizationId: string | undefined;
     if (input.runId) {
       const [run] = await this.database.orm
-        .select({ creatorId: snapshotRuns.creatorId, organizationId: snapshotRuns.organizationId })
+        .select({ creatorId: snapshotRuns.creatorId })
         .from(snapshotRuns)
         .where(eq(snapshotRuns.id, input.runId))
         .limit(1);
       if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
       creatorId = run.creatorId;
-      organizationId = run.organizationId;
-    } else if (creatorId) {
-      const [creator] = await this.database.orm
-        .select({ organizationId: creators.organizationId })
-        .from(creators)
-        .where(eq(creators.id, creatorId))
-        .limit(1);
-      organizationId = creator?.organizationId;
     }
-    if (!creatorId || !organizationId)
-      throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot scope not found.', 404);
-    if (session.user.platformRole === 'PLATFORM_ADMIN') return { creatorId, organizationId };
-    const [membership] = await this.database.orm
-      .select({ id: organizationMembers.id, role: organizationMembers.role })
-      .from(organizationMembers)
-      .where(
-        and(
-          eq(organizationMembers.organizationId, organizationId),
-          eq(organizationMembers.userId, session.user.id),
-        ),
-      )
+    if (!creatorId) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot scope not found.', 404);
+    if (session.user.role === 'PLATFORM_ADMIN') return { creatorId };
+    if (mode !== 'read' || session.user.role !== 'CREATOR') {
+      throw new AppError('SNAPSHOT_ACCESS_DENIED', 'Snapshot access denied.', 403);
+    }
+    const [creator] = await this.database.orm
+      .select({ id: creators.id })
+      .from(creators)
+      .where(and(eq(creators.id, creatorId), eq(creators.userId, session.user.id)))
       .limit(1);
-    const allowed =
-      membership &&
-      (mode === 'read' ||
-        (mode === 'approve' && ['OWNER', 'ADMIN'].includes(membership.role)) ||
-        (mode === 'operate' && ['OWNER', 'ADMIN', 'OPERATOR'].includes(membership.role)));
-    if (!allowed) {
+    if (!creator) {
       throw new AppError('SNAPSHOT_ACCESS_DENIED', 'Snapshot access denied.', 403);
     }
-    const scopes = await this.database.orm
-      .select({ creatorId: memberCreatorScopes.creatorId })
-      .from(memberCreatorScopes)
-      .where(eq(memberCreatorScopes.memberId, membership.id));
-    if (scopes.length > 0 && !scopes.some((scope) => scope.creatorId === creatorId)) {
-      throw new AppError('SNAPSHOT_ACCESS_DENIED', 'Snapshot access denied.', 403);
-    }
-    return { creatorId, organizationId };
+    return { creatorId };
   }
 
   public async checkEvidenceIntegrity(runId: string) {

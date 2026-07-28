@@ -70,11 +70,11 @@ export function createAuth(options: CreateAuthOptions) {
     trustedOrigins: [new URL(options.config.appUrl).origin],
     user: {
       additionalFields: {
-        platformRole: {
+        role: {
           defaultValue: 'USER',
           input: false,
           required: true,
-          type: ['USER', 'PLATFORM_ADMIN'],
+          type: ['USER', 'CREATOR', 'PLATFORM_ADMIN'],
         },
       },
     },

@@ -4,8 +4,8 @@ import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import { verificationRooms } from '../../infrastructure/db/schema.js';
 import { AuditService } from '../audit/audit-service.js';
+import type { RequestAuditContext } from '../audit/audit-service.js';
 import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
-import type { RequestAuditContext } from '../organizations/organization-service.js';
 
 export interface CreateVerificationRoomInput extends RequestAuditContext {
   readonly biliOwnerUid: string;
