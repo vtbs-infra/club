@@ -48,6 +48,9 @@ import {
   createSnapshotRuntime,
   type SnapshotRuntime,
 } from './modules/snapshots/snapshot-runtime.js';
+import siteContentRoutes from './modules/site-content/routes.js';
+import { SiteAssetsService } from './modules/site-content/site-assets-service.js';
+import { SiteContentService } from './modules/site-content/site-content-service.js';
 import verificationRoomRoutes from './modules/verification-rooms/routes.js';
 
 const APPLICATION_VERSION = '0.1.0';
@@ -97,6 +100,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const addressService = new AddressService(database, encryption);
   const claimService = new ClaimService(database, encryption);
   const announcementService = new AnnouncementService(database);
+  const siteContentService = new SiteContentService(database, clock);
+  const siteAssetsService = new SiteAssetsService(database, storage);
   const auditQueryService = new AuditQueryService(database);
   const fulfillmentRuntime =
     options.fulfillmentRuntime ?? createFulfillmentRuntime({ clock, config, database, encryption });
@@ -135,7 +140,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
       request.url.startsWith('/health/') ||
       request.url === '/openapi.json'
     ) {
-      void reply.header('cache-control', 'no-store');
+      if (!request.url.startsWith('/api/v1/site-assets/')) {
+        void reply.header('cache-control', 'no-store');
+      }
     }
     if (config.nodeEnv === 'production') {
       void reply.header('strict-transport-security', 'max-age=31536000; includeSubDomains');
@@ -214,6 +221,11 @@ export async function buildApp(options: BuildAppOptions = {}) {
     auth,
     database,
     service: announcementService,
+  });
+  await app.register(siteContentRoutes, {
+    assets: siteAssetsService,
+    auth,
+    service: siteContentService,
   });
   await app.register(auditRoutes, {
     auth,

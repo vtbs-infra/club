@@ -75,10 +75,13 @@ integration('database migration lifecycle', () => {
       expect(await tableExists(database, 'shipments')).toBe(true);
       expect(await tableExists(database, 'announcements')).toBe(true);
       expect(await tableExists(database, 'platform_appearance')).toBe(true);
+      expect(await tableExists(database, 'site_pages')).toBe(true);
+      expect(await tableExists(database, 'site_page_versions')).toBe(true);
+      expect(await tableExists(database, 'site_assets')).toBe(true);
       const migrations = await database.orm.execute<{ value: number }>(
         sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
       );
-      expect(migrations[0]?.value).toBe(9);
+      expect(migrations[0]?.value).toBe(10);
     } finally {
       await database.close();
     }
@@ -113,6 +116,9 @@ integration('database migration lifecycle', () => {
       await migrateDatabase(database, resolve('migrations'));
       expect(await tableExists(database, 'announcements')).toBe(true);
       expect(await tableExists(database, 'platform_appearance')).toBe(true);
+      expect(await tableExists(database, 'site_pages')).toBe(true);
+      expect(await tableExists(database, 'site_page_versions')).toBe(true);
+      expect(await tableExists(database, 'site_assets')).toBe(true);
       const survivor = await database.orm.execute<{ email: string }>(
         sql`select email from users where email = 'upgrade-survivor@example.com'`,
       );
@@ -120,7 +126,7 @@ integration('database migration lifecycle', () => {
       const migrations = await database.orm.execute<{ value: number }>(
         sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
       );
-      expect(migrations[0]?.value).toBe(9);
+      expect(migrations[0]?.value).toBe(10);
     } finally {
       await database.close();
       await rm(folder, { force: true, recursive: true });

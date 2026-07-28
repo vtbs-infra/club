@@ -75,6 +75,24 @@ verified re-encryption migration exists.
 
 Remove `CLUB_ADMIN_PASSWORD` immediately afterward.
 
+## Homepage and brand assets
+
+After signing in as the platform administrator, open `/platform/site`.
+
+1. Set the site name and footer text.
+2. Upload desktop and mobile Hero images plus an optional creator avatar. Use
+   JPEG, PNG, or WebP files no larger than 5 MB.
+3. Edit and reorder the controlled homepage blocks.
+4. Check both desktop and mobile previews.
+5. Save the draft, then publish it. Saving alone does not change the public
+   homepage.
+
+Published homepage content, drafts, and version history are stored in
+PostgreSQL. Re-encoded WebP brand images and thumbnails are stored below
+`STORAGE_LOCAL_PATH/public/brand`. Database and storage backups must be restored
+as one matching set. An asset referenced by the current draft or published
+homepage cannot be deleted.
+
 ## Organization onboarding
 
 1. Register the intended owner through the normal registration page.

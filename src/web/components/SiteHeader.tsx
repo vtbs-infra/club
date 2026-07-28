@@ -38,6 +38,7 @@ export function SiteHeader({ authenticated = false, platformAdmin = false }: Sit
             {platformAdmin ? (
               <>
                 <NavLink to="/platform/operations">Platform</NavLink>
+                <NavLink to="/platform/site">Site</NavLink>
                 <NavLink to="/platform/appearance">Appearance</NavLink>
               </>
             ) : null}

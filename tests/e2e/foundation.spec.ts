@@ -46,7 +46,9 @@ test.afterAll(async () => {
 test('serves the production React shell and liveness API', async ({ page, request }) => {
   await page.goto(baseUrl);
   await expect(page.locator('html')).toHaveAttribute('data-ui-theme', 'archive');
-  await expect(page.getByRole('heading', { name: /Community gifts/ })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Welcome to the Captain Gift Portal' }),
+  ).toBeVisible();
   await page.getByRole('link', { name: 'Create account' }).first().click();
   await expect(page.getByRole('heading', { name: 'Join your community team.' })).toBeVisible();
   await expect(page.getByLabel('Display name')).toBeVisible();

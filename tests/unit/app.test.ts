@@ -124,6 +124,11 @@ describe('application factory', () => {
         '/api/v1/organizations/{orgId}/shipments/import',
       );
       expect(response.json<OpenApiDocument>().paths).not.toHaveProperty('/api/v1/entitlements');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/site/home');
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/platform/site/home/draft',
+      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/platform/site-assets');
     } finally {
       await storage.cleanup();
     }
