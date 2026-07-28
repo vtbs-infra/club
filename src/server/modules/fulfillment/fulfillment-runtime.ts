@@ -32,7 +32,7 @@ export function createFulfillmentRuntime(input: {
         ? new FakeTrackingProvider(input.clock)
         : null
       : input.provider;
-  const service = new FulfillmentService(input.database, input.encryption, provider);
+  const service = new FulfillmentService(input.database, input.encryption, provider, input.clock);
   let interval: ReturnType<typeof setInterval> | null = null;
   let ticking = false;
   let lastTickAt: Date | null = null;

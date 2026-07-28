@@ -16,6 +16,7 @@ interface FulfillmentRoutesOptions {
 
 const Id = Type.String({ format: 'uuid' });
 const OrganizationParameters = Type.Object({ orgId: Id });
+const OrganizationCreatorParameters = Type.Object({ creatorId: Id, orgId: Id });
 const ClaimParameters = Type.Object({ claimId: Id });
 const ShipmentParameters = Type.Object({ shipmentId: Id });
 const Filters = Type.Object(
@@ -67,6 +68,23 @@ function context(request: {
   };
 }
 
+function workbookContentDisposition(creatorDisplayName: string, periodStart: string): string {
+  const safeCreatorName =
+    Array.from(creatorDisplayName, (character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code <= 31 || code === 127 || '"*/:<>?\\|'.includes(character) ? '_' : character;
+    })
+      .join('')
+      .trim() || 'creator';
+  const period = periodStart.slice(0, 7);
+  const utf8Name = `${safeCreatorName}-${period}-当月舰长收货名单.xlsx`;
+  const encodedName = encodeURIComponent(utf8Name)
+    .replaceAll("'", '%27')
+    .replaceAll('(', '%28')
+    .replaceAll(')', '%29');
+  return `attachment; filename="guard-addresses-${period}.xlsx"; filename*=UTF-8''${encodedName}`;
+}
+
 const fulfillmentRoutes: FastifyPluginAsync<FulfillmentRoutesOptions> = (app, options) => {
   const requireSession = createRequireSession(options.auth);
 
@@ -88,6 +106,39 @@ const fulfillmentRoutes: FastifyPluginAsync<FulfillmentRoutesOptions> = (app, op
         'claim.read',
       );
       return options.service.listClaims(request.params.orgId, access.creatorIds, request.query);
+    },
+  );
+
+  app.get<{ Params: { creatorId: string; orgId: string } }>(
+    '/api/v1/organizations/:orgId/creators/:creatorId/guards/current-month.xlsx',
+    {
+      preHandler: requireSession,
+      schema: {
+        params: OrganizationCreatorParameters,
+        response: { 200: Type.Any() },
+        tags: ['fulfillment'],
+      },
+    },
+    async (request, reply) => {
+      const access = await options.service.assertOrganizationAccess(
+        session(request),
+        request.params.orgId,
+        'recipient-address.read',
+      );
+      const exported = await options.service.exportCurrentMonthGuardAddresses(
+        request.params.orgId,
+        request.params.creatorId,
+        access.creatorIds,
+        context(request),
+      );
+      return reply
+        .header(
+          'content-disposition',
+          workbookContentDisposition(exported.creatorDisplayName, exported.periodStart),
+        )
+        .header('x-export-row-count', String(exported.rowCount))
+        .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .send(exported.content);
     },
   );
 

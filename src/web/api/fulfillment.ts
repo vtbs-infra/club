@@ -144,6 +144,36 @@ export async function downloadFulfillmentCsv(organizationId: string) {
   URL.revokeObjectURL(url);
 }
 
+function downloadName(response: Response, fallback: string): string {
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  if (!encoded) return fallback;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return fallback;
+  }
+}
+
+export async function downloadCurrentMonthGuardWorkbook(organizationId: string, creatorId: string) {
+  const response = await fetch(
+    `/api/v1/organizations/${organizationId}/creators/${creatorId}/guards/current-month.xlsx`,
+    { credentials: 'include' },
+  );
+  if (!response.ok) {
+    throw new Error('Current-month guard address workbook could not be exported.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = downloadName(response, 'current-month-guard-addresses.xlsx');
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function downloadShipmentTemplate() {
   const response = await fetch('/api/v1/shipments/export-template', {
     credentials: 'include',

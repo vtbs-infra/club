@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import {
@@ -6,12 +6,14 @@ import {
   isOrganizationRole,
   type OrganizationPermission,
 } from '../../../shared/permissions/permissions.js';
+import { SystemClock, type Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   claimAddresses,
   claimEntitlements,
   claims,
   claimStatusHistory,
+  creators,
   entitlements,
   giftCampaigns,
   giftPackages,
@@ -19,12 +21,14 @@ import {
   organizationMembers,
   shipmentItems,
   shipments,
+  snapshotMembers,
   trackingEvents,
 } from '../../infrastructure/db/schema.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import { isAddressPayload, type AddressPayload } from '../addresses/address-domain.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { AuthSession } from '../auth/auth.js';
+import { relevantMonthlyPeriods } from '../snapshots/month-end.js';
 import {
   FULFILLMENT_CSV_VERSION,
   IMPORT_COLUMNS,
@@ -32,6 +36,11 @@ import {
   serializeCsv,
   validateTrackingUrl,
 } from './fulfillment-domain.js';
+import {
+  buildGuardAddressWorkbook,
+  type GuardAddressWorkbookRow,
+  type GuardTier,
+} from './guard-address-workbook.js';
 import type { ShipmentStatus, TrackingProvider, TrackingResult } from './tracking-provider.js';
 
 export interface FulfillmentFilters {
@@ -138,6 +147,7 @@ export class FulfillmentService {
     private readonly database: DatabaseService,
     private readonly encryption: EncryptionKeyRing,
     private readonly trackingProvider: TrackingProvider | null,
+    private readonly clock: Clock = new SystemClock(),
   ) {
     this.audit = new AuditService(database);
   }
@@ -371,6 +381,140 @@ export class FulfillmentService {
       );
       return serializeCsv(rows);
     });
+  }
+
+  public async exportCurrentMonthGuardAddresses(
+    organizationId: string,
+    creatorId: string,
+    allowedCreatorIds: readonly string[],
+    context: FulfillmentAuditContext,
+  ) {
+    if (allowedCreatorIds.length > 0 && !allowedCreatorIds.includes(creatorId)) {
+      throw new AppError('FULFILLMENT_ACCESS_DENIED', 'Fulfillment access denied.', 403);
+    }
+    const [creator] = await this.database.orm
+      .select({
+        displayName: creators.displayName,
+        id: creators.id,
+        timezone: creators.timezone,
+      })
+      .from(creators)
+      .where(
+        and(
+          eq(creators.id, creatorId),
+          eq(creators.organizationId, organizationId),
+          isNull(creators.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (!creator) throw new AppError('CREATOR_NOT_FOUND', 'Creator not found.', 404);
+
+    const generatedAt = this.clock.now();
+    const periodStart = relevantMonthlyPeriods(generatedAt, creator.timezone)[0];
+    const result = await this.database.orm.transaction(async (transaction) => {
+      const sourceRows = await transaction
+        .select({
+          address: claimAddresses,
+          biliUid: claims.biliUid,
+          claimId: claims.id,
+          claimNumber: claims.claimNumber,
+          claimStatus: claims.status,
+          displayName: snapshotMembers.displayNameAtSnapshot,
+          sourcePosition: snapshotMembers.sourcePosition,
+          tier: entitlements.tier,
+        })
+        .from(claims)
+        .innerJoin(giftCampaigns, eq(giftCampaigns.id, claims.campaignId))
+        .innerJoin(claimAddresses, eq(claimAddresses.claimId, claims.id))
+        .innerJoin(claimEntitlements, eq(claimEntitlements.claimId, claims.id))
+        .innerJoin(entitlements, eq(entitlements.id, claimEntitlements.entitlementId))
+        .innerJoin(snapshotMembers, eq(snapshotMembers.id, entitlements.snapshotMemberId))
+        .where(
+          and(
+            eq(claims.organizationId, organizationId),
+            eq(claims.creatorId, creatorId),
+            eq(giftCampaigns.periodStart, periodStart),
+            ne(claims.status, 'CANCELLED'),
+            isNull(entitlements.revokedAt),
+          ),
+        )
+        .orderBy(asc(snapshotMembers.sourcePosition), asc(claims.claimNumber));
+
+      const uniqueRows = new Map<
+        string,
+        (typeof sourceRows)[number] & { readonly tier: GuardTier }
+      >();
+      for (const row of sourceRows) {
+        if (row.tier !== 'CAPTAIN' && row.tier !== 'ADMIRAL' && row.tier !== 'GOVERNOR') {
+          throw new AppError(
+            'FULFILLMENT_GUARD_TIER_INVALID',
+            'A guard record contains an unsupported tier.',
+            500,
+          );
+        }
+        if (!uniqueRows.has(row.claimId)) uniqueRows.set(row.claimId, { ...row, tier: row.tier });
+      }
+
+      const workbookRows: GuardAddressWorkbookRow[] = [];
+      for (const row of uniqueRows.values()) {
+        workbookRows.push({
+          address: this.decryptAddress(row.claimId, row.address),
+          biliUid: row.biliUid,
+          claimNumber: row.claimNumber,
+          claimStatus: row.claimStatus,
+          displayName: row.displayName,
+          tier: row.tier,
+        });
+      }
+      const content = await buildGuardAddressWorkbook({
+        creatorDisplayName: creator.displayName,
+        generatedAt,
+        periodStart,
+        rows: workbookRows,
+        timezone: creator.timezone,
+      });
+
+      for (const row of uniqueRows.values()) {
+        await this.audit.record(
+          {
+            action: 'fulfillment.address-exported',
+            actorUserId: context.actorUserId,
+            afterSummary: {
+              format: 'xlsx',
+              periodStart,
+              source: 'current-month-guard-export',
+            },
+            creatorId,
+            ipAddress: context.ipAddress ?? null,
+            organizationId,
+            requestId: context.requestId ?? null,
+            targetId: row.claimId,
+            targetType: 'claim',
+          },
+          transaction,
+        );
+      }
+      await this.audit.record(
+        {
+          action: 'fulfillment.guard-xlsx-exported',
+          actorUserId: context.actorUserId,
+          afterSummary: { periodStart, rowCount: workbookRows.length },
+          creatorId,
+          ipAddress: context.ipAddress ?? null,
+          organizationId,
+          requestId: context.requestId ?? null,
+          targetId: creatorId,
+          targetType: 'creator',
+        },
+        transaction,
+      );
+      return { content, rowCount: workbookRows.length };
+    });
+    return {
+      ...result,
+      creatorDisplayName: creator.displayName,
+      periodStart,
+    };
   }
 
   public exportTemplate() {

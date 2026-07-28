@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 
+import { downloadCurrentMonthGuardWorkbook } from '../api/fulfillment';
 import { getCreators, getMembers, type Membership } from '../api/identity';
 import { AuthenticatedPage } from '../components/AuthenticatedPage';
 
@@ -28,11 +30,14 @@ interface OrganizationDetailsProperties {
 }
 
 function OrganizationDetails({ membership, organizationId }: OrganizationDetailsProperties) {
+  const [exportError, setExportError] = useState('');
+  const [exportingCreatorId, setExportingCreatorId] = useState('');
   const creators = useQuery({
     queryFn: () => getCreators(organizationId),
     queryKey: ['organizations', organizationId, 'creators'],
   });
   const canReadMembers = membership.role === 'OWNER' || membership.role === 'ADMIN';
+  const canExportGuardAddresses = membership.role === 'OWNER' || membership.role === 'FULFILLMENT';
   const members = useQuery({
     enabled: canReadMembers,
     queryFn: () => getMembers(organizationId),
@@ -73,6 +78,11 @@ function OrganizationDetails({ membership, organizationId }: OrganizationDetails
           </Link>
         ) : null}
       </div>
+      {exportError ? (
+        <p aria-live="polite" className="form-message form-error">
+          {exportError}
+        </p>
+      ) : null}
       <div className="workspace-grid">
         <section className="panel">
           <p className="panel-label">CREATORS</p>
@@ -90,9 +100,33 @@ function OrganizationDetails({ membership, organizationId }: OrganizationDetails
                 <span className={creator.active ? 'status-active' : 'muted'}>
                   {creator.active ? 'Active' : 'Paused'}
                 </span>
-                <Link to={`/organizations/${organizationId}/creators/${creator.id}/snapshots`}>
-                  Snapshots
-                </Link>
+                <div className="record-actions">
+                  <Link to={`/organizations/${organizationId}/creators/${creator.id}/snapshots`}>
+                    Snapshots
+                  </Link>
+                  {canExportGuardAddresses ? (
+                    <button
+                      className="button button-secondary button-small"
+                      disabled={Boolean(exportingCreatorId)}
+                      type="button"
+                      onClick={() => {
+                        setExportError('');
+                        setExportingCreatorId(creator.id);
+                        void downloadCurrentMonthGuardWorkbook(organizationId, creator.id)
+                          .catch(() => {
+                            setExportError(
+                              'Current-month guard address workbook could not be exported.',
+                            );
+                          })
+                          .finally(() => setExportingCreatorId(''));
+                      }}
+                    >
+                      {exportingCreatorId === creator.id
+                        ? 'Preparing Excel…'
+                        : 'Download monthly Excel'}
+                    </button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>

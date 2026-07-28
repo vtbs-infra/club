@@ -11,6 +11,9 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@excel.js/exceljs": ["./node_modules/@excel.js/exceljs/index.d.ts"]
+    }
   }
 }

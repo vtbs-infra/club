@@ -118,6 +118,9 @@ describe('application factory', () => {
         '/api/v1/organizations/{orgId}/fulfillment/claims',
       );
       expect(response.json<OpenApiDocument>().paths).toHaveProperty(
+        '/api/v1/organizations/{orgId}/creators/{creatorId}/guards/current-month.xlsx',
+      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
         '/api/v1/claims/{claimId}/shipments',
       );
       expect(response.json<OpenApiDocument>().paths).toHaveProperty(

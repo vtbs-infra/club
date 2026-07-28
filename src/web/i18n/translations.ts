@@ -101,6 +101,8 @@ export const englishToChinese: Readonly<Record<string, string>> = {
   Critical: '严重',
   'Cumulative tiers': '等级累积',
   'Current counts': '当前统计',
+  'Current-month guard address workbook could not be exported.':
+    '当月舰长地址 Excel 导出失败，请稍后重试。',
   Database: '数据库',
   'Database and private storage are responding.': '数据库和私有存储响应正常。',
   DEFAULT: '默认',
@@ -117,6 +119,7 @@ export const englishToChinese: Readonly<Record<string, string>> = {
   DISABLED: '已停用',
   'Display name': '显示名称',
   District: '区县',
+  'Download monthly Excel': '下载当月舰长 Excel',
   Draft: '草稿',
   Edit: '编辑',
   Email: '邮箱',
@@ -238,6 +241,7 @@ export const englishToChinese: Readonly<Record<string, string>> = {
   'Private atomic local storage': '私有原子化本地存储',
   'Process claims, export delivery data, and import tracking by claim number.':
     '处理领取记录、导出配送数据，并按领取编号导入物流信息。',
+  'Preparing Excel…': '正在生成 Excel…',
   'Process selected': '处理所选记录',
   'Prove your Bilibili UID': '验证你的哔哩哔哩 UID',
   Province: '省份',

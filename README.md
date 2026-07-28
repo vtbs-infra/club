@@ -67,7 +67,7 @@ organizations.
 | Monthly evidence | Creator-timezone scheduling, complete paginated capture, consistency checks, immutable finalized members, compressed raw evidence, and SHA-256 metadata |
 | Gift campaigns | Captain/admiral/governor tier rules, deterministic entitlement generation, historical matching, claim windows, and configurable gift options |
 | Claims and addresses | AES-256-GCM encrypted address book, frozen claim-address snapshots, idempotent state transitions, cancellation, and resubmission |
-| Fulfillment | Claim queues, address export, packages, shipments, tracking import, exceptions, and delivery completion |
+| Fulfillment | Claim queues, one-click current-month guard Excel (UID, nickname, tier, and frozen address), packages, shipments, tracking import, exceptions, and delivery completion |
 | Organizations | Multiple organizations and creators, member roles, creator scopes, and append-only audit records |
 | Communications | Platform, organization, creator, and campaign announcements with visibility windows and pinned notices |
 | Custom homepage | Controlled block editor, draft/publish workflow, version history, desktop/mobile preview, brand image processing, and audience rules |
@@ -391,6 +391,9 @@ old key until a verified re-encryption migration exists.
   storage.
 - Claim submissions freeze an address snapshot so later address-book changes do
   not rewrite historical fulfillment data.
+- Current-month guard workbooks use those frozen snapshots, are limited to
+  `OWNER`/`FULFILLMENT` users and creator scopes, and audit every exported
+  address.
 - Bilibili challenge codes are stored as HMAC digests rather than plaintext.
 - Raw snapshot pages are compressed, hashed, and kept outside PostgreSQL.
 - Public brand uploads are decoded and re-encoded; metadata and unsupported

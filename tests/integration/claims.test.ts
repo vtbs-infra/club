@@ -1,4 +1,5 @@
 import { and, count, eq, sql } from 'drizzle-orm';
+import ExcelJS from '@excel.js/exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
@@ -269,7 +270,12 @@ integration('encrypted addresses and claims', () => {
       .select()
       .from(entitlements)
       .where(eq(entitlements.campaignId, campaign.id));
-    return { campaignId: campaign.id, entitlementId: entitlement!.id, runId: run!.id };
+    return {
+      campaignId: campaign.id,
+      entitlementId: entitlement!.id,
+      periodStart,
+      runId: run!.id,
+    };
   }
 
   it('stores only encrypted address fields and provides audited CRUD', async () => {
@@ -732,7 +738,9 @@ integration('encrypted addresses and claims', () => {
       { target: 'PROCESSING', version: submitted.version },
       { actorUserId: userId },
     );
-    const manualService = new FulfillmentService(database, keyRing, null);
+    const manualService = new FulfillmentService(database, keyRing, null, {
+      now: () => new Date(`${campaign.periodStart.slice(0, 7)}-15T04:00:00.000Z`),
+    });
     const csv = await manualService.exportClaims(
       organizationId,
       [],
@@ -741,6 +749,31 @@ integration('encrypted addresses and claims', () => {
     );
     expect(csv).toContain(originalAddress.recipientName);
     expect(csv).toContain(submitted.claimNumber);
+    await expect(
+      manualService.exportCurrentMonthGuardAddresses(
+        organizationId,
+        creatorId,
+        ['00000000-0000-4000-8000-000000000001'],
+        { actorUserId: userId },
+      ),
+    ).rejects.toMatchObject({ code: 'FULFILLMENT_ACCESS_DENIED' });
+    const exported = await manualService.exportCurrentMonthGuardAddresses(
+      organizationId,
+      creatorId,
+      [],
+      { actorUserId: userId },
+    );
+    expect(exported.periodStart).toBe(campaign.periodStart);
+    expect(exported.rowCount).toBe(1);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(
+      exported.content as unknown as Parameters<typeof workbook.xlsx.load>[0],
+    );
+    const worksheet = workbook.getWorksheet('当月舰长')!;
+    expect(worksheet.getCell('A5').value).toBe('claim-recipient-uid');
+    expect(worksheet.getCell('B5').value).toBe('Recipient');
+    expect(worksheet.getCell('C5').value).toBe('舰长');
+    expect(worksheet.getCell('D5').value).toBe(originalAddress.recipientName);
     const auditRows = await database.orm
       .select()
       .from(auditLogs)
@@ -750,6 +783,20 @@ integration('encrypted addresses and claims', () => {
           eq(auditLogs.targetId, submitted.id),
         ),
       );
-    expect(auditRows).toHaveLength(1);
+    expect(auditRows).toHaveLength(2);
+    const [workbookAudit] = await database.orm
+      .select()
+      .from(auditLogs)
+      .where(
+        and(
+          eq(auditLogs.action, 'fulfillment.guard-xlsx-exported'),
+          eq(auditLogs.targetId, creatorId),
+        ),
+      )
+      .limit(1);
+    expect(workbookAudit?.afterSummary).toMatchObject({
+      periodStart: campaign.periodStart,
+      rowCount: 1,
+    });
   });
 });

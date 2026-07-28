@@ -601,6 +601,13 @@ h2 {
   color: #9299b1;
   font-size: 12px;
 }
+.record-list li > .record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
 .status-active {
   color: #8ce5ce;
   font-size: 12px;
