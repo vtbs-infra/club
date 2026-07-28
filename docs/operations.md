@@ -1,187 +1,192 @@
-# Operations
+# 运维手册
 
-This guide covers deployment, initial configuration, monitoring, backup,
-restore, key rotation, upgrades, and incident handling.
+本手册适用于长期运行的 Club 实例。首次安装见[开始使用](getting-started.md)，所有环境
+变量见[配置参考](configuration.md)。
 
-## Deployment profile
+## 部署拓扑
 
-A supported Club deployment contains:
+一个 Club 部署包含：
 
-- one Club application instance;
-- PostgreSQL 17;
-- one durable local-storage volume;
-- HTTPS termination at a trusted reverse proxy for internet-facing instances.
+- 一个 Club 应用实例；
+- 一个 PostgreSQL 17 实例；
+- 一个持久化对象存储目录；
+- 面向公网时使用的 HTTPS 反向代理。
 
-The application process owns Bilibili room connections, monthly roster
-scheduling, and tracking refresh. Keep one active application instance for a
-deployment.
+应用进程同时运行 B站房间连接、名单调度和物流刷新。保持一个活动应用实例。
 
-## Required configuration
+Compose 数据卷：
 
-Copy `.env.example` to `.env` and set production values before building the
-service.
+| 数据卷          | 内容                   |
+| --------------- | ---------------------- |
+| `club-postgres` | PostgreSQL 数据目录    |
+| `club-storage`  | 名单原始证据和礼物图片 |
 
-Required secrets:
+## 日常检查
 
-- `POSTGRES_PASSWORD`;
-- `BETTER_AUTH_SECRET`, at least 32 random characters;
-- `ADDRESS_ENCRYPTION_KEY_RING`, containing a 32-byte base64 key;
-- `ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION`.
-
-Keep `DATABASE_URL` and `COMPOSE_DATABASE_URL` aligned with the same database
-credentials. URL-encode reserved characters in passwords embedded in a URL.
-
-Example key generation:
+检查容器：
 
 ```powershell
-openssl rand -base64 32
-```
-
-Set `APP_URL` to the public origin, including its final scheme and port. Origin
-validation uses this value. When a controlled reverse proxy supplies forwarding
-headers, set `TRUST_PROXY=true` and restrict direct access to the application
-port.
-
-## Initial deployment
-
-Build the image and start PostgreSQL:
-
-```powershell
-docker compose build app
-docker compose up -d postgres
-```
-
-Apply the database migration explicitly:
-
-```powershell
-docker compose run --rm app pnpm db:migrate
-```
-
-Create the first platform administrator:
-
-```powershell
-docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
-  pnpm club admin:create --email admin@example.com --name Admin
-```
-
-Start the application:
-
-```powershell
-docker compose up -d app
 docker compose ps
 ```
 
-Check both health endpoints:
+检查健康接口：
 
 ```powershell
 Invoke-RestMethod http://localhost:3000/health/live
 Invoke-RestMethod http://localhost:3000/health/ready
 ```
 
-## Application setup
-
-Complete these tasks from the web interface:
-
-1. Register the user account that will operate each creator profile.
-2. Sign in as platform administrator and open `/admin/creators`.
-3. Assign each operator account to a creator profile.
-4. Configure the creator display name, Bilibili UID, live-room ID, IANA
-   timezone, and active state.
-5. Open `/admin/verification` and configure at least one enabled verification
-   room.
-6. Test the room connection.
-7. Confirm roster scheduling from `/admin/rosters`.
-
-Creators can then publish gift releases and announcements from `/creator`.
-
-## Health and diagnosis
-
-| Endpoint                   | Meaning                                                         |
-| -------------------------- | --------------------------------------------------------------- |
-| `GET /health/live`         | Fastify process is responsive                                   |
-| `GET /health/ready`        | PostgreSQL and object storage are ready                         |
-| `GET /api/v1/admin/system` | Authenticated scheduler, storage, binding, and tracking summary |
-| `GET /openapi.json`        | Generated HTTP contract                                         |
-
-Useful commands:
+检查日志：
 
 ```powershell
-docker compose ps
 docker compose logs --tail 200 app
-docker compose logs --tail 200 postgres
-docker compose exec -T postgres pg_isready -U club -d club
+docker compose logs --tail 100 postgres
 ```
 
-Every API response carries `x-request-id`. Use that value to correlate browser
-errors with structured application logs.
+平台管理员还应定期查看：
 
-## Backup
+- `/admin/system` 中的数据库、存储和调度状态；
+- `/admin/verification` 中的直播间健康状态；
+- `/admin/rosters` 中的失败或等待确认任务；
+- 待处理礼物单和到期领取任务。
 
-A backup set contains:
+## 健康接口
 
-- a PostgreSQL custom-format dump;
-- the complete `club-storage` volume;
-- the deployed image digest or Git revision;
-- `BETTER_AUTH_SECRET`;
-- the complete `ADDRESS_ENCRYPTION_KEY_RING`;
-- checksums for the database dump and storage archive.
+### `/health/live`
 
-Create a database dump:
+只检查 Fastify 进程能否响应，不依赖 PostgreSQL。适合作为容器 Liveness Probe。
+
+### `/health/ready`
+
+检查：
+
+- PostgreSQL 查询；
+- 对象存储的隔离写入、读取和删除。
+
+任一检查失败时，实例不具备完整业务处理能力。
+
+### `/api/v1/admin/system`
+
+需要平台管理员登录，返回：
+
+- 应用版本；
+- 数据库与存储状态；
+- 名单和物流运行时状态；
+- 名单任务与运单状态计数；
+- 验证直播间状态；
+- 近期名单失败；
+- 存储对象完整性警告。
+
+## 日志
+
+Club 使用 Pino 输出结构化日志。每个 HTTP 请求都有 `x-request-id`，错误响应体也包含
+同一个请求 ID。
+
+日志级别通过 `LOG_LEVEL` 配置。诊断单个请求时，使用请求 ID 搜索应用日志。
+
+日志中不应记录：
+
+- 密码与认证密钥；
+- Session Cookie 和认证 Token；
+- B站验证码；
+- 收件人姓名、电话和详细地址；
+- SMTP 凭据；
+- 地址加密密钥。
+
+## 备份范围
+
+一份可恢复备份必须同时包含：
+
+1. PostgreSQL 自定义格式 Dump；
+2. 完整的 `club-storage` 数据；
+3. `BETTER_AUTH_SECRET`；
+4. 完整的 `ADDRESS_ENCRYPTION_KEY_RING`；
+5. 部署使用的 Git Revision 或镜像 Digest；
+6. 数据库和存储归档的校验和。
+
+数据库保存业务状态和对象引用，对象存储保存名单证据与图片，二者必须属于同一备份
+时间点。
+
+## 创建备份
+
+在备份窗口中暂停应用写入：
+
+```powershell
+docker compose stop app
+```
+
+创建 PostgreSQL Dump：
 
 ```powershell
 docker compose exec -T postgres pg_dump -U club -d club -Fc > club.dump
 ```
 
-Create the object-storage archive at a consistent point. Stop the application
-while the storage archive is created, or use a storage snapshot mechanism that
-provides the same consistency guarantee.
+归档 `club-storage` 数据卷，然后重新启动应用：
 
-Store backup artifacts and secret records outside the deployment host. Test
-restores on a schedule appropriate to the deployment's recovery objective.
+```powershell
+docker compose start app
+```
 
-## Restore
+归档工具和目标位置由部署环境决定。备份文件和密钥记录应保存到部署主机之外，并设置
+访问控制和保留周期。
 
-Restore into isolated database and storage volumes:
+## 恢复演练
 
-1. Configure the database credentials, authentication secret, and complete
-   encryption key ring.
-2. Start PostgreSQL.
-3. Restore the custom-format dump with `pg_restore`.
-4. Restore the matching storage archive.
-5. Run `pnpm db:migrate`.
-6. Start one application instance.
-7. Check `/health/ready`.
-8. Verify login, address decryption, roster evidence, a gift order, and a
-   shipment.
+恢复演练使用隔离的新数据库和存储卷：
 
-Database and storage artifacts must come from the same backup set. Roster
-evidence and gift images live in object storage; business state and object
-references live in PostgreSQL.
+1. 配置备份对应的数据库密码、认证密钥和加密密钥环；
+2. 启动 PostgreSQL；
+3. 使用 `pg_restore` 恢复数据库；
+4. 恢复匹配的对象存储归档；
+5. 执行 `pnpm db:migrate`；
+6. 启动一个 Club 应用实例；
+7. 检查 `/health/ready`；
+8. 验证登录、地址解密、名单证据、礼物单和发货记录。
 
-## Encryption-key rotation
+恢复成功标准：
 
-Use a new integer version for each address-encryption key:
+- 用户可以使用原账号登录；
+- 地址和领取字段可以解密；
+- 名单详情与原始证据对象一致；
+- 礼物封面可以读取；
+- 礼物单状态历史完整；
+- 已录入的物流信息可见。
+
+## 加密密钥轮换
+
+生成新的 32 字节 base64 密钥，并使用新的整数版本：
 
 ```text
 ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION=2
-ADDRESS_ENCRYPTION_KEY_RING=1:<old-base64-key>,2:<new-base64-key>
+ADDRESS_ENCRYPTION_KEY_RING=1:<existing-key>,2:<new-key>
 ```
 
-Restart Club after changing the active version. New encrypted records use the
-active key. Existing records continue to use the version stored with their
-ciphertext. Retain every referenced key version in the key ring and in backup
-secret records.
+更新配置后重启应用：
 
-## Upgrade
+```powershell
+docker compose up -d app
+```
 
-Before an upgrade:
+新写入记录使用版本 2，已有记录继续通过版本 1 解密。数据库仍引用某个版本时，该版本
+必须保留在运行配置和备份中。
 
-1. create a matching database and storage backup;
-2. record the running image digest;
-3. review the release notes and migration;
-4. build the target image.
+轮换后执行：
 
-Apply the target migration and restart:
+1. 新建并读取一个地址；
+2. 打开一条使用轮换前密钥版本的地址或礼物单；
+3. 提交一条测试领取；
+4. 检查应用日志中没有解密错误。
+
+## 升级
+
+升级前：
+
+1. 阅读目标版本 Changelog；
+2. 创建数据库与对象存储联合备份；
+3. 记录当前镜像 Digest；
+4. 检查目标迁移文件。
+
+构建目标镜像并执行迁移：
 
 ```powershell
 docker compose build app
@@ -189,52 +194,68 @@ docker compose run --rm app pnpm db:migrate
 docker compose up -d app
 ```
 
-After restart:
+升级后验证：
 
-- check liveness and readiness;
-- check `/admin/system`;
-- verify verification-room health;
-- inspect recent roster attempts;
-- confirm recipient, creator, and administrator login routes;
-- review application logs for the deployment window.
+```powershell
+docker compose ps
+Invoke-RestMethod http://localhost:3000/health/live
+Invoke-RestMethod http://localhost:3000/health/ready
+```
 
-Rollback requires an image and matching database/storage backup whose schema
-and data were captured together.
+随后检查管理员、主播和普通用户入口，验证直播间连接、近期名单任务和物流运行时。
 
-## Incident handling
+回滚需要恢复与目标镜像 Schema 相匹配的 PostgreSQL 和对象存储备份。
 
-### Bilibili room connection
+## B站连接故障
 
-Check outbound HTTPS and WebSocket access, room configuration, and
-`/admin/verification`. Disable an unhealthy room before enabling its
-replacement. Active challenges will be reconciled by the binding runtime.
+检查：
 
-### Roster capture
+- 宿主机到 B站 HTTPS 与 WebSocket 的连接；
+- 直播间 ID 和房主 UID；
+- 验证直播间是否启用；
+- `/admin/verification` 中的最后连接时间；
+- 应用日志中的请求与连接错误。
 
-Inspect the run and attempt from `/admin/rosters`. A consistent late result can
-be approved or rejected as one captured unit. Retry failed runs from the same
-view. Preserve attempt metadata and stored provider pages during investigation.
+可以先停用异常房间，再启用另一个已配置房间。绑定运行时会重新计算未过期挑战需要
+监听的房间。
 
-### Storage integrity
+## 名单抓取故障
 
-Keep the database reference and affected object available for diagnosis.
-Restore the object from the matching backup set and re-run the roster integrity
-check.
+在 `/admin/rosters` 查看任务和抓取尝试：
 
-### Address decryption
+- 网络、Provider 状态或超时导致的失败可以重试；
+- 一致的延迟结果可以批准或拒绝；
+- 一致性失败需要重新抓取；
+- 对象完整性警告需要检查存储和对应 SHA-256。
 
-Stop claim and shipping mutations, identify the missing key version, and
-restore that version to `ADDRESS_ENCRYPTION_KEY_RING`. Keep the ciphertext
-unchanged.
+诊断期间保留任务、尝试、分页元数据和存储对象。
 
-### Tracking provider
+## 地址解密故障
 
-Shipping records remain available while tracking refresh is unavailable.
-Restore provider connectivity, then allow the background refresh runtime to
-continue.
+出现缺失密钥版本或认证标签错误时：
 
-## Logging rules
+1. 暂停领取和发货操作；
+2. 从错误上下文确认需要的密钥版本；
+3. 从安全密钥记录恢复该版本；
+4. 重启应用并验证解密；
+5. 保留原密文。
 
-Application logs are structured JSON. Log configuration, audit summaries, and
-request context without plaintext addresses, passwords, session cookies,
-binding codes, authentication tokens, SMTP credentials, or encryption keys.
+## 存储故障
+
+检查 `club-storage` 挂载、剩余空间和权限。健康检查会创建隔离临时对象，不会修改名单
+证据。
+
+对象哈希不匹配时，保留数据库记录和现有对象用于诊断，然后从同一备份集恢复对应
+对象。
+
+## 容量管理
+
+主要增长来源：
+
+- 每月每位主播的 gzip 名单分页；
+- 礼物封面；
+- 礼物单、状态历史和物流事件；
+- 审计日志。
+
+监控 PostgreSQL 数据卷和对象存储数据卷的剩余空间。清理策略只能处理明确可删除的
+业务数据；名单证据、冻结领取信息和审计记录需要保持引用完整。
