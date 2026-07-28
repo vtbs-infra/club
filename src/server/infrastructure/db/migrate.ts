@@ -1,3 +1,5 @@
+import '../../config/load-local-env.js';
+
 import { loadConfig } from '../../config/env.js';
 import { createDatabase } from './database.js';
 import { migrateDatabase } from './migration-runner.js';

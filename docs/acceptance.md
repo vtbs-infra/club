@@ -1,29 +1,30 @@
-# Product acceptance evidence
+# Creator-first acceptance matrix
 
-The criteria in `product-architecture.md` map to implementation and automated
-evidence as follows.
-
-| Criterion | Evidence |
+| Requirement | Evidence |
 | --- | --- |
-| Users cannot supply a verification room or UID | Empty challenge schema; binding tests and browser journey use platform assignment and message sender UID. |
-| Binding requires the matching assigned-room message | Integration coverage for wrong room/code, duplicate events, conflict, expiry, and success. |
-| One active user per UID | Partial unique index and binding conflict tests. |
-| Late registration discovers historical eligibility | Campaign integration and full browser journey bind after snapshot evidence exists. |
-| Cutoff and cross-midnight rules are unambiguous | Month-end unit tests plus 23:59, midnight-completion, and late-start integrations. |
-| Attempts never combine pages | Attempt foreign keys and retry assertions. |
-| Late/inconsistent captures cannot improperly finalize | Snapshot late approval and inconsistency-code tests. |
-| No roster import or manual grant | No route; OpenAPI test excludes generic entitlement mutation. |
-| Finalized members are immutable | Database trigger and integration update/delete tests. |
-| Retries do not duplicate entitlements | Campaign reconciliation tests. |
-| Concurrent submission creates one claim | Claim concurrency and idempotency tests. |
-| Address edits cannot alter frozen claims | Encrypted claim-snapshot and immutability tests. |
-| Organization data is tenant and creator scoped | Auth, announcement, status, and fulfillment integrations. |
-| Sensitive access and shipment changes are audited | Claims, fulfillment, audit, and redaction tests. |
-| Raw pages remain private | Snapshot integrity, storage, and HTTP file-access tests. |
-| Restart restores work and listening | Binding restart, interrupted snapshot, and graceful-close tests. |
-| Default topology is one app plus PostgreSQL and storage | Final Compose smoke test and operations guide. |
-| Combined backup restores critical state | Clean isolated restore rehearsal plus guarded recovery probe for user, encrypted addresses, snapshot object/hash, claim, and shipment. |
-| Binding through delivery is end to end | `registration-to-delivery.spec.ts`, including mobile coverage. |
+| Exactly `USER`, `CREATOR`, `PLATFORM_ADMIN` | Schema check, Better Auth contract, `auth-roles.test.ts` |
+| Registration creates a normal user | `auth-roles.test.ts` |
+| Creator owns one profile and cannot address another creator | Unique schema constraint, session creator guard, auth and gift integration tests |
+| No organization or old compatibility routes | Fresh migration test, OpenAPI unit test, repository search |
+| Every active creator gets monthly roster runs | Snapshot integration tests |
+| Exact cutoff and cross-midnight attribution | Month-end unit and snapshot integration tests |
+| Raw pages stored outside PostgreSQL with hashes | Snapshot integrity integration tests |
+| Finalized roster evidence cannot mutate | PostgreSQL triggers and snapshot integration tests |
+| Month without a gift creates no order | `gift-orders.test.ts` |
+| Release-first and snapshot-first produce the same result | `gift-orders.test.ts` |
+| Reconciliation retries do not duplicate orders | Unique constraints and `gift-orders.test.ts` |
+| Late binding reveals historical UID orders | Binding and gift-order integration tests |
+| Account is frozen only on submission | `gift-orders.test.ts` |
+| Address and option values are encrypted and frozen | Encryption unit test, gift-order integration test, database triggers |
+| Invalid order and shipment transitions are rejected | Gift-order integration test and database triggers |
+| Creator fulfills their own orders | Creator guard and cross-creator integration tests |
+| User dashboard has banner, news, action, gift cards | Production React implementation and Playwright shell test |
+| No runtime UI customization | Config test, route/OpenAPI test, repository search |
+| Static gates pass | `pnpm check` |
+| Unit gates pass | `pnpm test` |
+| PostgreSQL gates pass | `pnpm test:integration` with `TEST_DATABASE_URL` |
+| Production build and browser smoke pass | `pnpm build`, `pnpm test:e2e` |
 
-CI uses fake Bilibili and tracking providers; required acceptance flows never
-depend on a live external service.
+The approved product decisions are recorded in
+[`creator-first-rebuild.md`](creator-first-rebuild.md). A release is not
+acceptable if implementation, this matrix, and that record disagree.

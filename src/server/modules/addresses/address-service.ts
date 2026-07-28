@@ -8,7 +8,7 @@ import { addresses } from '../../infrastructure/db/schema.js';
 import { EncryptionError, type EncryptedValue } from '../../infrastructure/encryption/key-ring.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import { AuditService } from '../audit/audit-service.js';
-import type { RequestAuditContext } from '../campaigns/campaign-service.js';
+import type { RequestAuditContext } from '../audit/audit-service.js';
 import {
   isAddressPayload,
   normalizeAddressPayload,

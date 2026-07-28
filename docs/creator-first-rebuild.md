@@ -1,8 +1,13 @@
 # Creator-first rebuild plan
 
-Status: approved for implementation  
-Approved: 2026-07-29  
-Baseline: `5387054`  
+Status: implemented and locally accepted
+
+Approved: 2026-07-29
+
+Implemented: 2026-07-29
+
+Baseline: `5387054`
+
 Implementation branch: `codex/creator-first-rebuild`
 
 ## 1. Why this rebuild exists
@@ -258,3 +263,25 @@ after the cutover.
 - Cross-role and cross-creator authorization tests pass.
 - Formatting, linting, TypeScript, unit, integration, production build, and
   end-to-end tests all pass in the supported runtime.
+
+## 8. Implementation result
+
+The rebuild was completed as a direct cutover on the implementation branch.
+The obsolete organization, campaign, claim, appearance, site-content, theme,
+page-editor, and generic asset-library paths were removed rather than retained
+behind compatibility routes.
+
+Local acceptance covered:
+
+- formatting, linting, and TypeScript validation;
+- 39 unit and application tests;
+- 26 PostgreSQL integration tests against the rebuilt schema;
+- a production web and server build;
+- two Playwright foundation scenarios;
+- a clean Compose deployment with PostgreSQL 17;
+- administrator login, the simplified administrator navigation, creator
+  promotion entry point, and removal of the legacy organization route.
+
+The local deployment is ready for product data. A real Bilibili verification
+room and creator accounts still need to be configured through the administrator
+interface before live roster and binding acceptance.

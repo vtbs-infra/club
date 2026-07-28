@@ -13,7 +13,6 @@ x-app-environment: &app-environment
   STORAGE_DRIVER: local
   STORAGE_LOCAL_PATH: /data/club
   TRACKING_PROVIDER: ${TRACKING_PROVIDER:-none}
-  CLUB_UI_THEME: ${CLUB_UI_THEME:-archive}
   TRUST_PROXY: ${TRUST_PROXY:-false}
 
 services:

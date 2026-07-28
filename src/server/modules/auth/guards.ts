@@ -1,20 +1,12 @@
 import { and, eq, isNull } from 'drizzle-orm';
+import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest, preHandlerHookHandler } from 'fastify';
 
 import { AppError } from '../../../shared/errors/app-error.js';
-import {
-  hasOrganizationPermission,
-  isOrganizationRole,
-  type OrganizationPermission,
-} from '../../../shared/permissions/permissions.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import {
-  memberCreatorScopes,
-  organizationMembers,
-  organizations,
-} from '../../infrastructure/db/schema.js';
+import { creators } from '../../infrastructure/db/schema.js';
+import type { AccountRole } from '../../infrastructure/db/schema.js';
 import type { AppAuth, AuthSession } from './auth.js';
-import { fromNodeHeaders } from 'better-auth/node';
 
 export async function resolveSession(request: FastifyRequest, auth: AppAuth): Promise<AuthSession> {
   if (request.authSession) return request.authSession;
@@ -32,70 +24,57 @@ export function createRequireSession(auth: AppAuth): preHandlerHookHandler {
   };
 }
 
-export function createRequirePlatformAdmin(auth: AppAuth): preHandlerHookHandler {
+export function createRequireRole(
+  auth: AppAuth,
+  ...allowedRoles: readonly AccountRole[]
+): preHandlerHookHandler {
   return async (request) => {
     const session = await resolveSession(request, auth);
-    if (session.user.platformRole !== 'PLATFORM_ADMIN') {
-      throw new AppError(
-        'PLATFORM_PERMISSION_DENIED',
-        'Platform administrator access required.',
-        403,
-      );
+    if (!allowedRoles.includes(session.user.role)) {
+      throw new AppError('ROLE_PERMISSION_DENIED', 'This account cannot access this area.', 403);
     }
   };
 }
 
-export function createRequireOrganizationPermission(
+export function createRequirePlatformAdmin(auth: AppAuth): preHandlerHookHandler {
+  return createRequireRole(auth, 'PLATFORM_ADMIN');
+}
+
+export function createRequireCreator(
   auth: AppAuth,
   database: DatabaseService,
-  permission: OrganizationPermission,
 ): preHandlerHookHandler {
   return async (request) => {
     const session = await resolveSession(request, auth);
-    const parameters = request.params as { creatorId?: string; orgId?: string };
-    const organizationId = parameters.orgId;
-    if (!organizationId) {
-      throw new AppError('ORGANIZATION_SCOPE_REQUIRED', 'An organization scope is required.', 400);
+    if (session.user.role !== 'CREATOR') {
+      throw new AppError('CREATOR_ACCESS_REQUIRED', 'Creator access required.', 403);
     }
-
-    const [membership] = await database.orm
-      .select({ id: organizationMembers.id, role: organizationMembers.role })
-      .from(organizationMembers)
-      .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
+    const [creator] = await database.orm
+      .select({
+        active: creators.active,
+        bilibiliUid: creators.bilibiliUid,
+        displayName: creators.displayName,
+        id: creators.id,
+        roomId: creators.roomId,
+        timezone: creators.timezone,
+        userId: creators.userId,
+      })
+      .from(creators)
       .where(
         and(
-          eq(organizationMembers.organizationId, organizationId),
-          eq(organizationMembers.userId, session.user.id),
-          isNull(organizations.archivedAt),
+          eq(creators.userId, session.user.id),
+          eq(creators.active, true),
+          isNull(creators.archivedAt),
         ),
       )
       .limit(1);
-
-    if (!membership || !isOrganizationRole(membership.role)) {
-      throw new AppError('ORGANIZATION_ACCESS_DENIED', 'Organization access denied.', 403);
+    if (!creator) {
+      throw new AppError(
+        'CREATOR_PROFILE_UNAVAILABLE',
+        'The creator profile is inactive or missing.',
+        403,
+      );
     }
-    if (!hasOrganizationPermission(membership.role, permission)) {
-      throw new AppError('ORGANIZATION_PERMISSION_DENIED', 'Organization permission denied.', 403);
-    }
-
-    const scopes = await database.orm
-      .select({ creatorId: memberCreatorScopes.creatorId })
-      .from(memberCreatorScopes)
-      .where(eq(memberCreatorScopes.memberId, membership.id));
-    const creatorIds = scopes.map((scope) => scope.creatorId);
-    if (
-      parameters.creatorId &&
-      creatorIds.length > 0 &&
-      !creatorIds.includes(parameters.creatorId)
-    ) {
-      throw new AppError('CREATOR_SCOPE_DENIED', 'Creator access denied.', 403);
-    }
-
-    request.organizationAccess = {
-      creatorIds,
-      memberId: membership.id,
-      organizationId,
-      role: membership.role,
-    };
+    request.creatorProfile = creator;
   };
 }

@@ -155,7 +155,7 @@ const bindingRoutes: FastifyPluginAsync<BindingRoutesOptions> = (app, options) =
   );
 
   app.delete<{ Body: InterventionBody; Params: BindingParameters }>(
-    '/api/v1/platform/bilibili-bindings/:bindingId',
+    '/api/v1/admin/bilibili-bindings/:bindingId',
     {
       preHandler: requirePlatformAdmin,
       schema: {

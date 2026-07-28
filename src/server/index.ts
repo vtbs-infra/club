@@ -1,3 +1,5 @@
+import './config/load-local-env.js';
+
 import { buildApp } from './app.js';
 import { loadConfig } from './config/env.js';
 

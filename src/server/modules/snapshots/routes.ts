@@ -1,18 +1,19 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
-import { createRequireSession } from '../auth/guards.js';
+import { createRequireCreator, createRequirePlatformAdmin } from '../auth/guards.js';
 import type { SnapshotService } from './snapshot-service.js';
 
 interface SnapshotRoutesOptions {
   readonly auth: AppAuth;
+  readonly database: DatabaseService;
   readonly service: SnapshotService;
 }
 
 const Id = Type.String({ format: 'uuid' });
 const EmptyBody = Type.Object({}, { additionalProperties: false });
-const CreatorParameters = Type.Object({ creatorId: Id });
 const RunParameters = Type.Object({ snapshotRunId: Id });
 
 function session(request: { readonly authSession: AuthSession | null }): AuthSession {
@@ -33,113 +34,138 @@ function auditContext(request: {
 }
 
 const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options) => {
-  const requireSession = createRequireSession(options.auth);
+  const requireCreator = createRequireCreator(options.auth, options.database);
+  const requireAdmin = createRequirePlatformAdmin(options.auth);
 
-  app.get<{ Params: { creatorId: string } }>(
-    '/api/v1/creators/:creatorId/snapshots',
+  app.get(
+    '/api/v1/creator/rosters',
     {
-      preHandler: requireSession,
+      preHandler: requireCreator,
+      schema: { response: { 200: Type.Array(Type.Any()) }, tags: ['creator-rosters'] },
+    },
+    (request) => options.service.listForCreator(request.creatorProfile!.id),
+  );
+
+  app.get<{ Params: { snapshotRunId: string } }>(
+    '/api/v1/creator/rosters/:snapshotRunId',
+    {
+      preHandler: requireCreator,
       schema: {
-        params: CreatorParameters,
-        response: { 200: Type.Array(Type.Any()) },
-        tags: ['snapshots'],
+        params: RunParameters,
+        response: { 200: Type.Any() },
+        tags: ['creator-rosters'],
       },
     },
     async (request) => {
-      await options.service.assertAccess(session(request), { creatorId: request.params.creatorId });
-      return options.service.listForCreator(request.params.creatorId);
+      await options.service.assertAccess(session(request), {
+        runId: request.params.snapshotRunId,
+      });
+      const detail = await options.service.getDetail(request.params.snapshotRunId);
+      return {
+        attempts: detail.attempts.map((attempt) => ({
+          attemptNumber: attempt.attemptNumber,
+          captureCompletedAt: attempt.captureCompletedAt,
+          captureStartedAt: attempt.captureStartedAt,
+          consistencyStatus: attempt.consistencyStatus,
+          declaredTotal: attempt.declaredTotal,
+          failureCode: attempt.failureCode,
+          failureMessage: attempt.failureMessage,
+          normalizedTotal: attempt.normalizedTotal,
+          punctuality: attempt.punctuality,
+        })),
+        run: detail.run,
+      };
     },
   );
 
-  app.get<{ Params: { snapshotRunId: string } }>(
-    '/api/v1/snapshots/:snapshotRunId',
+  app.get<{ Querystring: { creatorId?: string } }>(
+    '/api/v1/admin/rosters',
     {
-      preHandler: requireSession,
-      schema: { params: RunParameters, response: { 200: Type.Any() }, tags: ['snapshots'] },
+      preHandler: requireAdmin,
+      schema: {
+        querystring: Type.Object({ creatorId: Type.Optional(Id) }),
+        response: { 200: Type.Array(Type.Any()) },
+        tags: ['admin-rosters'],
+      },
     },
-    async (request) => {
-      await options.service.assertAccess(session(request), { runId: request.params.snapshotRunId });
-      return options.service.getDetail(request.params.snapshotRunId);
-    },
+    (request) => options.service.listAll(request.query.creatorId),
   );
 
   app.get<{ Params: { snapshotRunId: string } }>(
-    '/api/v1/snapshots/:snapshotRunId/integrity',
+    '/api/v1/admin/rosters/:snapshotRunId',
     {
-      preHandler: requireSession,
+      preHandler: requireAdmin,
+      schema: {
+        params: RunParameters,
+        response: { 200: Type.Any() },
+        tags: ['admin-rosters'],
+      },
+    },
+    (request) => options.service.getDetail(request.params.snapshotRunId),
+  );
+
+  app.get<{ Params: { snapshotRunId: string } }>(
+    '/api/v1/admin/rosters/:snapshotRunId/integrity',
+    {
+      preHandler: requireAdmin,
       schema: {
         params: RunParameters,
         response: { 200: Type.Array(Type.Any()) },
-        tags: ['snapshots'],
+        tags: ['admin-rosters'],
       },
     },
-    async (request) => {
-      await options.service.assertAccess(session(request), { runId: request.params.snapshotRunId });
-      return options.service.checkEvidenceIntegrity(request.params.snapshotRunId);
-    },
+    (request) => options.service.checkEvidenceIntegrity(request.params.snapshotRunId),
   );
 
   app.post<{ Body: Record<string, never>; Params: { snapshotRunId: string } }>(
-    '/api/v1/snapshots/:snapshotRunId/retry',
+    '/api/v1/admin/rosters/:snapshotRunId/retry',
     {
-      preHandler: requireSession,
+      preHandler: requireAdmin,
       schema: {
         body: EmptyBody,
         params: RunParameters,
         response: { 202: Type.Any() },
-        tags: ['snapshots'],
+        tags: ['admin-rosters'],
       },
     },
     async (request, reply) => {
-      await options.service.assertAccess(
-        session(request),
-        { runId: request.params.snapshotRunId },
-        'operate',
-      );
       await options.service.capture(request.params.snapshotRunId);
       return reply.status(202).send(await options.service.getDetail(request.params.snapshotRunId));
     },
   );
 
   app.post<{ Body: Record<string, never>; Params: { snapshotRunId: string } }>(
-    '/api/v1/snapshots/:snapshotRunId/approve-late',
+    '/api/v1/admin/rosters/:snapshotRunId/approve-late',
     {
-      preHandler: requireSession,
+      preHandler: requireAdmin,
       schema: {
         body: EmptyBody,
         params: RunParameters,
         response: { 204: Type.Null() },
-        tags: ['snapshots'],
+        tags: ['admin-rosters'],
       },
     },
     async (request, reply) => {
-      await options.service.assertAccess(
-        session(request),
-        { runId: request.params.snapshotRunId },
-        'approve',
-      );
       await options.service.approveLate(request.params.snapshotRunId, auditContext(request));
       return reply.status(204).send();
     },
   );
 
   app.post<{ Body: { reason: string }; Params: { snapshotRunId: string } }>(
-    '/api/v1/snapshots/:snapshotRunId/reject-late',
+    '/api/v1/admin/rosters/:snapshotRunId/reject-late',
     {
-      preHandler: requireSession,
+      preHandler: requireAdmin,
       schema: {
-        body: Type.Object({ reason: Type.String({ maxLength: 500, minLength: 3 }) }),
+        body: Type.Object(
+          { reason: Type.String({ maxLength: 500, minLength: 3 }) },
+          { additionalProperties: false },
+        ),
         params: RunParameters,
         response: { 204: Type.Null() },
-        tags: ['snapshots'],
+        tags: ['admin-rosters'],
       },
     },
     async (request, reply) => {
-      await options.service.assertAccess(
-        session(request),
-        { runId: request.params.snapshotRunId },
-        'approve',
-      );
       await options.service.rejectLate(request.params.snapshotRunId, {
         ...auditContext(request),
         reason: request.body.reason,

@@ -1,104 +1,113 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
-import { register, signIn } from '../api/identity';
+import { getIdentity, registerAccount, signIn } from '../api/client';
 import { ApiError } from '../api/http';
-import { SiteHeader } from '../components/SiteHeader';
 
-interface AuthFields {
-  email: string;
-  name: string;
-  password: string;
-}
-
-interface AuthPageProperties {
-  readonly mode: 'login' | 'register';
-}
-
-export function AuthPage({ mode }: AuthPageProperties) {
+export function AuthPage({ mode }: { readonly mode: 'login' | 'register' }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [registered, setRegistered] = useState(false);
-  const { formState, handleSubmit, register: registerField } = useForm<AuthFields>();
-
+  const isRegister = mode === 'register';
   if (registered) return <Navigate replace state={{ registered: true }} to="/login" />;
-  const isRegistration = mode === 'register';
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    try {
+      if (isRegister) {
+        await registerAccount(email, name, password);
+        setRegistered(true);
+      } else {
+        await signIn(email, password);
+        const identity = await getIdentity();
+        queryClient.setQueryData(['identity'], identity);
+        await navigate('/app', { replace: true });
+      }
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : '暂时无法继续，请稍后重试。');
+    } finally {
+      setPending(false);
+    }
+  };
 
   return (
-    <main className="shell">
-      <SiteHeader />
-      <section className="auth-layout">
-        <div className="auth-copy">
-          <p className="section-kicker">SECURE WORKSPACE</p>
-          <h1>{isRegistration ? 'Join your community team.' : 'Welcome back.'}</h1>
-          <p className="lede">
-            {isRegistration
-              ? 'Create your Club identity. An owner can then invite you into an organization.'
-              : 'Sign in to manage organizations, creators, and community gift operations.'}
-          </p>
-        </div>
-        <form
-          className="panel auth-form"
-          onSubmit={handleSubmit(async (fields) => {
-            setError(null);
-            try {
-              if (isRegistration) {
-                await register(fields.email, fields.name, fields.password);
-                setRegistered(true);
-              } else {
-                await signIn(fields.email, fields.password);
-                await navigate('/organizations', { replace: true });
-              }
-            } catch (caught) {
-              setError(caught instanceof ApiError ? caught.message : 'Unable to continue.');
-            }
-          })}
-        >
-          <div>
-            <p className="panel-label">{isRegistration ? 'CREATE ACCOUNT' : 'SIGN IN'}</p>
-            <h2>{isRegistration ? 'Your Club identity' : 'Continue to Club'}</h2>
+    <main className="auth-page">
+      <Link className="brand auth-brand" to="/">
+        <span className="brand-mark">✦</span>
+        <span>Club</span>
+      </Link>
+      <section className="auth-card">
+        <div className="auth-welcome">
+          <div className="auth-stars" aria-hidden="true">
+            ✦ ★ ✧
           </div>
-          {isRegistration ? (
+          <p className="eyebrow">WELCOME TO CLUB</p>
+          <h1>{isRegister ? '创建你的 Club 账号' : '欢迎回来'}</h1>
+          <p>
+            {isRegister
+              ? '注册后绑定 B站 UID，即可自动匹配属于你的舰长礼物。'
+              : '登录后继续查看礼物、处理发货或管理平台。'}
+          </p>
+          <div className="auth-illustration" aria-hidden="true">
+            <span>✦</span>
+            <div>GIFT</div>
+            <span>★</span>
+          </div>
+        </div>
+        <form className="auth-form" onSubmit={submit}>
+          <div>
+            <p className="eyebrow">{isRegister ? '注册' : '登录'}</p>
+            <h2>{isRegister ? '开始使用 Club' : '进入你的工作台'}</h2>
+          </div>
+          {isRegister ? (
             <label>
-              Display name
+              昵称
               <input
                 autoComplete="name"
-                {...registerField('name', { required: 'Enter a display name.' })}
+                maxLength={80}
+                onChange={(event) => setName(event.target.value)}
+                required
+                value={name}
               />
-              <span className="field-error">{formState.errors.name?.message}</span>
             </label>
           ) : null}
           <label>
-            Email
+            邮箱
             <input
               autoComplete="email"
+              onChange={(event) => setEmail(event.target.value)}
+              required
               type="email"
-              {...registerField('email', { required: 'Enter your email.' })}
+              value={email}
             />
-            <span className="field-error">{formState.errors.email?.message}</span>
           </label>
           <label>
-            Password
+            密码
             <input
-              autoComplete={isRegistration ? 'new-password' : 'current-password'}
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
               minLength={8}
+              onChange={(event) => setPassword(event.target.value)}
+              required
               type="password"
-              {...registerField('password', {
-                minLength: { message: 'Use at least 8 characters.', value: 8 },
-                required: 'Enter your password.',
-              })}
+              value={password}
             />
-            <span className="field-error">{formState.errors.password?.message}</span>
           </label>
-          {error ? <div className="form-message form-error">{error}</div> : null}
-          <button className="button" disabled={formState.isSubmitting} type="submit">
-            {formState.isSubmitting ? 'Working…' : isRegistration ? 'Create account' : 'Sign in'}
+          {error ? <div className="inline-notice notice-danger">{error}</div> : null}
+          <button className="button primary wide" disabled={pending} type="submit">
+            {pending ? '请稍候…' : isRegister ? '创建账号' : '登录'}
           </button>
-          <p className="form-switch">
-            {isRegistration ? 'Already registered?' : 'New to Club?'}{' '}
-            <Link to={isRegistration ? '/login' : '/register'}>
-              {isRegistration ? 'Sign in' : 'Create an account'}
+          <p className="auth-switch">
+            {isRegister ? '已经有账号？' : '还没有账号？'}
+            <Link to={isRegister ? '/login' : '/register'}>
+              {isRegister ? '立即登录' : '免费注册'}
             </Link>
           </p>
         </form>

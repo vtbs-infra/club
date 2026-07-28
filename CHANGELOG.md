@@ -7,23 +7,30 @@ Changelog and the project uses semantic versioning.
 
 ### Added
 
-- Complete self-hosted Bilibili guard-gift workflow from UID binding and
-  month-end eligibility through claims, fulfillment, tracking, announcements,
-  and operations.
-- Combined PostgreSQL/private-storage backup and clean-restore runbook.
-- Guarded recovery probe for repeatable encryption and snapshot-integrity
-  restore rehearsals.
-- Empty-database, upgrade, interruption-recovery, security, mobile, and
-  registration-to-delivery verification.
+- Creator-first product with mutually exclusive recipient, creator, and
+  platform-administrator accounts.
+- Immutable monthly roster capture independent from optional monthly gift
+  publication.
+- UID-owned gift orders, frozen encrypted claim data, creator shipping, and
+  tracking.
+- Separate recipient, creator, and administrator responsive interfaces.
+
+### Removed
+
+- Organizations, memberships, operator and fulfillment roles, legacy
+  campaigns, entitlements, and claims.
+- Runtime themes, appearance configuration, page editors, generic site
+  content, and per-creator visual customization.
 
 ### Security
 
 - Required Compose secrets with no production fallback.
-- Browser security headers, Origin checks, rate limits, tenant and creator
-  scopes, encrypted addresses, and redacted audit/status output.
+- Browser security headers, Origin checks, rate limits, creator-session
+  isolation, encrypted addresses, and PostgreSQL integrity triggers.
 
 ### Upgrade notes
 
-- Apply migrations through `0007_yummy_victor_mancha.sql` before starting.
+- This pre-release cutover replaces the local migration history with one
+  creator-first baseline and requires a local database reset.
 - Preserve `BETTER_AUTH_SECRET` and every
   `ADDRESS_ENCRYPTION_KEY_RING` key during upgrades and restores.

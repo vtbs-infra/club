@@ -14,11 +14,40 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import type { SitePageContent } from '../../../shared/site-content.js';
+export type AccountRole = 'USER' | 'CREATOR' | 'PLATFORM_ADMIN';
+export type GuardTier = 'CAPTAIN' | 'ADMIRAL' | 'GOVERNOR';
+export type GiftReleaseStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED';
+export type GiftOrderStatus =
+  'CLAIMABLE' | 'SUBMITTED' | 'PROCESSING' | 'SHIPPED' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
+
+export interface GiftReleaseField {
+  readonly key: string;
+  readonly label: string;
+  readonly type: 'TEXT' | 'TEXTAREA' | 'SELECT' | 'RADIO' | 'CHECKBOX';
+  readonly required: boolean;
+  readonly options?: readonly string[];
+}
+
+export interface GiftOrderPackageSnapshot {
+  readonly name: string;
+  readonly description: string;
+  readonly items: readonly {
+    readonly name: string;
+    readonly description: string;
+    readonly quantity: number;
+  }[];
+}
 
 const timestamps = {
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+};
+
+const encryptedColumns = {
+  ciphertext: text('ciphertext').notNull(),
+  initializationVector: text('initialization_vector').notNull(),
+  authenticationTag: text('authentication_tag').notNull(),
+  keyVersion: integer('key_version').notNull(),
 };
 
 export const users = pgTable(
@@ -29,102 +58,12 @@ export const users = pgTable(
     email: text('email').notNull(),
     emailVerified: boolean('email_verified').default(false).notNull(),
     image: text('image'),
-    platformRole: text('platform_role').default('USER').notNull(),
+    role: text('role').default('USER').notNull(),
     ...timestamps,
   },
   (table) => [
     uniqueIndex('users_email_unique').on(table.email),
-    check('users_platform_role_check', sql`${table.platformRole} in ('USER', 'PLATFORM_ADMIN')`),
-  ],
-);
-
-export const platformAppearance = pgTable(
-  'platform_appearance',
-  {
-    id: text('id').primaryKey(),
-    theme: text('theme').notNull(),
-    version: integer('version').default(1).notNull(),
-    updatedByUserId: uuid('updated_by_user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    ...timestamps,
-  },
-  (table) => [
-    check('platform_appearance_singleton_check', sql`${table.id} = 'global'`),
-    check(
-      'platform_appearance_theme_check',
-      sql`${table.theme} in ('moe', 'neon', 'archive', 'pixel')`,
-    ),
-    check('platform_appearance_version_check', sql`${table.version} >= 1`),
-  ],
-);
-
-export const sitePages = pgTable(
-  'site_pages',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    slug: text('slug').notNull(),
-    publishedVersionId: uuid('published_version_id').references(
-      (): AnyPgColumn => sitePageVersions.id,
-      { onDelete: 'set null' },
-    ),
-    draftVersionId: uuid('draft_version_id').references((): AnyPgColumn => sitePageVersions.id, {
-      onDelete: 'set null',
-    }),
-    ...timestamps,
-  },
-  (table) => [uniqueIndex('site_pages_slug_unique').on(table.slug)],
-);
-
-export const sitePageVersions = pgTable(
-  'site_page_versions',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    pageId: uuid('page_id')
-      .notNull()
-      .references(() => sitePages.id, { onDelete: 'cascade' }),
-    version: integer('version').notNull(),
-    contentJson: jsonb('content_json').$type<SitePageContent>().notNull(),
-    createdByUserId: uuid('created_by_user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
-    publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
-  },
-  (table) => [
-    uniqueIndex('site_page_versions_page_version_unique').on(table.pageId, table.version),
-    index('site_page_versions_page_created_idx').on(table.pageId, table.createdAt),
-    check('site_page_versions_version_positive', sql`${table.version} > 0`),
-  ],
-);
-
-export const siteAssets = pgTable(
-  'site_assets',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    objectKey: text('object_key').notNull(),
-    thumbnailObjectKey: text('thumbnail_object_key').notNull(),
-    filename: text('filename').notNull(),
-    mimeType: text('mime_type').notNull(),
-    width: integer('width').notNull(),
-    height: integer('height').notNull(),
-    sizeBytes: integer('size_bytes').notNull(),
-    sha256: text('sha256').notNull(),
-    createdByUserId: uuid('created_by_user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex('site_assets_object_key_unique').on(table.objectKey),
-    uniqueIndex('site_assets_thumbnail_object_key_unique').on(table.thumbnailObjectKey),
-    index('site_assets_created_idx').on(table.createdAt),
-    check('site_assets_mime_type_check', sql`${table.mimeType} = 'image/webp'`),
-    check(
-      'site_assets_dimensions_positive',
-      sql`${table.width} > 0 and ${table.height} > 0 and ${table.sizeBytes} > 0`,
-    ),
-    check('site_assets_sha256_check', sql`${table.sha256} ~ '^[0-9a-f]{64}$'`),
+    check('users_role_check', sql`${table.role} in ('USER', 'CREATOR', 'PLATFORM_ADMIN')`),
   ],
 );
 
@@ -190,77 +129,26 @@ export const verifications = pgTable(
   (table) => [index('verifications_identifier_idx').on(table.identifier)],
 );
 
-export const organizations = pgTable(
-  'organizations',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    slug: text('slug').notNull(),
-    name: text('name').notNull(),
-    archivedAt: timestamp('archived_at', { mode: 'date', withTimezone: true }),
-    ...timestamps,
-  },
-  (table) => [uniqueIndex('organizations_slug_unique').on(table.slug)],
-);
-
-export const organizationMembers = pgTable(
-  'organization_members',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    role: text('role').notNull(),
-    ...timestamps,
-  },
-  (table) => [
-    uniqueIndex('organization_members_org_user_unique').on(table.organizationId, table.userId),
-    index('organization_members_user_id_idx').on(table.userId),
-    check(
-      'organization_members_role_check',
-      sql`${table.role} in ('OWNER', 'ADMIN', 'OPERATOR', 'FULFILLMENT', 'VIEWER')`,
-    ),
-  ],
-);
-
 export const creators = pgTable(
   'creators',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id')
+    userId: uuid('user_id')
       .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
+      .references(() => users.id, { onDelete: 'restrict' }),
     bilibiliUid: text('bilibili_uid').notNull(),
     roomId: text('room_id').notNull(),
     displayName: text('display_name').notNull(),
-    timezone: text('timezone').notNull(),
+    timezone: text('timezone').default('Asia/Shanghai').notNull(),
     active: boolean('active').default(true).notNull(),
     archivedAt: timestamp('archived_at', { mode: 'date', withTimezone: true }),
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('creators_org_bilibili_uid_unique').on(table.organizationId, table.bilibiliUid),
-    index('creators_organization_id_idx').on(table.organizationId),
-  ],
-);
-
-export const memberCreatorScopes = pgTable(
-  'member_creator_scopes',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    memberId: uuid('member_id')
-      .notNull()
-      .references(() => organizationMembers.id, { onDelete: 'cascade' }),
-    creatorId: uuid('creator_id')
-      .notNull()
-      .references(() => creators.id, { onDelete: 'cascade' }),
-    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex('member_creator_scopes_member_creator_unique').on(table.memberId, table.creatorId),
-    index('member_creator_scopes_creator_id_idx').on(table.creatorId),
+    uniqueIndex('creators_user_unique').on(table.userId),
+    uniqueIndex('creators_bilibili_uid_unique').on(table.bilibiliUid),
+    uniqueIndex('creators_room_id_unique').on(table.roomId),
+    index('creators_active_idx').on(table.active, table.archivedAt),
   ],
 );
 
@@ -269,9 +157,6 @@ export const auditLogs = pgTable(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
-    organizationId: uuid('organization_id').references(() => organizations.id, {
-      onDelete: 'set null',
-    }),
     creatorId: uuid('creator_id').references(() => creators.id, { onDelete: 'set null' }),
     action: text('action').notNull(),
     targetType: text('target_type').notNull(),
@@ -284,7 +169,7 @@ export const auditLogs = pgTable(
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('audit_logs_organization_created_idx').on(table.organizationId, table.createdAt),
+    index('audit_logs_creator_created_idx').on(table.creatorId, table.createdAt),
     index('audit_logs_actor_created_idx').on(table.actorUserId, table.createdAt),
   ],
 );
@@ -381,9 +266,6 @@ export const snapshotRuns = pgTable(
   'snapshot_runs',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'restrict' }),
     creatorId: uuid('creator_id')
       .notNull()
       .references(() => creators.id, { onDelete: 'restrict' }),
@@ -412,7 +294,7 @@ export const snapshotRuns = pgTable(
   (table) => [
     uniqueIndex('snapshot_runs_creator_period_unique').on(table.creatorId, table.periodStart),
     index('snapshot_runs_due_idx').on(table.status, table.scheduledCutoffAt),
-    index('snapshot_runs_organization_period_idx').on(table.organizationId, table.periodStart),
+    index('snapshot_runs_creator_period_idx').on(table.creatorId, table.periodStart),
     check(
       'snapshot_runs_status_check',
       sql`${table.status} in ('SCHEDULED', 'RUNNING', 'FAILED', 'PENDING_APPROVAL', 'FINALIZED', 'REJECTED')`,
@@ -480,6 +362,10 @@ export const snapshotPages = pgTable(
     uniqueIndex('snapshot_pages_object_key_unique').on(table.objectKey),
     check('snapshot_pages_page_positive', sql`${table.pageNumber} > 0`),
     check('snapshot_pages_hash_check', sql`${table.contentHashSha256} ~ '^[0-9a-f]{64}$'`),
+    check(
+      'snapshot_pages_sizes_non_negative',
+      sql`${table.compressedSize} >= 0 and ${table.uncompressedSize} >= 0 and ${table.itemCount} >= 0`,
+    ),
   ],
 );
 
@@ -531,53 +417,39 @@ export const snapshotMembers = pgTable(
   ],
 );
 
-export interface CampaignClaimField {
-  readonly key: string;
-  readonly label: string;
-  readonly options?: readonly string[];
-  readonly required: boolean;
-  readonly type: 'TEXT' | 'LONG_TEXT' | 'SELECT';
-}
-
-export const giftCampaigns = pgTable(
-  'gift_campaigns',
+export const giftReleases = pgTable(
+  'gift_releases',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'restrict' }),
     creatorId: uuid('creator_id')
       .notNull()
       .references(() => creators.id, { onDelete: 'restrict' }),
-    periodStart: date('period_start', { mode: 'string' }).notNull(),
+    eligibilityMonth: date('eligibility_month', { mode: 'string' }).notNull(),
     title: text('title').notNull(),
     description: text('description').default('').notNull(),
-    coverFileId: uuid('cover_file_id'),
+    coverObjectKey: text('cover_object_key'),
     claimStartAt: timestamp('claim_start_at', { mode: 'date', withTimezone: true }).notNull(),
     claimDeadlineAt: timestamp('claim_deadline_at', { mode: 'date', withTimezone: true }).notNull(),
-    fulfillmentMode: text('fulfillment_mode').notNull(),
-    claimFormSchema: jsonb('claim_form_schema').$type<readonly CampaignClaimField[]>().notNull(),
+    fulfillmentMode: text('fulfillment_mode').default('HIGHEST_ONLY').notNull(),
+    formSchema: jsonb('form_schema').$type<readonly GiftReleaseField[]>().default([]).notNull(),
     status: text('status').default('DRAFT').notNull(),
     publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
     closedAt: timestamp('closed_at', { mode: 'date', withTimezone: true }),
-    createdBy: uuid('created_by')
+    createdByUserId: uuid('created_by_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('gift_campaigns_creator_period_unique').on(table.creatorId, table.periodStart),
-    index('gift_campaigns_organization_status_idx').on(table.organizationId, table.status),
+    uniqueIndex('gift_releases_creator_month_unique').on(table.creatorId, table.eligibilityMonth),
+    index('gift_releases_creator_status_idx').on(table.creatorId, table.status),
+    check('gift_releases_status_check', sql`${table.status} in ('DRAFT', 'PUBLISHED', 'CLOSED')`),
     check(
-      'gift_campaigns_status_check',
-      sql`${table.status} in ('DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED')`,
-    ),
-    check(
-      'gift_campaigns_fulfillment_mode_check',
+      'gift_releases_fulfillment_mode_check',
       sql`${table.fulfillmentMode} in ('HIGHEST_ONLY', 'CUMULATIVE')`,
     ),
     check(
-      'gift_campaigns_claim_window_check',
+      'gift_releases_claim_window_check',
       sql`${table.claimDeadlineAt} > ${table.claimStartAt}`,
     ),
   ],
@@ -587,17 +459,17 @@ export const giftPackages = pgTable(
   'gift_packages',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    campaignId: uuid('campaign_id')
+    giftReleaseId: uuid('gift_release_id')
       .notNull()
-      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
+      .references(() => giftReleases.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description').default('').notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('gift_packages_campaign_name_unique').on(table.campaignId, table.name),
-    index('gift_packages_campaign_sort_idx').on(table.campaignId, table.sortOrder),
+    uniqueIndex('gift_packages_release_name_unique').on(table.giftReleaseId, table.name),
+    index('gift_packages_release_sort_idx').on(table.giftReleaseId, table.sortOrder),
   ],
 );
 
@@ -607,7 +479,7 @@ export const giftPackageItems = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     giftPackageId: uuid('gift_package_id')
       .notNull()
-      .references(() => giftPackages.id, { onDelete: 'restrict' }),
+      .references(() => giftPackages.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     description: text('description').default('').notNull(),
     quantity: integer('quantity').default(1).notNull(),
@@ -624,69 +496,89 @@ export const giftTierRules = pgTable(
   'gift_tier_rules',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    campaignId: uuid('campaign_id')
+    giftReleaseId: uuid('gift_release_id')
       .notNull()
-      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
+      .references(() => giftReleases.id, { onDelete: 'cascade' }),
     tier: text('tier').notNull(),
     giftPackageId: uuid('gift_package_id')
       .notNull()
-      .references(() => giftPackages.id, { onDelete: 'restrict' }),
+      .references(() => giftPackages.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('gift_tier_rules_campaign_tier_unique').on(table.campaignId, table.tier),
+    uniqueIndex('gift_tier_rules_release_tier_unique').on(table.giftReleaseId, table.tier),
     check('gift_tier_rules_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
   ],
 );
 
-export const entitlements = pgTable(
-  'entitlements',
+export const giftOrders = pgTable(
+  'gift_orders',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'restrict' }),
+    orderNumber: text('order_number').notNull(),
     creatorId: uuid('creator_id')
       .notNull()
       .references(() => creators.id, { onDelete: 'restrict' }),
-    campaignId: uuid('campaign_id')
+    giftReleaseId: uuid('gift_release_id')
       .notNull()
-      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
+      .references(() => giftReleases.id, { onDelete: 'restrict' }),
     snapshotMemberId: uuid('snapshot_member_id')
       .notNull()
       .references(() => snapshotMembers.id, { onDelete: 'restrict' }),
-    giftPackageId: uuid('gift_package_id')
-      .notNull()
-      .references(() => giftPackages.id, { onDelete: 'restrict' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'restrict' }),
     biliUid: text('bili_uid').notNull(),
+    biliDisplayName: text('bili_display_name').notNull(),
     tier: text('tier').notNull(),
-    revokedAt: timestamp('revoked_at', { mode: 'date', withTimezone: true }),
-    revokedBy: uuid('revoked_by').references(() => users.id, { onDelete: 'set null' }),
-    revokeReason: text('revoke_reason'),
-    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+    status: text('status').default('CLAIMABLE').notNull(),
+    expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
+    submittedAt: timestamp('submitted_at', { mode: 'date', withTimezone: true }),
+    processingAt: timestamp('processing_at', { mode: 'date', withTimezone: true }),
+    shippedAt: timestamp('shipped_at', { mode: 'date', withTimezone: true }),
+    completedAt: timestamp('completed_at', { mode: 'date', withTimezone: true }),
+    expiredAt: timestamp('expired_at', { mode: 'date', withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { mode: 'date', withTimezone: true }),
+    cancelReason: text('cancel_reason'),
+    version: integer('version').default(1).notNull(),
+    ...timestamps,
   },
   (table) => [
-    uniqueIndex('entitlements_campaign_member_package_unique').on(
-      table.campaignId,
+    uniqueIndex('gift_orders_number_unique').on(table.orderNumber),
+    uniqueIndex('gift_orders_release_member_unique').on(
+      table.giftReleaseId,
       table.snapshotMemberId,
-      table.giftPackageId,
     ),
-    index('entitlements_bili_uid_idx').on(table.biliUid),
-    index('entitlements_campaign_revoked_idx').on(table.campaignId, table.revokedAt),
-    check('entitlements_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
+    uniqueIndex('gift_orders_release_uid_unique').on(table.giftReleaseId, table.biliUid),
+    index('gift_orders_uid_updated_idx').on(table.biliUid, table.updatedAt),
+    index('gift_orders_user_updated_idx').on(table.userId, table.updatedAt),
+    index('gift_orders_creator_status_idx').on(table.creatorId, table.status),
     check(
-      'entitlements_revocation_check',
-      sql`(${table.revokedAt} is null and ${table.revokedBy} is null and ${table.revokeReason} is null) or (${table.revokedAt} is not null and ${table.revokedBy} is not null and length(${table.revokeReason}) >= 3)`,
+      'gift_orders_status_check',
+      sql`${table.status} in ('CLAIMABLE', 'SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
     ),
+    check('gift_orders_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
+    check('gift_orders_version_positive', sql`${table.version} > 0`),
   ],
 );
 
-const encryptedColumns = {
-  ciphertext: text('ciphertext').notNull(),
-  initializationVector: text('initialization_vector').notNull(),
-  authenticationTag: text('authentication_tag').notNull(),
-  keyVersion: integer('key_version').notNull(),
-};
+export const giftOrderItems = pgTable(
+  'gift_order_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    giftOrderId: uuid('gift_order_id')
+      .notNull()
+      .references(() => giftOrders.id, { onDelete: 'restrict' }),
+    giftPackageId: uuid('gift_package_id')
+      .notNull()
+      .references(() => giftPackages.id, { onDelete: 'restrict' }),
+    packageSnapshot: jsonb('package_snapshot').$type<GiftOrderPackageSnapshot>().notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('gift_order_items_order_package_unique').on(table.giftOrderId, table.giftPackageId),
+    index('gift_order_items_order_sort_idx').on(table.giftOrderId, table.sortOrder),
+  ],
+);
 
 export const addresses = pgTable(
   'addresses',
@@ -709,109 +601,50 @@ export const addresses = pgTable(
   ],
 );
 
-export const claims = pgTable(
-  'claims',
+export const giftOrderAddresses = pgTable(
+  'gift_order_addresses',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    claimNumber: text('claim_number').notNull(),
-    organizationId: uuid('organization_id')
+    giftOrderId: uuid('gift_order_id')
       .notNull()
-      .references(() => organizations.id, { onDelete: 'restrict' }),
-    creatorId: uuid('creator_id')
-      .notNull()
-      .references(() => creators.id, { onDelete: 'restrict' }),
-    campaignId: uuid('campaign_id')
-      .notNull()
-      .references(() => giftCampaigns.id, { onDelete: 'restrict' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    biliUid: text('bili_uid').notNull(),
-    status: text('status').default('SUBMITTED').notNull(),
-    submittedAt: timestamp('submitted_at', { mode: 'date', withTimezone: true }).notNull(),
-    processingAt: timestamp('processing_at', { mode: 'date', withTimezone: true }),
-    shippedAt: timestamp('shipped_at', { mode: 'date', withTimezone: true }),
-    completedAt: timestamp('completed_at', { mode: 'date', withTimezone: true }),
-    cancelledAt: timestamp('cancelled_at', { mode: 'date', withTimezone: true }),
-    cancelReason: text('cancel_reason'),
-    version: integer('version').default(1).notNull(),
-    ...timestamps,
-  },
-  (table) => [
-    uniqueIndex('claims_claim_number_unique').on(table.claimNumber),
-    uniqueIndex('claims_campaign_bili_uid_unique').on(table.campaignId, table.biliUid),
-    index('claims_organization_status_idx').on(table.organizationId, table.status),
-    index('claims_user_updated_idx').on(table.userId, table.updatedAt),
-    check(
-      'claims_status_check',
-      sql`${table.status} in ('SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
-    ),
-    check('claims_version_positive', sql`${table.version} > 0`),
-  ],
-);
-
-export const claimEntitlements = pgTable(
-  'claim_entitlements',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    claimId: uuid('claim_id')
-      .notNull()
-      .references(() => claims.id, { onDelete: 'restrict' }),
-    entitlementId: uuid('entitlement_id')
-      .notNull()
-      .references(() => entitlements.id, { onDelete: 'restrict' }),
-    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex('claim_entitlements_claim_entitlement_unique').on(
-      table.claimId,
-      table.entitlementId,
-    ),
-    uniqueIndex('claim_entitlements_entitlement_unique').on(table.entitlementId),
-  ],
-);
-
-export const claimAddresses = pgTable(
-  'claim_addresses',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    claimId: uuid('claim_id')
-      .notNull()
-      .references(() => claims.id, { onDelete: 'restrict' }),
-    sourceAddressId: uuid('source_address_id'),
+      .references(() => giftOrders.id, { onDelete: 'restrict' }),
+    sourceAddressId: uuid('source_address_id').references(() => addresses.id, {
+      onDelete: 'set null',
+    }),
     ...encryptedColumns,
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('claim_addresses_claim_unique').on(table.claimId),
-    check('claim_addresses_key_version_positive', sql`${table.keyVersion} > 0`),
+    uniqueIndex('gift_order_addresses_order_unique').on(table.giftOrderId),
+    check('gift_order_addresses_key_version_positive', sql`${table.keyVersion} > 0`),
   ],
 );
 
-export const claimOptionValues = pgTable(
-  'claim_option_values',
+export const giftOrderOptionValues = pgTable(
+  'gift_order_option_values',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    claimId: uuid('claim_id')
+    giftOrderId: uuid('gift_order_id')
       .notNull()
-      .references(() => claims.id, { onDelete: 'restrict' }),
+      .references(() => giftOrders.id, { onDelete: 'restrict' }),
     fieldKey: text('field_key').notNull(),
+    fieldLabel: text('field_label').notNull(),
     ...encryptedColumns,
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('claim_option_values_claim_key_unique').on(table.claimId, table.fieldKey),
-    check('claim_option_values_key_version_positive', sql`${table.keyVersion} > 0`),
+    uniqueIndex('gift_order_option_values_order_key_unique').on(table.giftOrderId, table.fieldKey),
+    check('gift_order_option_values_key_version_positive', sql`${table.keyVersion} > 0`),
   ],
 );
 
-export const claimStatusHistory = pgTable(
-  'claim_status_history',
+export const giftOrderStatusHistory = pgTable(
+  'gift_order_status_history',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    claimId: uuid('claim_id')
+    giftOrderId: uuid('gift_order_id')
       .notNull()
-      .references(() => claims.id, { onDelete: 'restrict' }),
+      .references(() => giftOrders.id, { onDelete: 'restrict' }),
     fromStatus: text('from_status'),
     toStatus: text('to_status').notNull(),
     actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -819,14 +652,14 @@ export const claimStatusHistory = pgTable(
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('claim_status_history_claim_created_idx').on(table.claimId, table.createdAt),
+    index('gift_order_status_history_order_created_idx').on(table.giftOrderId, table.createdAt),
     check(
-      'claim_status_history_from_check',
-      sql`${table.fromStatus} is null or ${table.fromStatus} in ('SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
+      'gift_order_status_history_from_check',
+      sql`${table.fromStatus} is null or ${table.fromStatus} in ('CLAIMABLE', 'SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
     ),
     check(
-      'claim_status_history_to_check',
-      sql`${table.toStatus} in ('SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
+      'gift_order_status_history_to_check',
+      sql`${table.toStatus} in ('CLAIMABLE', 'SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
     ),
   ],
 );
@@ -837,16 +670,14 @@ export const shipments = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     shipmentNumber: text('shipment_number').notNull(),
     shipmentKey: text('shipment_key').notNull(),
-    claimId: uuid('claim_id')
+    giftOrderId: uuid('gift_order_id')
       .notNull()
-      .references(() => claims.id, { onDelete: 'restrict' }),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'restrict' }),
+      .references(() => giftOrders.id, { onDelete: 'restrict' }),
     creatorId: uuid('creator_id')
       .notNull()
       .references(() => creators.id, { onDelete: 'restrict' }),
     carrierCode: text('carrier_code').notNull(),
+    carrierName: text('carrier_name').notNull(),
     trackingNumber: text('tracking_number').notNull(),
     trackingUrl: text('tracking_url'),
     status: text('status').default('LABEL_CREATED').notNull(),
@@ -863,9 +694,9 @@ export const shipments = pgTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('shipments_shipment_number_unique').on(table.shipmentNumber),
-    uniqueIndex('shipments_claim_key_unique').on(table.claimId, table.shipmentKey),
-    index('shipments_organization_status_idx').on(table.organizationId, table.status),
+    uniqueIndex('shipments_number_unique').on(table.shipmentNumber),
+    uniqueIndex('shipments_order_key_unique').on(table.giftOrderId, table.shipmentKey),
+    index('shipments_creator_status_idx').on(table.creatorId, table.status),
     index('shipments_tracking_due_idx').on(table.nextTrackingRefreshAt),
     check(
       'shipments_status_check',
@@ -885,17 +716,17 @@ export const shipmentItems = pgTable(
     shipmentId: uuid('shipment_id')
       .notNull()
       .references(() => shipments.id, { onDelete: 'restrict' }),
-    claimEntitlementId: uuid('claim_entitlement_id')
+    giftOrderItemId: uuid('gift_order_item_id')
       .notNull()
-      .references(() => claimEntitlements.id, { onDelete: 'restrict' }),
+      .references(() => giftOrderItems.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('shipment_items_shipment_entitlement_unique').on(
+    uniqueIndex('shipment_items_shipment_order_item_unique').on(
       table.shipmentId,
-      table.claimEntitlementId,
+      table.giftOrderItemId,
     ),
-    uniqueIndex('shipment_items_claim_entitlement_unique').on(table.claimEntitlementId),
+    uniqueIndex('shipment_items_order_item_unique').on(table.giftOrderItemId),
   ],
 );
 
@@ -931,20 +762,14 @@ export const announcements = pgTable(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     scope: text('scope').notNull(),
-    organizationId: uuid('organization_id').references(() => organizations.id, {
-      onDelete: 'restrict',
-    }),
     creatorId: uuid('creator_id').references(() => creators.id, { onDelete: 'restrict' }),
-    campaignId: uuid('campaign_id').references(() => giftCampaigns.id, {
-      onDelete: 'restrict',
-    }),
     title: text('title').notNull(),
     body: text('body').notNull(),
     severity: text('severity').default('INFO').notNull(),
     pinned: boolean('pinned').default(false).notNull(),
     publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }),
-    createdBy: uuid('created_by')
+    createdByUserId: uuid('created_by_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     version: integer('version').default(1).notNull(),
@@ -952,13 +777,8 @@ export const announcements = pgTable(
   },
   (table) => [
     index('announcements_visibility_idx').on(table.scope, table.publishedAt, table.expiresAt),
-    index('announcements_organization_created_idx').on(table.organizationId, table.createdAt),
     index('announcements_creator_created_idx').on(table.creatorId, table.createdAt),
-    index('announcements_campaign_created_idx').on(table.campaignId, table.createdAt),
-    check(
-      'announcements_scope_check',
-      sql`${table.scope} in ('PLATFORM', 'ORGANIZATION', 'CREATOR', 'CAMPAIGN')`,
-    ),
+    check('announcements_scope_check', sql`${table.scope} in ('PLATFORM', 'CREATOR')`),
     check(
       'announcements_severity_check',
       sql`${table.severity} in ('INFO', 'WARNING', 'CRITICAL')`,
@@ -971,10 +791,8 @@ export const announcements = pgTable(
     check(
       'announcements_scope_identity_check',
       sql`(
-        (${table.scope} = 'PLATFORM' and ${table.organizationId} is null and ${table.creatorId} is null and ${table.campaignId} is null)
-        or (${table.scope} = 'ORGANIZATION' and ${table.organizationId} is not null and ${table.creatorId} is null and ${table.campaignId} is null)
-        or (${table.scope} = 'CREATOR' and ${table.organizationId} is not null and ${table.creatorId} is not null and ${table.campaignId} is null)
-        or (${table.scope} = 'CAMPAIGN' and ${table.organizationId} is not null and ${table.creatorId} is null and ${table.campaignId} is not null)
+        (${table.scope} = 'PLATFORM' and ${table.creatorId} is null)
+        or (${table.scope} = 'CREATOR' and ${table.creatorId} is not null)
       )`,
     ),
   ],
@@ -1035,25 +853,17 @@ export const schema = {
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
-  claimAddresses,
-  claimEntitlements,
-  claimOptionValues,
-  claims,
-  claimStatusHistory,
   creators,
-  entitlements,
-  giftCampaigns,
+  giftOrderAddresses,
+  giftOrderItems,
+  giftOrderOptionValues,
+  giftOrders,
+  giftOrderStatusHistory,
   giftPackageItems,
   giftPackages,
+  giftReleases,
   giftTierRules,
   idempotencyRecords,
-  memberCreatorScopes,
-  organizationMembers,
-  organizations,
-  platformAppearance,
-  siteAssets,
-  sitePages,
-  sitePageVersions,
   sessions,
   shipmentItems,
   shipments,

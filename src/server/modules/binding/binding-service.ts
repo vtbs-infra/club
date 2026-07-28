@@ -11,9 +11,9 @@ import {
   verificationRooms,
 } from '../../infrastructure/db/schema.js';
 import { AuditService } from '../audit/audit-service.js';
+import type { RequestAuditContext } from '../audit/audit-service.js';
 import type { LiveMessageEvent } from '../bilibili/live-message-source.js';
 import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
-import type { RequestAuditContext } from '../organizations/organization-service.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CHALLENGE_LIFETIME_MS = 10 * 60 * 1000;

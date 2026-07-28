@@ -1,9 +1,7 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
-import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
+import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -15,19 +13,7 @@ import { migrateDatabase } from '../../src/server/infrastructure/db/migration-ru
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integration = testDatabaseUrl ? describe : describe.skip;
 
-interface MigrationJournal {
-  readonly dialect: string;
-  readonly entries: readonly {
-    readonly breakpoints: boolean;
-    readonly idx: number;
-    readonly tag: string;
-    readonly version: string;
-    readonly when: number;
-  }[];
-  readonly version: string;
-}
-
-integration('database migration lifecycle', () => {
+integration('database migration baseline', () => {
   let admin: ReturnType<typeof postgres>;
   const databases: string[] = [];
 
@@ -49,8 +35,8 @@ integration('database migration lifecycle', () => {
     await admin.end({ timeout: 5 });
   });
 
-  async function temporaryDatabase(label: string) {
-    const name = `club_${label}_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+  async function temporaryDatabase(): Promise<DatabaseService> {
+    const name = `club_baseline_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
     await admin.unsafe(`create database "${name}"`);
     databases.push(name);
     const targetUrl = new URL(testDatabaseUrl!);
@@ -65,71 +51,41 @@ integration('database migration lifecycle', () => {
     return Boolean(rows[0]?.exists);
   }
 
-  it('migrates an empty PostgreSQL database to the complete schema', async () => {
-    const database = await temporaryDatabase('empty');
+  it('creates only the creator-first target model on an empty database', async () => {
+    const database = await temporaryDatabase();
     try {
       await migrateDatabase(database, resolve('migrations'));
-      expect(await tableExists(database, 'users')).toBe(true);
-      expect(await tableExists(database, 'snapshot_pages')).toBe(true);
-      expect(await tableExists(database, 'claims')).toBe(true);
-      expect(await tableExists(database, 'shipments')).toBe(true);
-      expect(await tableExists(database, 'announcements')).toBe(true);
-      expect(await tableExists(database, 'platform_appearance')).toBe(true);
-      expect(await tableExists(database, 'site_pages')).toBe(true);
-      expect(await tableExists(database, 'site_page_versions')).toBe(true);
-      expect(await tableExists(database, 'site_assets')).toBe(true);
-      const migrations = await database.orm.execute<{ value: number }>(
-        sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
-      );
-      expect(migrations[0]?.value).toBe(10);
-    } finally {
-      await database.close();
-    }
-  });
-
-  it('upgrades a milestone-6 database without losing existing rows', async () => {
-    const database = await temporaryDatabase('upgrade');
-    const folder = await mkdtemp(join(tmpdir(), 'club-migrations-'));
-    try {
-      await mkdir(join(folder, 'meta'), { recursive: true });
-      const journal = JSON.parse(
-        await readFile(resolve('migrations/meta/_journal.json'), 'utf8'),
-      ) as MigrationJournal;
-      const legacyJournal: MigrationJournal = {
-        ...journal,
-        entries: journal.entries.filter((entry) => entry.idx <= 6),
-      };
-      await writeFile(
-        join(folder, 'meta', '_journal.json'),
-        `${JSON.stringify(legacyJournal, null, 2)}\n`,
-      );
-      for (const entry of legacyJournal.entries) {
-        await cp(resolve('migrations', `${entry.tag}.sql`), join(folder, `${entry.tag}.sql`));
+      for (const table of [
+        'users',
+        'creators',
+        'snapshot_runs',
+        'snapshot_pages',
+        'gift_releases',
+        'gift_orders',
+        'gift_order_addresses',
+        'shipments',
+        'announcements',
+      ]) {
+        expect(await tableExists(database, table), table).toBe(true);
       }
-      await migrateDatabase(database, folder);
-      await database.orm.execute(sql`
-        insert into users (name, email)
-        values ('Upgrade Survivor', 'upgrade-survivor@example.com')
-      `);
-      expect(await tableExists(database, 'announcements')).toBe(false);
-
-      await migrateDatabase(database, resolve('migrations'));
-      expect(await tableExists(database, 'announcements')).toBe(true);
-      expect(await tableExists(database, 'platform_appearance')).toBe(true);
-      expect(await tableExists(database, 'site_pages')).toBe(true);
-      expect(await tableExists(database, 'site_page_versions')).toBe(true);
-      expect(await tableExists(database, 'site_assets')).toBe(true);
-      const survivor = await database.orm.execute<{ email: string }>(
-        sql`select email from users where email = 'upgrade-survivor@example.com'`,
-      );
-      expect(survivor[0]?.email).toBe('upgrade-survivor@example.com');
+      for (const removed of [
+        'organizations',
+        'organization_members',
+        'campaigns',
+        'entitlements',
+        'claims',
+        'platform_appearance',
+        'site_pages',
+        'site_assets',
+      ]) {
+        expect(await tableExists(database, removed), removed).toBe(false);
+      }
       const migrations = await database.orm.execute<{ value: number }>(
         sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
       );
-      expect(migrations[0]?.value).toBe(10);
+      expect(migrations[0]?.value).toBe(1);
     } finally {
       await database.close();
-      await rm(folder, { force: true, recursive: true });
     }
   });
 });

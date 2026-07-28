@@ -1,0 +1,228 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+
+import {
+  createAddress,
+  deleteAddress,
+  getAddresses,
+  updateAddress,
+  type AddressPayload,
+  type AddressRecord,
+} from '../api/client';
+import { ErrorState, InlineNotice, LoadingState } from './Ui';
+
+const emptyAddress: AddressPayload = {
+  city: '',
+  countryRegion: '中国大陆',
+  detailedAddress: '',
+  district: '',
+  phone: '',
+  postalCode: '',
+  province: '',
+  recipientName: '',
+  userNote: '',
+};
+
+const fields: readonly {
+  readonly key: keyof AddressPayload;
+  readonly label: string;
+  readonly placeholder?: string;
+  readonly required?: boolean;
+  readonly wide?: boolean;
+}[] = [
+  { key: 'recipientName', label: '收件人', required: true },
+  { key: 'phone', label: '手机号码', required: true },
+  { key: 'countryRegion', label: '国家或地区', required: true },
+  { key: 'province', label: '省 / 直辖市', required: true },
+  { key: 'city', label: '城市', required: true },
+  { key: 'district', label: '区 / 县' },
+  {
+    key: 'detailedAddress',
+    label: '详细地址',
+    placeholder: '街道、门牌号、楼栋及房间号',
+    required: true,
+    wide: true,
+  },
+  { key: 'postalCode', label: '邮政编码' },
+  {
+    key: 'userNote',
+    label: '配送备注',
+    placeholder: '选填，仅在发货需要时使用',
+    wide: true,
+  },
+];
+
+export function AddressForm({
+  compact = false,
+  initial,
+  onCancel,
+  onSaved,
+}: {
+  readonly compact?: boolean;
+  readonly initial?: AddressRecord | undefined;
+  readonly onCancel?: (() => void) | undefined;
+  readonly onSaved?: ((address: AddressRecord) => void) | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const [label, setLabel] = useState(initial?.label ?? '常用地址');
+  const [isDefault, setIsDefault] = useState(initial?.isDefault ?? true);
+  const [payload, setPayload] = useState<AddressPayload>(initial?.payload ?? emptyAddress);
+  const save = useMutation({
+    mutationFn: () =>
+      initial
+        ? updateAddress(initial.id, { isDefault, label, payload })
+        : createAddress({ isDefault, label, payload }),
+    onSuccess: async (address) => {
+      await queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] });
+      onSaved?.(address);
+    },
+  });
+
+  return (
+    <form
+      className={compact ? 'address-editor compact' : 'address-editor'}
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        save.mutate();
+      }}
+    >
+      <div className="form-grid">
+        <label>
+          地址名称
+          <input
+            maxLength={80}
+            onChange={(event) => setLabel(event.target.value)}
+            required
+            value={label}
+          />
+        </label>
+        <label className="check-field">
+          <input
+            checked={isDefault}
+            onChange={(event) => setIsDefault(event.target.checked)}
+            type="checkbox"
+          />
+          设为默认地址
+        </label>
+        {fields.map((field) => (
+          <label className={field.wide ? 'span-full' : undefined} key={field.key}>
+            {field.label}
+            <input
+              maxLength={field.key === 'detailedAddress' || field.key === 'userNote' ? 500 : 100}
+              onChange={(event) =>
+                setPayload((current) => ({
+                  ...current,
+                  [field.key]: event.target.value,
+                }))
+              }
+              placeholder={field.placeholder}
+              required={field.required}
+              value={payload[field.key]}
+            />
+          </label>
+        ))}
+      </div>
+      {save.isError ? <InlineNotice tone="danger">{save.error.message}</InlineNotice> : null}
+      <div className="form-actions">
+        <button className="button primary" disabled={save.isPending} type="submit">
+          {save.isPending ? '正在保存…' : initial ? '保存修改' : '保存并使用'}
+        </button>
+        {onCancel ? (
+          <button className="button ghost" onClick={onCancel} type="button">
+            取消
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+export function AddressBook() {
+  const queryClient = useQueryClient();
+  const addresses = useQuery({ queryFn: getAddresses, queryKey: ['me', 'addresses'] });
+  const [editing, setEditing] = useState<AddressRecord | null>(null);
+  const [adding, setAdding] = useState(false);
+  const remove = useMutation({
+    mutationFn: deleteAddress,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] }),
+  });
+  if (addresses.isPending) return <LoadingState label="正在读取地址…" />;
+  if (addresses.isError) return <ErrorState error={addresses.error} />;
+  return (
+    <div className="stack-lg">
+      <div className="section-heading">
+        <div>
+          <h2>收货地址</h2>
+          <p>地址会加密保存；礼物提交后会冻结当时的地址副本。</p>
+        </div>
+        {!adding && !editing ? (
+          <button className="button primary" onClick={() => setAdding(true)} type="button">
+            添加地址
+          </button>
+        ) : null}
+      </div>
+      {addresses.data.length === 0 && !adding ? (
+        <div className="empty-inline">
+          <p>还没有收货地址。</p>
+          <button className="button secondary" onClick={() => setAdding(true)} type="button">
+            添加第一个地址
+          </button>
+        </div>
+      ) : (
+        <div className="address-grid">
+          {addresses.data.map((address) => (
+            <article className="address-card" key={address.id}>
+              <div className="address-card-top">
+                <strong>{address.label}</strong>
+                {address.isDefault ? <span className="soft-tag">默认</span> : null}
+              </div>
+              <p>
+                {address.payload.recipientName}
+                <span>{address.payload.phone}</span>
+              </p>
+              <small>
+                {address.payload.province}
+                {address.payload.city}
+                {address.payload.district}
+                {address.payload.detailedAddress}
+              </small>
+              <div className="card-actions">
+                <button className="text-button" onClick={() => setEditing(address)} type="button">
+                  编辑
+                </button>
+                <button
+                  className="text-button danger"
+                  disabled={remove.isPending}
+                  onClick={() => {
+                    if (window.confirm(`确认删除“${address.label}”吗？`)) {
+                      remove.mutate(address.id);
+                    }
+                  }}
+                  type="button"
+                >
+                  删除
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      {adding ? (
+        <section className="panel">
+          <h3>添加收货地址</h3>
+          <AddressForm onCancel={() => setAdding(false)} onSaved={() => setAdding(false)} />
+        </section>
+      ) : null}
+      {editing ? (
+        <section className="panel">
+          <h3>编辑“{editing.label}”</h3>
+          <AddressForm
+            initial={editing}
+            onCancel={() => setEditing(null)}
+            onSaved={() => setEditing(null)}
+          />
+        </section>
+      ) : null}
+    </div>
+  );
+}

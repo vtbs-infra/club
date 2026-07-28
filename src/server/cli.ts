@@ -1,6 +1,8 @@
 import { parseArgs } from 'node:util';
 import readline from 'node:readline';
 
+import './config/load-local-env.js';
+
 import { loadConfig } from './config/env.js';
 import { createDatabase } from './infrastructure/db/database.js';
 import { createAuth } from './modules/auth/auth.js';

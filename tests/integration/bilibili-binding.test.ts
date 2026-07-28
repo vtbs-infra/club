@@ -120,7 +120,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
         displayName,
         priority,
       },
-      url: '/api/v1/platform/verification-rooms',
+      url: '/api/v1/admin/verification-rooms',
     });
     expect(response.statusCode, response.body).toBe(201);
     return response.json<RoomResponse>();
@@ -153,10 +153,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
         bilibili_bindings,
         binding_challenges,
         verification_rooms,
-        member_creator_scopes,
         creators,
-        organization_members,
-        organizations,
         sessions,
         accounts,
         verifications,
@@ -209,7 +206,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     const forbidden = await app.inject({
       headers: { cookie: aliceCookie },
       method: 'GET',
-      url: '/api/v1/platform/verification-rooms',
+      url: '/api/v1/admin/verification-rooms',
     });
     expect(forbidden.statusCode).toBe(403);
 
@@ -220,7 +217,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
         headers: { cookie: adminCookie, origin },
         method: 'POST',
         payload: {},
-        url: `/api/v1/platform/verification-rooms/${room.id}/test`,
+        url: `/api/v1/admin/verification-rooms/${room.id}/test`,
       });
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json()).toMatchObject({ healthStatus: 'HEALTHY' });
@@ -254,7 +251,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       headers: { cookie: adminCookie, origin },
       method: 'PATCH',
       payload: { enabled: false },
-      url: `/api/v1/platform/verification-rooms/${roomA.id}`,
+      url: `/api/v1/admin/verification-rooms/${roomA.id}`,
     });
     expect(disablePrimary.statusCode).toBe(200);
     const bobResponse = await issue(bobCookie);
@@ -280,7 +277,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       headers: { cookie: adminCookie, origin },
       method: 'PATCH',
       payload: { enabled: true },
-      url: `/api/v1/platform/verification-rooms/${roomA.id}`,
+      url: `/api/v1/admin/verification-rooms/${roomA.id}`,
     });
     await runtime.bindings.reconcileConnections();
     await source.emitMessage({
@@ -446,7 +443,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       headers: { cookie: adminCookie, origin },
       method: 'DELETE',
       payload: { reason: 'Resolved a verified account ownership request.' },
-      url: `/api/v1/platform/bilibili-bindings/${binding.id}`,
+      url: `/api/v1/admin/bilibili-bindings/${binding.id}`,
     });
     expect(removed.statusCode, removed.body).toBe(204);
     const [record] = await database.orm

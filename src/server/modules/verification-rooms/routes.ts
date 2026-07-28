@@ -68,7 +68,7 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
   const requirePlatformAdmin = createRequirePlatformAdmin(options.auth);
 
   app.get(
-    '/api/v1/platform/verification-rooms',
+    '/api/v1/admin/verification-rooms',
     {
       preHandler: requirePlatformAdmin,
       schema: { response: { 200: Type.Array(RoomSchema) }, tags: ['verification-rooms'] },
@@ -77,7 +77,7 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
   );
 
   app.post<{ Body: CreateRoomBody }>(
-    '/api/v1/platform/verification-rooms',
+    '/api/v1/admin/verification-rooms',
     {
       preHandler: requirePlatformAdmin,
       schema: {
@@ -106,7 +106,7 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
   );
 
   app.patch<{ Body: UpdateRoomBody; Params: RoomParameters }>(
-    '/api/v1/platform/verification-rooms/:roomId',
+    '/api/v1/admin/verification-rooms/:roomId',
     {
       preHandler: requirePlatformAdmin,
       schema: {
@@ -135,7 +135,7 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
   );
 
   app.post<{ Body: Record<string, never>; Params: RoomParameters }>(
-    '/api/v1/platform/verification-rooms/:roomId/test',
+    '/api/v1/admin/verification-rooms/:roomId/test',
     {
       preHandler: requirePlatformAdmin,
       schema: {
