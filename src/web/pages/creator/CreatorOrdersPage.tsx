@@ -47,9 +47,10 @@ export function CreatorOrdersPage() {
         title="礼物单"
       />
       <div className="order-toolbar">
-        <div className="filter-tabs">
+        <div aria-label="按礼物单状态筛选" className="filter-tabs" role="group">
           {filters.map((filter) => (
             <button
+              aria-pressed={status === filter.value}
               className={status === filter.value ? 'active' : ''}
               key={filter.label}
               onClick={() =>

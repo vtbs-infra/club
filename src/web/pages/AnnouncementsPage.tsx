@@ -33,40 +33,47 @@ export function AnnouncementsPage() {
         <EmptyState description="有新消息时会显示在这里。" title="暂无公告" />
       ) : (
         <div className="announcement-list">
-          {announcements.data.map((announcement) => (
-            <article
-              className={
-                openId === announcement.id ? 'announcement-card open' : 'announcement-card'
-              }
-              key={announcement.id}
-            >
-              <button onClick={() => open(announcement)} type="button">
-                <div>
-                  <StatusBadge status={announcement.severity}>
-                    {announcement.severity === 'INFO'
-                      ? '公告'
-                      : announcement.severity === 'WARNING'
-                        ? '重要'
-                        : '紧急'}
-                  </StatusBadge>
-                  {announcement.pinned ? <span className="soft-tag">置顶</span> : null}
-                  {!announcement.read ? <span className="unread-dot" aria-label="未读" /> : null}
-                </div>
-                <strong>{announcement.title}</strong>
-                <time>
-                  {announcement.publishedAt ? formatDate(announcement.publishedAt, true) : ''}
-                </time>
-                <span aria-hidden="true">{openId === announcement.id ? '−' : '+'}</span>
-              </button>
-              {openId === announcement.id ? (
-                <div className="announcement-body">
-                  {announcement.body.split('\n').map((paragraph, index) => (
-                    <p key={index}>{paragraph || '\u00a0'}</p>
-                  ))}
-                </div>
-              ) : null}
-            </article>
-          ))}
+          {announcements.data.map((announcement) => {
+            const expanded = openId === announcement.id;
+            const bodyId = `announcement-${announcement.id}-body`;
+            return (
+              <article
+                className={expanded ? 'announcement-card open' : 'announcement-card'}
+                key={announcement.id}
+              >
+                <button
+                  aria-controls={bodyId}
+                  aria-expanded={expanded}
+                  onClick={() => open(announcement)}
+                  type="button"
+                >
+                  <div>
+                    <StatusBadge status={announcement.severity}>
+                      {announcement.severity === 'INFO'
+                        ? '公告'
+                        : announcement.severity === 'WARNING'
+                          ? '重要'
+                          : '紧急'}
+                    </StatusBadge>
+                    {announcement.pinned ? <span className="soft-tag">置顶</span> : null}
+                    {!announcement.read ? <span className="unread-dot" aria-label="未读" /> : null}
+                  </div>
+                  <strong>{announcement.title}</strong>
+                  <time>
+                    {announcement.publishedAt ? formatDate(announcement.publishedAt, true) : ''}
+                  </time>
+                  <span aria-hidden="true">{expanded ? '−' : '+'}</span>
+                </button>
+                {expanded ? (
+                  <div className="announcement-body" id={bodyId}>
+                    {announcement.body.split('\n').map((paragraph, index) => (
+                      <p key={index}>{paragraph || '\u00a0'}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

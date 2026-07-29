@@ -426,7 +426,6 @@ export function AdminRostersPage() {
           <label>
             拒绝原因
             <textarea
-              autoFocus
               maxLength={500}
               onChange={(event) => setRejectReason(event.target.value)}
               placeholder="请说明本次名单不能定稿的原因"

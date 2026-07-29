@@ -110,7 +110,7 @@ test('clears the credential form when the user signs out', async ({ page }) => {
   await page.getByLabel('密码').fill('correct-horse-battery-staple');
   await page.getByRole('button', { name: '登录' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await page.locator('.account-trigger').click();
+  await page.getByRole('button', { name: '测试用户的账号菜单' }).click();
   await page.getByRole('menuitem', { name: '退出登录' }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByLabel('邮箱')).toHaveValue('');
@@ -218,12 +218,30 @@ test('lands a recipient on the mobile dashboard', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '七月舰长礼物' })).toBeVisible();
   await expect(page.getByText('先保存一个收货地址')).toBeVisible();
 
-  const accountTrigger = page.locator('.account-trigger');
-  await accountTrigger.click();
+  const accountTrigger = page.getByRole('button', { name: '测试用户的账号菜单' });
+  await accountTrigger.focus();
+  await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menu')).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: '账号', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('menuitem', { name: 'B站绑定' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
   await expect(accountTrigger).toBeFocused();
+
+  await page.goto(`${baseUrl}/gifts`);
+  const giftFilters = page.getByRole('group', { name: '按礼物状态筛选' });
+  await expect(giftFilters).toBeVisible();
+  await expect(giftFilters.getByRole('button', { name: '全部' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await giftFilters.getByRole('button', { name: '待领取' }).click();
+  await expect(giftFilters.getByRole('button', { name: '待领取' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByRole('heading', { name: '七月舰长礼物' })).toBeVisible();
 });
 
 test('uses the default address and real radio choice when claiming a gift', async ({ page }) => {
@@ -450,8 +468,17 @@ test('publishes the creator current edits without a separate save', async ({ pag
 
   await page.goto(`${baseUrl}/creator/releases/${releaseId}`);
   await page.getByLabel('礼物名称').fill('当前页面的新标题');
-  await page.getByRole('button', { name: '发布并生成礼物单' }).first().click();
-  const dialog = page.getByRole('dialog', { name: '确认发布当前内容？' });
+  const publishButton = page.getByRole('button', { name: '发布并生成礼物单' }).first();
+  await publishButton.click();
+  let dialog = page.getByRole('dialog', { name: '确认发布当前内容？' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '返回' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(publishButton).toBeFocused();
+
+  await publishButton.click();
+  dialog = page.getByRole('dialog', { name: '确认发布当前内容？' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: '发布并生成礼物单' }).click();
   await expect.poll(() => publishedInput).not.toBeNull();

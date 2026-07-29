@@ -1,5 +1,6 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { getIdentity, signOut, type AccountRole, type Identity } from '../api/client';
@@ -98,29 +99,9 @@ function Shell({
   const location = useLocation();
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const accountMenuRef = useRef<HTMLDivElement>(null);
-  const accountTriggerRef = useRef<HTMLButtonElement>(null);
   const navigation =
     area === 'admin' ? adminNavigation : area === 'creator' ? creatorNavigation : userNavigation;
-
-  useEffect(() => {
-    if (!accountOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!accountMenuRef.current?.contains(event.target as Node)) setAccountOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setAccountOpen(false);
-      accountTriggerRef.current?.focus();
-    };
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [accountOpen]);
+  const accountDisplayName = identity.creator?.displayName ?? identity.user.name;
 
   return (
     <div className={`app-frame frame-${area}`}>
@@ -136,8 +117,9 @@ function Shell({
             ) : null}
           </Link>
           <button
+            aria-controls="main-navigation"
             aria-expanded={menuOpen}
-            aria-label="打开导航"
+            aria-label={menuOpen ? '关闭导航' : '打开导航'}
             className="menu-toggle"
             onClick={() => setMenuOpen((open) => !open)}
             type="button"
@@ -146,7 +128,11 @@ function Shell({
             <span />
             <span />
           </button>
-          <nav className={menuOpen ? 'main-nav nav-open' : 'main-nav'} aria-label="主导航">
+          <nav
+            className={menuOpen ? 'main-nav nav-open' : 'main-nav'}
+            aria-label="主导航"
+            id="main-navigation"
+          >
             {navigation.map((item) => (
               <NavLink
                 className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
@@ -159,63 +145,58 @@ function Shell({
               </NavLink>
             ))}
           </nav>
-          <div className="account-menu" ref={accountMenuRef}>
-            <button
-              aria-expanded={accountOpen}
-              aria-haspopup="menu"
-              className="account-trigger"
-              onClick={() => setAccountOpen((open) => !open)}
-              ref={accountTriggerRef}
-              type="button"
-            >
-              <span className="avatar">
-                {(identity.creator?.displayName ?? identity.user.name).slice(0, 1).toUpperCase()}
-              </span>
-              <span className="account-name">
-                {identity.creator?.displayName ?? identity.user.name}
-              </span>
-              <span aria-hidden="true">⌄</span>
-            </button>
-            {accountOpen ? (
-              <div className="account-popover" role="menu">
-                <div>
-                  <strong>{identity.user.name}</strong>
-                  <small>{identity.user.email}</small>
-                </div>
-                {area === 'user' ? (
-                  <>
-                    <Link onClick={() => setAccountOpen(false)} role="menuitem" to="/account">
-                      账号
-                    </Link>
-                    <Link
-                      onClick={() => setAccountOpen(false)}
-                      role="menuitem"
-                      to="/account/bilibili"
-                    >
-                      B站绑定
-                    </Link>
-                    <Link
-                      onClick={() => setAccountOpen(false)}
-                      role="menuitem"
-                      to="/account/addresses"
-                    >
-                      收货地址
-                    </Link>
-                  </>
-                ) : null}
+          <div className="account-menu">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
                 <button
-                  role="menuitem"
+                  aria-label={`${accountDisplayName}的账号菜单`}
+                  className="account-trigger"
                   type="button"
-                  onClick={async () => {
-                    await signOut();
-                    queryClient.clear();
-                    window.location.replace('/login');
-                  }}
                 >
-                  退出登录
+                  <span className="avatar">{accountDisplayName.slice(0, 1).toUpperCase()}</span>
+                  <span className="account-name">{accountDisplayName}</span>
+                  <span aria-hidden="true">⌄</span>
                 </button>
-              </div>
-            ) : null}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  className="account-popover"
+                  collisionPadding={12}
+                  sideOffset={8}
+                >
+                  <DropdownMenu.Label className="account-popover-header">
+                    <strong>{identity.user.name}</strong>
+                    <small>{identity.user.email}</small>
+                  </DropdownMenu.Label>
+                  {area === 'user' ? (
+                    <>
+                      <DropdownMenu.Item asChild>
+                        <Link to="/account">账号</Link>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item asChild>
+                        <Link to="/account/bilibili">B站绑定</Link>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item asChild>
+                        <Link to="/account/addresses">收货地址</Link>
+                      </DropdownMenu.Item>
+                    </>
+                  ) : null}
+                  <DropdownMenu.Item asChild>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await signOut();
+                        queryClient.clear();
+                        window.location.replace('/login');
+                      }}
+                    >
+                      退出登录
+                    </button>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
           </div>
         </div>
       </header>

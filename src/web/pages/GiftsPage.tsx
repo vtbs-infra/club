@@ -30,14 +30,13 @@ export function GiftsPage() {
         intro="每一张礼物单都来自已经冻结的月度大航海名单。"
         title="礼物单"
       />
-      <div className="filter-tabs" role="tablist">
+      <div aria-label="按礼物状态筛选" className="filter-tabs" role="group">
         {filters.map((filter, index) => (
           <button
-            aria-selected={active === index}
+            aria-pressed={active === index}
             className={active === index ? 'active' : ''}
             key={filter.label}
             onClick={() => setActive(index)}
-            role="tab"
             type="button"
           >
             {filter.label}

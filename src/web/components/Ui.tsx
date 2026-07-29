@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { useRef, type ReactNode } from 'react';
 
 import { ApiError } from '../api/http';
 
@@ -177,90 +178,58 @@ export function ConfirmDialog({
   readonly title: string;
   readonly tone?: 'danger' | 'primary';
 }) {
-  const titleId = useId();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    (
-      dialogRef.current?.querySelector<HTMLElement>('input, textarea, select') ?? cancelRef.current
-    )?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) {
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(
-        dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]',
-        ) ?? [],
-      );
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0]!;
-      const last = focusable.at(-1)!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      previousFocusRef.current?.focus();
-      previousFocusRef.current = null;
-    };
-  }, [busy, onCancel, open]);
-
-  if (!open) return null;
   return (
-    <div
-      className="dialog-backdrop"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target && !busy) onCancel();
+    <Dialog.Root
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !busy) onCancel();
       }}
-      role="presentation"
+      open={open}
     >
-      <section
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className="confirm-dialog"
-        ref={dialogRef}
-        role="dialog"
-      >
-        <h2 id={titleId}>{title}</h2>
-        <div className="confirm-dialog-copy">{description}</div>
-        <div className="form-actions">
-          <button
-            className="button ghost"
-            disabled={busy}
-            onClick={onCancel}
-            ref={cancelRef}
-            type="button"
-          >
-            返回
-          </button>
-          <button
-            className={tone === 'danger' ? 'button danger' : 'button primary'}
-            disabled={busy || confirmDisabled}
-            onClick={onConfirm}
-            type="button"
-          >
-            {busy ? '正在处理…' : confirmLabel}
-          </button>
-        </div>
-      </section>
-    </div>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-backdrop" />
+        <Dialog.Content
+          className="confirm-dialog"
+          onCloseAutoFocus={(event) => {
+            const returnFocus = returnFocusRef.current;
+            returnFocusRef.current = null;
+            if (!returnFocus?.isConnected) return;
+            event.preventDefault();
+            returnFocus.focus();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (busy) event.preventDefault();
+          }}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current =
+              document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onPointerDownOutside={(event) => {
+            if (busy) event.preventDefault();
+          }}
+        >
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description asChild>
+            <div className="confirm-dialog-copy">{description}</div>
+          </Dialog.Description>
+          <div className="form-actions">
+            <Dialog.Close asChild>
+              <button className="button ghost" disabled={busy} type="button">
+                返回
+              </button>
+            </Dialog.Close>
+            <button
+              className={tone === 'danger' ? 'button danger' : 'button primary'}
+              disabled={busy || confirmDisabled}
+              onClick={onConfirm}
+              type="button"
+            >
+              {busy ? '正在处理…' : confirmLabel}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
