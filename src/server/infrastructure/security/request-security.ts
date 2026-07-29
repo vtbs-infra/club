@@ -26,15 +26,48 @@ export interface RateLimitResult {
 
 export class InMemoryRateLimiter {
   private readonly entries = new Map<string, RateLimitEntry>();
+  private operations = 0;
 
   public constructor(
     private readonly limit = 120,
     private readonly windowMs = 60_000,
-  ) {}
+    private readonly maxEntries = 10_000,
+  ) {
+    if (limit < 1 || windowMs < 1 || maxEntries < 1) {
+      throw new RangeError('Rate limiter values must be positive.');
+    }
+  }
+
+  public get entryCount(): number {
+    return this.entries.size;
+  }
+
+  private pruneExpired(nowMs: number): void {
+    for (const [key, entry] of this.entries) {
+      if (entry.resetAt <= nowMs) this.entries.delete(key);
+    }
+  }
+
+  private makeCapacity(nowMs: number): void {
+    this.pruneExpired(nowMs);
+    if (this.entries.size < this.maxEntries) return;
+    let oldestKey: string | null = null;
+    let oldestResetAt = Number.POSITIVE_INFINITY;
+    for (const [key, entry] of this.entries) {
+      if (entry.resetAt < oldestResetAt) {
+        oldestKey = key;
+        oldestResetAt = entry.resetAt;
+      }
+    }
+    if (oldestKey) this.entries.delete(oldestKey);
+  }
 
   public consume(key: string, now: Date): RateLimitResult {
     const nowMs = now.getTime();
+    this.operations += 1;
+    if (this.operations % 256 === 0) this.pruneExpired(nowMs);
     const existing = this.entries.get(key);
+    if (!existing && this.entries.size >= this.maxEntries) this.makeCapacity(nowMs);
     const entry =
       existing && existing.resetAt > nowMs
         ? existing

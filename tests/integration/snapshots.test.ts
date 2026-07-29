@@ -1,4 +1,7 @@
-import { and, count, eq, sql } from 'drizzle-orm';
+import { resolve } from 'node:path';
+
+import { and, count, eq, inArray } from 'drizzle-orm';
+import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
@@ -6,6 +9,7 @@ import {
   createDatabase,
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
+import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
 import {
   auditLogs,
   creators,
@@ -14,7 +18,7 @@ import {
   snapshotMembers,
   snapshotRuns,
   users,
-} from '../../src/server/infrastructure/db/schema.js';
+} from '../../src/server/infrastructure/db/schema/index.js';
 import {
   createTemporaryStorage,
   type TemporaryStorage,
@@ -30,6 +34,7 @@ import type {
   GuardRosterPage,
   GuardRosterSource,
 } from '../../src/server/modules/bilibili/guard-roster-source.js';
+import { CreatorService } from '../../src/server/modules/creators/creator-service.js';
 import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -76,39 +81,97 @@ class AdvancingSource implements GuardRosterSource {
   }
 }
 
+class ConcurrentEmptySource implements GuardRosterSource {
+  public readonly name = 'concurrent-fake';
+  public readonly version = '1';
+  public maximumConcurrentRequests = 0;
+  private concurrentRequests = 0;
+
+  public async fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage> {
+    this.concurrentRequests += 1;
+    this.maximumConcurrentRequests = Math.max(
+      this.maximumConcurrentRequests,
+      this.concurrentRequests,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    this.concurrentRequests -= 1;
+    return {
+      declaredPageCount: 1,
+      declaredTotal: 0,
+      fetchedAt: new Date(),
+      members: [],
+      pageNumber: input.pageNumber,
+      rawBytes: new TextEncoder().encode(
+        JSON.stringify({ pageNumber: input.pageNumber, roomId: input.roomId }),
+      ),
+    };
+  }
+}
+
+class BlockingEmptySource implements GuardRosterSource {
+  public readonly name = 'blocking-fake';
+  public readonly version = '1';
+  public readonly entered: Promise<void>;
+  private firstRequest = true;
+  private readonly gate: Promise<void>;
+  private markEntered!: () => void;
+  private releaseGate!: () => void;
+
+  public constructor() {
+    this.entered = new Promise((resolve) => {
+      this.markEntered = resolve;
+    });
+    this.gate = new Promise((resolve) => {
+      this.releaseGate = resolve;
+    });
+  }
+
+  public release(): void {
+    this.releaseGate();
+  }
+
+  public async fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage> {
+    if (this.firstRequest) {
+      this.firstRequest = false;
+      this.markEntered();
+      await this.gate;
+    }
+    return {
+      declaredPageCount: 1,
+      declaredTotal: 0,
+      fetchedAt: new Date(),
+      members: [],
+      pageNumber: input.pageNumber,
+      rawBytes: new TextEncoder().encode(JSON.stringify({ pageNumber: input.pageNumber })),
+    };
+  }
+}
+
 integration('month-end snapshot capture', () => {
+  let admin: ReturnType<typeof postgres>;
   let database: DatabaseService;
+  let databaseName: string;
   let storage: TemporaryStorage;
   let ownerId: string;
   const creatorIds: string[] = [];
 
   beforeAll(async () => {
-    database = createDatabase(testDatabaseUrl!);
+    const adminUrl = new URL(testDatabaseUrl!);
+    adminUrl.pathname = '/postgres';
+    admin = postgres(adminUrl.toString(), { max: 1 });
+    databaseName = `club_snapshots_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+    await admin.unsafe(`create database "${databaseName}"`);
+    const databaseUrl = new URL(testDatabaseUrl!);
+    databaseUrl.pathname = `/${databaseName}`;
+    database = createDatabase(databaseUrl.toString());
+    await migrateDatabase(database, resolve('migrations'));
     storage = await createTemporaryStorage();
-    await database.orm.execute(sql`
-      TRUNCATE TABLE
-        audit_logs,
-        snapshot_members,
-        snapshot_attempt_members,
-        snapshot_pages,
-        snapshot_attempts,
-        snapshot_runs,
-        bilibili_bindings,
-        binding_challenges,
-        verification_rooms,
-        creators,
-        sessions,
-        accounts,
-        verifications,
-        users
-      CASCADE
-    `);
     const [owner] = await database.orm
       .insert(users)
       .values({ email: 'snapshot-owner@example.com', name: 'Snapshot Owner' })
       .returning({ id: users.id });
     ownerId = owner!.id;
-    for (let index = 1; index <= 8; index += 1) {
+    for (let index = 1; index <= 20; index += 1) {
       const [account] = await database.orm
         .insert(users)
         .values({
@@ -134,6 +197,15 @@ integration('month-end snapshot capture', () => {
   afterAll(async () => {
     if (database) await database.close();
     if (storage) await storage.cleanup();
+    if (admin) {
+      await admin`
+        select pg_terminate_backend(pid)
+        from pg_stat_activity
+        where datname = ${databaseName} and pid <> pg_backend_pid()
+      `;
+      await admin.unsafe(`drop database if exists "${databaseName}"`);
+      await admin.end({ timeout: 5 });
+    }
   });
 
   async function julyRun(creatorId: string) {
@@ -150,7 +222,7 @@ integration('month-end snapshot capture', () => {
     const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));
     const source = new FakeGuardRosterSource();
     const service = new SnapshotService(database, storage.driver, source, clock);
-    expect(await service.precreateRuns()).toBe(16);
+    expect(await service.precreateRuns()).toBe(40);
     expect(await service.precreateRuns()).toBe(0);
     const runs = await database.orm
       .select()
@@ -176,7 +248,7 @@ integration('month-end snapshot capture', () => {
     const run = await julyRun(creatorIds[0]!);
     await service.capture(run.id);
 
-    const detail = await service.getDetail(run.id);
+    const detail = await service.queries.getDetail(run.id);
     expect(detail.run.status).toBe('FINALIZED');
     expect(detail.attempts[0]).toMatchObject({
       consistencyStatus: 'CONSISTENT',
@@ -185,7 +257,9 @@ integration('month-end snapshot capture', () => {
       punctuality: 'ON_TIME',
     });
     expect(detail.pages).toHaveLength(2);
-    expect((await service.checkEvidenceIntegrity(run.id)).every((page) => page.ok)).toBe(true);
+    expect((await service.queries.checkEvidenceIntegrity(run.id)).every((page) => page.ok)).toBe(
+      true,
+    );
     const [total] = await database.orm
       .select({ value: count() })
       .from(snapshotMembers)
@@ -200,7 +274,7 @@ integration('month-end snapshot capture', () => {
     const service = new SnapshotService(database, storage.driver, source, clock);
     const run = await julyRun(creatorIds[1]!);
     await service.capture(run.id);
-    expect((await service.getDetail(run.id)).run.status).toBe('PENDING_APPROVAL');
+    expect((await service.queries.getDetail(run.id)).run.status).toBe('PENDING_APPROVAL');
     const [before] = await database.orm
       .select({ value: count() })
       .from(snapshotMembers)
@@ -212,7 +286,7 @@ integration('month-end snapshot capture', () => {
       ipAddress: '127.0.0.1',
       requestId: 'late-approval-test',
     });
-    expect((await service.getDetail(run.id)).run.status).toBe('FINALIZED');
+    expect((await service.queries.getDetail(run.id)).run.status).toBe('FINALIZED');
     const [audit] = await database.orm
       .select({ action: auditLogs.action })
       .from(auditLogs)
@@ -227,7 +301,7 @@ integration('month-end snapshot capture', () => {
     const service = new SnapshotService(database, storage.driver, source, clock);
     const run = await julyRun(creatorIds[2]!);
     await service.capture(run.id);
-    expect((await service.getDetail(run.id)).attempts[0]).toMatchObject({
+    expect((await service.queries.getDetail(run.id)).attempts[0]).toMatchObject({
       consistencyStatus: 'INCONSISTENT',
       failureCode: 'DUPLICATE_UID',
     });
@@ -238,7 +312,7 @@ integration('month-end snapshot capture', () => {
         requestId: 'inconsistent-approval-test',
       }),
     ).rejects.toMatchObject({ code: 'SNAPSHOT_NOT_APPROVABLE' });
-    const failedDetail = await service.getDetail(run.id);
+    const failedDetail = await service.queries.getDetail(run.id);
     const [candidates] = await database.orm
       .select({ value: count() })
       .from(snapshotAttemptMembers)
@@ -247,7 +321,7 @@ integration('month-end snapshot capture', () => {
 
     source.setScenario(buildFakeRosterScenario([member('3001', 1), member('3002', 2)]));
     await service.capture(run.id);
-    const detail = await service.getDetail(run.id);
+    const detail = await service.queries.getDetail(run.id);
     expect(detail.attempts.map((attempt) => attempt.attemptNumber).sort()).toEqual([1, 2]);
     expect(new Set(detail.pages.map((page) => page.snapshotAttemptId)).size).toBe(2);
     expect(detail.run.status).toBe('FINALIZED');
@@ -289,7 +363,7 @@ integration('month-end snapshot capture', () => {
     const service = new SnapshotService(database, storage.driver, source, clock);
     const run = await julyRun(creatorIds[creatorIndex]!);
     await service.capture(run.id);
-    expect((await service.getDetail(run.id)).attempts[0]).toMatchObject({
+    expect((await service.queries.getDetail(run.id)).attempts[0]).toMatchObject({
       consistencyStatus: 'INCONSISTENT',
       failureCode,
     });
@@ -332,14 +406,120 @@ integration('month-end snapshot capture', () => {
       new MutableClock(new Date('2026-07-22T00:05:00.000Z')),
     );
     expect(await service.recoverInterrupted()).toBe(1);
-    expect((await service.getDetail(run!.id)).attempts[0]).toMatchObject({
+    expect((await service.queries.getDetail(run!.id)).attempts[0]).toMatchObject({
       consistencyStatus: 'INCONSISTENT',
       failureCode: 'PROCESS_INTERRUPTED',
     });
   });
 
+  it('starts every due creator without a fixed batch or whole-capture serialization', async () => {
+    const clock = new MutableClock(new Date('2026-07-31T15:59:40.000Z'));
+    const source = new ConcurrentEmptySource();
+    const service = new SnapshotService(database, storage.driver, source, clock);
+
+    expect(await service.runDue()).toBeGreaterThanOrEqual(12);
+
+    const newCreatorRuns = await database.orm
+      .select({ status: snapshotRuns.status })
+      .from(snapshotRuns)
+      .where(
+        and(
+          inArray(snapshotRuns.creatorId, creatorIds.slice(8)),
+          eq(snapshotRuns.periodStart, '2026-07-01'),
+        ),
+      );
+    expect(newCreatorRuns).toHaveLength(12);
+    expect(newCreatorRuns.every((run) => run.status === 'FINALIZED')).toBe(true);
+    expect(source.maximumConcurrentRequests).toBeGreaterThan(1);
+  });
+
+  it('updates pending task identity and removes pending tasks when a creator is disabled', async () => {
+    const creatorService = new CreatorService(database);
+    const creatorId = creatorIds[8]!;
+    await creatorService.update({
+      actorUserId: ownerId,
+      creatorId,
+      ipAddress: '127.0.0.1',
+      requestId: 'update-scheduled-snapshot',
+      roomId: '880009',
+      timezone: 'UTC',
+    });
+    const [updatedRun] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(eq(snapshotRuns.creatorId, creatorId), eq(snapshotRuns.periodStart, '2026-08-01')),
+      );
+    expect(updatedRun).toMatchObject({
+      creatorRoomId: '880009',
+      cutoffTimezone: 'UTC',
+      scheduledCutoffAt: new Date('2026-08-31T23:59:00.000Z'),
+      status: 'SCHEDULED',
+    });
+
+    await creatorService.update({
+      active: false,
+      actorUserId: ownerId,
+      creatorId,
+      ipAddress: '127.0.0.1',
+      requestId: 'disable-scheduled-snapshot',
+    });
+    const pending = await database.orm
+      .select({ status: snapshotRuns.status })
+      .from(snapshotRuns)
+      .where(
+        and(eq(snapshotRuns.creatorId, creatorId), eq(snapshotRuns.periodStart, '2026-08-01')),
+      );
+    expect(pending).toEqual([{ status: 'CANCELLED' }]);
+  });
+
+  it('rejects a concurrent retry and enforces the shared attempt limit', async () => {
+    const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
+    const [concurrentRun] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(eq(snapshotRuns.creatorId, creatorIds[9]!), eq(snapshotRuns.periodStart, '2026-08-01')),
+      );
+    const source = new BlockingEmptySource();
+    const service = new SnapshotService(database, storage.driver, source, clock);
+    const firstCapture = service.capture(concurrentRun!.id);
+    await source.entered;
+    await expect(service.capture(concurrentRun!.id)).rejects.toMatchObject({
+      code: 'SNAPSHOT_CAPTURE_NOT_ALLOWED',
+    });
+    source.release();
+    await firstCapture;
+
+    const [limitedRun] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(
+          eq(snapshotRuns.creatorId, creatorIds[10]!),
+          eq(snapshotRuns.periodStart, '2026-08-01'),
+        ),
+      );
+    await database.orm.insert(snapshotAttempts).values(
+      [1, 2, 3].map((attemptNumber) => ({
+        attemptNumber,
+        schedulerStartedAt: clock.now(),
+        snapshotRunId: limitedRun!.id,
+        sourceName: 'failed-fake',
+        sourceVersion: '1',
+      })),
+    );
+    await database.orm
+      .update(snapshotRuns)
+      .set({ status: 'FAILED' })
+      .where(eq(snapshotRuns.id, limitedRun!.id));
+    await expect(service.capture(limitedRun!.id)).rejects.toMatchObject({
+      code: 'SNAPSHOT_ATTEMPT_LIMIT_REACHED',
+    });
+  });
+
   it('fails the whole attempt when the provider exceeds its timeout', async () => {
-    const clock = new MutableClock(new Date('2026-07-31T15:59:30.000Z'));
+    const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
     const source: GuardRosterSource = {
       name: 'timeout-fake',
       version: '1',
@@ -358,9 +538,14 @@ integration('month-end snapshot capture', () => {
         }),
     };
     const service = new SnapshotService(database, storage.driver, source, clock, 5);
-    const run = await julyRun(creatorIds[7]!);
-    await service.capture(run.id);
-    expect((await service.getDetail(run.id)).attempts[0]).toMatchObject({
+    const [run] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(eq(snapshotRuns.creatorId, creatorIds[7]!), eq(snapshotRuns.periodStart, '2026-08-01')),
+      );
+    await service.capture(run!.id);
+    expect((await service.queries.getDetail(run!.id)).attempts[0]).toMatchObject({
       consistencyStatus: 'INCONSISTENT',
       failureCode: 'CAPTURE_TIMEOUT',
     });
@@ -395,7 +580,7 @@ integration('month-end snapshot capture', () => {
     clock.current = new Date('2026-07-31T15:59:00.000Z');
     const run = await julyRun(creator!.id);
     await service.capture(run.id);
-    const detail = await service.getDetail(run.id);
+    const detail = await service.queries.getDetail(run.id);
     expect(detail.run.status).toBe('FAILED');
     expect(detail.attempts[0]).toMatchObject({
       consistencyStatus: 'INCONSISTENT',

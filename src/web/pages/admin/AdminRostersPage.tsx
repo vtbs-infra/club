@@ -1,16 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import {
   approveAdminRoster,
   getAdminRoster,
+  getAdminRosterIntegrity,
   getAdminRosters,
   rejectAdminRoster,
   retryAdminRoster,
 } from '../../api/client';
 import {
+  ConfirmDialog,
   EmptyState,
+  ErrorNotice,
   ErrorState,
   InlineNotice,
   LoadingState,
@@ -20,6 +23,7 @@ import {
 import { formatDate, formatMonth } from '../../lib/format';
 
 const statusLabel: Readonly<Record<string, string>> = {
+  CANCELLED: '已取消',
   FAILED: '失败',
   FINALIZED: '已冻结',
   PENDING_APPROVAL: '待确认',
@@ -28,15 +32,33 @@ const statusLabel: Readonly<Record<string, string>> = {
   SCHEDULED: '已计划',
 };
 
+const failureLabel: Readonly<Record<string, string>> = {
+  CAPTURE_ATTEMPT_LIMIT_REACHED: '已达到最大同步次数',
+  DUPLICATE_MEMBER: '名单中存在重复 UID',
+  INVALID_TIER: '名单包含无法识别的舰队等级',
+  PAGE_LIMIT_EXCEEDED: '来源返回的分页数量异常',
+  PROVIDER_ERROR: 'B站名单来源请求失败',
+  TOTAL_MISMATCH: '分页汇总人数与来源声明不一致',
+};
+
 export function AdminRostersPage() {
   const queryClient = useQueryClient();
+  const detailRef = useRef<HTMLElement>(null);
   const [parameters, setParameters] = useSearchParams();
   const runId = parameters.get('run');
+  const [memberSearch, setMemberSearch] = useState('');
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const rosters = useQuery({ queryFn: getAdminRosters, queryKey: ['admin', 'rosters'] });
   const detail = useQuery({
     enabled: Boolean(runId),
     queryFn: () => getAdminRoster(runId!),
     queryKey: ['admin', 'rosters', runId],
+  });
+  const integrity = useQuery({
+    enabled: false,
+    queryFn: () => getAdminRosterIntegrity(runId!),
+    queryKey: ['admin', 'rosters', runId, 'integrity'],
   });
   const refresh = async () => {
     await Promise.all([
@@ -48,12 +70,40 @@ export function AdminRostersPage() {
   const approve = useMutation({ mutationFn: () => approveAdminRoster(runId!), onSuccess: refresh });
   const reject = useMutation({
     mutationFn: (reason: string) => rejectAdminRoster(runId!, reason),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      setRejectOpen(false);
+      setRejectReason('');
+      await refresh();
+    },
   });
   const selected = useMemo(
     () => rosters.data?.find(({ run }) => run.id === runId),
     [rosters.data, runId],
   );
+  const filteredMembers = useMemo(() => {
+    const normalized = memberSearch.trim().toLowerCase();
+    if (!normalized) return detail.data?.members ?? [];
+    return (
+      detail.data?.members.filter(
+        (member) =>
+          member.biliUid.includes(normalized) ||
+          member.displayNameAtSnapshot?.toLowerCase().includes(normalized),
+      ) ?? []
+    );
+  }, [detail.data?.members, memberSearch]);
+  const selectRun = (id: string) => {
+    setMemberSearch('');
+    setRejectOpen(false);
+    setRejectReason('');
+    setParameters({ run: id }, { replace: true });
+  };
+
+  useEffect(() => {
+    if (!runId || !window.matchMedia('(max-width: 920px)').matches) return;
+    requestAnimationFrame(() =>
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  }, [runId]);
   if (rosters.isPending) return <LoadingState label="正在读取名单任务…" />;
   if (rosters.isError) return <ErrorState error={rosters.error} />;
   const mutationError = retry.error ?? approve.error ?? reject.error;
@@ -83,7 +133,7 @@ export function AdminRostersPage() {
                 <button
                   className={run.id === runId ? 'roster-run selected' : 'roster-run'}
                   key={run.id}
-                  onClick={() => setParameters({ run: run.id }, { replace: true })}
+                  onClick={() => selectRun(run.id)}
                   type="button"
                 >
                   <span>
@@ -99,7 +149,7 @@ export function AdminRostersPage() {
             </div>
           )}
         </section>
-        <section className="panel roster-detail-panel">
+        <section className="panel roster-detail-panel" ref={detailRef}>
           {!runId ? (
             <EmptyState
               description="从左侧选择一个任务查看抓取结果与证据摘要。"
@@ -142,9 +192,7 @@ export function AdminRostersPage() {
                   <dd>{detail.data.attempts.length}</dd>
                 </div>
               </dl>
-              {mutationError ? (
-                <InlineNotice tone="danger">{mutationError.message}</InlineNotice>
-              ) : null}
+              {mutationError ? <ErrorNotice error={mutationError} /> : null}
               {detail.data.run.status === 'PENDING_APPROVAL' ? (
                 <div className="decision-card">
                   <div>
@@ -165,10 +213,7 @@ export function AdminRostersPage() {
                     <button
                       className="button ghost danger"
                       disabled={reject.isPending}
-                      onClick={() => {
-                        const reason = window.prompt('请输入拒绝原因：');
-                        if (reason) reject.mutate(reason);
-                      }}
+                      onClick={() => setRejectOpen(true)}
                       type="button"
                     >
                       拒绝此次抓取
@@ -235,7 +280,16 @@ export function AdminRostersPage() {
                         </dl>
                         {attempt.failureCode ? (
                           <InlineNotice tone="danger">
-                            <strong>{attempt.failureCode}</strong>：{attempt.failureMessage}
+                            <strong>
+                              {failureLabel[attempt.failureCode] ?? '名单同步未能完成'}
+                            </strong>
+                            <details className="error-details">
+                              <summary>错误详情</summary>
+                              <p>
+                                {attempt.failureCode}
+                                {attempt.failureMessage ? ` · ${attempt.failureMessage}` : ''}
+                              </p>
+                            </details>
                           </InlineNotice>
                         ) : null}
                       </article>
@@ -243,24 +297,116 @@ export function AdminRostersPage() {
                   )}
                 </div>
               </div>
+              {detail.data.members.length > 0 ? (
+                <div className="stack-md">
+                  <div className="section-heading compact">
+                    <div>
+                      <h3>定稿成员</h3>
+                      <p>{detail.data.members.length} 个不可变资格成员</p>
+                    </div>
+                    <label className="compact-search">
+                      <span className="sr-only">搜索 UID 或昵称</span>
+                      <input
+                        onChange={(event) => setMemberSearch(event.target.value)}
+                        placeholder="搜索 UID 或昵称"
+                        type="search"
+                        value={memberSearch}
+                      />
+                    </label>
+                  </div>
+                  <div className="table-scroll">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>序号</th>
+                          <th>UID</th>
+                          <th>抓取时昵称</th>
+                          <th>资格等级</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredMembers.map((member) => (
+                          <tr key={member.id}>
+                            <td>{member.sourcePosition}</td>
+                            <td>
+                              <code>{member.biliUid}</code>
+                            </td>
+                            <td>{member.displayNameAtSnapshot ?? '—'}</td>
+                            <td>
+                              {member.tier === 'CAPTAIN'
+                                ? '舰长'
+                                : member.tier === 'ADMIRAL'
+                                  ? '提督'
+                                  : '总督'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {filteredMembers.length === 0 ? (
+                    <p className="quiet-line">没有符合当前搜索条件的成员。</p>
+                  ) : null}
+                </div>
+              ) : null}
               {detail.data.pages.length > 0 ? (
                 <details className="evidence-details">
-                  <summary>原始分页证据摘要（{detail.data.pages.length} 页）</summary>
+                  <summary>原始分页证据（{detail.data.pages.length} 页）</summary>
+                  <div className="form-actions evidence-actions">
+                    <button
+                      className="button secondary"
+                      disabled={integrity.isFetching}
+                      onClick={() => void integrity.refetch()}
+                      type="button"
+                    >
+                      {integrity.isFetching ? '正在校验…' : '校验证据完整性'}
+                    </button>
+                    {integrity.data ? (
+                      <StatusBadge
+                        status={integrity.data.every((result) => result.ok) ? 'ok' : 'failed'}
+                      >
+                        {integrity.data.every((result) => result.ok)
+                          ? '全部哈希一致'
+                          : '发现不一致'}
+                      </StatusBadge>
+                    ) : null}
+                  </div>
+                  {integrity.isError ? <ErrorNotice error={integrity.error} /> : null}
                   <table className="data-table">
                     <thead>
                       <tr>
+                        <th>执行</th>
                         <th>页码</th>
                         <th>成员数</th>
                         <th>内容哈希</th>
+                        <th>校验</th>
                       </tr>
                     </thead>
                     <tbody>
                       {detail.data.pages.map((page) => (
-                        <tr key={page.pageNumber}>
+                        <tr key={`${page.snapshotAttemptId}-${page.pageNumber}`}>
+                          <td>
+                            第{' '}
+                            {detail.data.attempts.find(
+                              (attempt) => attempt.id === page.snapshotAttemptId,
+                            )?.attemptNumber ?? '—'}{' '}
+                            次
+                          </td>
                           <td>{page.pageNumber}</td>
                           <td>{page.itemCount}</td>
                           <td>
                             <code>{page.contentHashSha256.slice(0, 16)}…</code>
+                          </td>
+                          <td>
+                            {integrity.data
+                              ? integrity.data.find(
+                                  (result) =>
+                                    result.snapshotAttemptId === page.snapshotAttemptId &&
+                                    result.pageNumber === page.pageNumber,
+                                )?.ok
+                                ? '一致'
+                                : '不一致'
+                              : '未校验'}
                           </td>
                         </tr>
                       ))}
@@ -272,6 +418,30 @@ export function AdminRostersPage() {
           )}
         </section>
       </div>
+      <ConfirmDialog
+        busy={reject.isPending}
+        confirmDisabled={rejectReason.trim().length < 3}
+        confirmLabel="拒绝此次抓取"
+        description={
+          <label>
+            拒绝原因
+            <textarea
+              autoFocus
+              maxLength={500}
+              onChange={(event) => setRejectReason(event.target.value)}
+              placeholder="请说明本次名单不能定稿的原因"
+              rows={4}
+              value={rejectReason}
+            />
+            <small>至少 3 个字符；原因会写入审计记录。</small>
+          </label>
+        }
+        onCancel={() => setRejectOpen(false)}
+        onConfirm={() => reject.mutate(rejectReason.trim())}
+        open={rejectOpen}
+        title="拒绝迟到名单"
+        tone="danger"
+      />
     </div>
   );
 }

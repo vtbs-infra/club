@@ -1,5 +1,5 @@
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
-import { auditLogs } from '../../infrastructure/db/schema.js';
+import { auditLogs } from '../../infrastructure/db/schema/index.js';
 
 type AuditExecutor = Pick<AppDatabase, 'insert'>;
 

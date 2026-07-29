@@ -7,13 +7,15 @@ import {
   snapshotPages,
   snapshotRuns,
   verificationRooms,
-} from '../../infrastructure/db/schema.js';
+} from '../../infrastructure/db/schema/index.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
+import type { BindingRuntime } from '../binding/binding-runtime.js';
 import type { FulfillmentRuntime } from '../fulfillment/fulfillment-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 
 interface SystemStatusServiceOptions {
   readonly database: DatabaseService;
+  readonly bindingRuntime: BindingRuntime;
   readonly fulfillmentRuntime: FulfillmentRuntime;
   readonly snapshotRuntime: SnapshotRuntime;
   readonly storage: StorageDriver;
@@ -31,14 +33,17 @@ export class SystemStatusService {
   public constructor(private readonly options: SystemStatusServiceOptions) {}
 
   public async platform() {
-    const [databaseCheck, storageCheck] = await Promise.allSettled([
+    const [databaseCheck, schemaCheck, storageCheck] = await Promise.allSettled([
       this.options.database.ping(),
+      this.options.database.checkSchema(),
       this.options.storage.checkHealth(),
     ]);
     const checks = {
       database: databaseCheck.status === 'fulfilled' ? ('ok' as const) : ('down' as const),
+      schema: schemaCheck.status === 'fulfilled' ? ('ok' as const) : ('down' as const),
       storage: storageCheck.status === 'fulfilled' ? ('ok' as const) : ('down' as const),
     };
+    const bindingRuntime = this.options.bindingRuntime.getStatus();
     const snapshotRuntime = this.options.snapshotRuntime.getStatus();
     const fulfillmentRuntime = this.options.fulfillmentRuntime.getStatus();
     if (checks.database === 'down') {
@@ -47,7 +52,8 @@ export class SystemStatusService {
         integrityWarnings: [],
         recentSnapshotFailures: [],
         rooms: [],
-        schedulers: {
+        runtimes: {
+          binding: bindingRuntime,
           roster: snapshotRuntime,
           tracking: fulfillmentRuntime,
         },
@@ -120,16 +126,25 @@ export class SystemStatusService {
       integrityWarnings,
       recentSnapshotFailures: failures,
       rooms,
-      schedulers: {
+      runtimes: {
+        binding: bindingRuntime,
         roster: snapshotRuntime,
         tracking: fulfillmentRuntime,
       },
       shipmentCounts: counts(shipmentRows.map((shipment) => shipment.status)),
       snapshotRunCounts: counts(runRows.map((run) => run.status)),
       status:
-        checks.storage === 'ok' && integrityWarnings.length === 0
-          ? ('ok' as const)
-          : ('degraded' as const),
+        checks.schema === 'down' ||
+        checks.storage === 'down' ||
+        integrityWarnings.length > 0 ||
+        [bindingRuntime, snapshotRuntime, fulfillmentRuntime].some(
+          (runtime) => runtime.state !== 'RUNNING',
+        ) ||
+        rooms.some((room) => room.enabled && room.healthStatus === 'UNHEALTHY')
+          ? ('degraded' as const)
+          : rooms.every((room) => !room.enabled)
+            ? ('needs_setup' as const)
+            : ('ok' as const),
       trackingDueCount: shipmentRows.filter(
         (shipment) =>
           shipment.nextRefreshAt !== null &&

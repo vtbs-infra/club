@@ -1,6 +1,12 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync, preHandlerHookHandler } from 'fastify';
 
+import {
+  BilibiliBindingSchema,
+  BilibiliChallengeSchema,
+  IssuedBilibiliChallengeSchema,
+} from '../../../shared/contracts/binding.js';
+import { IdSchema, Nullable } from '../../../shared/contracts/common.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { InMemoryRateLimiter } from '../../infrastructure/security/request-security.js';
@@ -26,38 +32,6 @@ interface BindingParameters {
 interface InterventionBody {
   reason: string;
 }
-
-const IdSchema = Type.String({ format: 'uuid' });
-const BindingSchema = Type.Union([
-  Type.Null(),
-  Type.Object({
-    biliDisplayName: Type.Union([Type.Null(), Type.String()]),
-    biliUid: Type.String(),
-    boundAt: Type.String({ format: 'date-time' }),
-    id: IdSchema,
-  }),
-]);
-const ChallengeSchema = Type.Union([
-  Type.Null(),
-  Type.Object({
-    connectionState: Type.Union([
-      Type.Null(),
-      Type.Literal('CONNECTING'),
-      Type.Literal('HEALTHY'),
-      Type.Literal('UNHEALTHY'),
-    ]),
-    expiresAt: Type.String({ format: 'date-time' }),
-    id: IdSchema,
-    room: Type.Object({ displayName: Type.String(), link: Type.String({ format: 'uri' }) }),
-    status: Type.Union([
-      Type.Literal('ACTIVE'),
-      Type.Literal('CONSUMED'),
-      Type.Literal('EXPIRED'),
-      Type.Literal('CANCELLED'),
-      Type.Literal('CONFLICT'),
-    ]),
-  }),
-]);
 
 function auditContext(request: {
   readonly authSession: AuthSession | null;
@@ -93,7 +67,7 @@ const bindingRoutes: FastifyPluginAsync<BindingRoutesOptions> = (app, options) =
     '/api/v1/me/bilibili-binding',
     {
       preHandler: requireSession,
-      schema: { response: { 200: BindingSchema }, tags: ['bilibili-binding'] },
+      schema: { response: { 200: Nullable(BilibiliBindingSchema) }, tags: ['bilibili-binding'] },
     },
     async (request) =>
       (await options.service.getAccountState(request.authSession!.user.id)).binding,
@@ -103,7 +77,10 @@ const bindingRoutes: FastifyPluginAsync<BindingRoutesOptions> = (app, options) =
     '/api/v1/me/bilibili-challenges/current',
     {
       preHandler: requireSession,
-      schema: { response: { 200: ChallengeSchema }, tags: ['bilibili-binding'] },
+      schema: {
+        response: { 200: Nullable(BilibiliChallengeSchema) },
+        tags: ['bilibili-binding'],
+      },
     },
     async (request) =>
       (await options.service.getAccountState(request.authSession!.user.id)).challenge,
@@ -116,16 +93,7 @@ const bindingRoutes: FastifyPluginAsync<BindingRoutesOptions> = (app, options) =
       schema: {
         body: Type.Object({}, { additionalProperties: false }),
         response: {
-          201: Type.Object({
-            code: Type.String({ pattern: '^CLUB-[A-HJ-NP-Z2-9]{6}$' }),
-            expiresAt: Type.String({ format: 'date-time' }),
-            id: IdSchema,
-            room: Type.Object({
-              displayName: Type.String(),
-              id: IdSchema,
-              link: Type.String({ format: 'uri' }),
-            }),
-          }),
+          201: IssuedBilibiliChallengeSchema,
         },
         tags: ['bilibili-binding'],
       },

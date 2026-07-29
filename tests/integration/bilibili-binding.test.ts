@@ -1,5 +1,8 @@
-import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
+import { resolve } from 'node:path';
+
+import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
+import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
@@ -7,13 +10,14 @@ import {
   createDatabase,
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
+import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
 import {
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
   users,
   verificationRooms,
-} from '../../src/server/infrastructure/db/schema.js';
+} from '../../src/server/infrastructure/db/schema/index.js';
 import {
   createTemporaryStorage,
   type TemporaryStorage,
@@ -65,8 +69,10 @@ function cookieFrom(response: LightMyRequestResponse): string {
 
 integration('platform verification rooms and Bilibili UID binding', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
+  let admin: ReturnType<typeof postgres>;
   let auth: AppAuth;
   let database: DatabaseService;
+  let databaseName: string;
   let runtime: BindingRuntime;
   let source: FakeLiveMessageSource;
   let storage: TemporaryStorage;
@@ -115,7 +121,6 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       headers: { cookie: adminCookie, origin },
       method: 'POST',
       payload: {
-        biliOwnerUid: `9${biliRoomId}`,
         biliRoomId,
         displayName,
         priority,
@@ -140,27 +145,17 @@ integration('platform verification rooms and Bilibili UID binding', () => {
   }
 
   beforeAll(async () => {
-    database = createDatabase(testDatabaseUrl!);
+    const adminUrl = new URL(testDatabaseUrl!);
+    adminUrl.pathname = '/postgres';
+    admin = postgres(adminUrl.toString(), { max: 1 });
+    databaseName = `club_binding_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+    await admin.unsafe(`create database "${databaseName}"`);
+    const databaseUrl = new URL(testDatabaseUrl!);
+    databaseUrl.pathname = `/${databaseName}`;
+    database = createDatabase(databaseUrl.toString());
+    await migrateDatabase(database, resolve('migrations'));
     storage = await createTemporaryStorage();
-    await database.orm.execute(sql`
-      TRUNCATE TABLE
-        audit_logs,
-        snapshot_members,
-        snapshot_attempt_members,
-        snapshot_pages,
-        snapshot_attempts,
-        snapshot_runs,
-        bilibili_bindings,
-        binding_challenges,
-        verification_rooms,
-        creators,
-        sessions,
-        accounts,
-        verifications,
-        users
-      CASCADE
-    `);
-    const config = createTestConfig({ databaseUrl: testDatabaseUrl! });
+    const config = createTestConfig({ databaseUrl: databaseUrl.toString() });
     auth = createAuth({ config, database });
     await bootstrapPlatformAdmin({
       auth,
@@ -200,6 +195,10 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     if (app) await app.close();
     if (database) await database.close();
     if (storage) await storage.cleanup();
+    if (admin) {
+      await admin.unsafe(`drop database if exists "${databaseName}"`);
+      await admin.end();
+    }
   });
 
   it('lets only a platform administrator configure and test verification rooms', async () => {

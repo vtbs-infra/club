@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { getAddresses, getMyGift, submitGift, type AddressRecord } from '../api/client';
 import { AddressForm } from '../components/AddressEditor';
-import { ErrorState, InlineNotice, LoadingState, StatusBadge } from '../components/Ui';
+import { ErrorNotice, ErrorState, InlineNotice, LoadingState, StatusBadge } from '../components/Ui';
 import { formatDate, formatMonth, orderStatusLabel, tierLabel } from '../lib/format';
 
 export function GiftDetailPage() {
@@ -20,19 +20,19 @@ export function GiftDetailPage() {
     queryFn: getAddresses,
     queryKey: ['me', 'addresses'],
   });
-  const [addressId, setAddressId] = useState('');
+  const [addressChoiceId, setAddressChoiceId] = useState('');
   const [addingAddress, setAddingAddress] = useState(false);
   const [options, setOptions] = useState<Record<string, boolean | string>>({});
   const [confirmed, setConfirmed] = useState(false);
-  const effectiveAddressId =
-    addressId ||
-    addresses.data?.find((address) => address.isDefault)?.id ||
-    addresses.data?.[0]?.id ||
+  const selectedAddressId =
+    addresses.data?.find((address) => address.id === addressChoiceId)?.id ??
+    addresses.data?.find((address) => address.isDefault)?.id ??
+    addresses.data?.[0]?.id ??
     '';
   const submit = useMutation({
     mutationFn: () =>
       submitGift(giftOrderId, {
-        addressId: effectiveAddressId,
+        addressId: selectedAddressId,
         expectedVersion: gift.data!.version,
         options,
       }),
@@ -48,7 +48,7 @@ export function GiftDetailPage() {
   if (gift.isPending) return <LoadingState label="正在读取礼物详情…" />;
   if (gift.isError || !gift.data) return <ErrorState error={gift.error} />;
   const order = gift.data;
-  const selectedAddress = addresses.data?.find((address) => address.id === effectiveAddressId);
+  const selectedAddress = addresses.data?.find((address) => address.id === selectedAddressId);
   const claimNotStarted = new Date(order.release.claimStartAt) > new Date();
 
   return (
@@ -151,18 +151,23 @@ export function GiftDetailPage() {
                 ) : null}
               </div>
               {addresses.isPending ? <LoadingState label="正在读取地址…" /> : null}
+              {addresses.isError ? (
+                <ErrorState error={addresses.error} title="暂时无法读取收货地址" />
+              ) : null}
               <div className="address-choice-list">
                 {addresses.data?.map((address) => (
                   <label
                     className={
-                      address.id === addressId ? 'address-choice selected' : 'address-choice'
+                      address.id === selectedAddressId
+                        ? 'address-choice selected'
+                        : 'address-choice'
                     }
                     key={address.id}
                   >
                     <input
-                      checked={address.id === addressId}
+                      checked={address.id === selectedAddressId}
                       name="address"
-                      onChange={() => setAddressId(address.id)}
+                      onChange={() => setAddressChoiceId(address.id)}
                       type="radio"
                     />
                     <span>
@@ -190,7 +195,7 @@ export function GiftDetailPage() {
                     compact
                     onCancel={() => setAddingAddress(false)}
                     onSaved={(address: AddressRecord) => {
-                      setAddressId(address.id);
+                      setAddressChoiceId(address.id);
                       setAddingAddress(false);
                     }}
                   />
@@ -210,74 +215,102 @@ export function GiftDetailPage() {
                   </div>
                 </div>
                 <div className="claim-fields">
-                  {order.release.formFields.map((field) => (
-                    <label
-                      className={field.type === 'CHECKBOX' ? 'check-field' : undefined}
-                      key={field.key}
-                    >
-                      {field.type === 'CHECKBOX' ? (
-                        <>
-                          <input
-                            checked={options[field.key] === true}
-                            onChange={(event) =>
-                              setOptions((current) => ({
-                                ...current,
-                                [field.key]: event.target.checked,
-                              }))
-                            }
-                            required={field.required}
-                            type="checkbox"
-                          />
-                          {field.label}
-                        </>
-                      ) : (
-                        <>
+                  {order.release.formFields.map((field) =>
+                    field.type === 'RADIO' ? (
+                      <fieldset className="radio-field" key={field.key}>
+                        <legend>
                           {field.label}
                           {field.required ? <span className="required">*</span> : null}
-                          {field.type === 'TEXTAREA' ? (
-                            <textarea
-                              onChange={(event) =>
-                                setOptions((current) => ({
-                                  ...current,
-                                  [field.key]: event.target.value,
-                                }))
-                              }
-                              required={field.required}
-                              rows={4}
-                              value={(options[field.key] as string | undefined) ?? ''}
-                            />
-                          ) : field.type === 'SELECT' || field.type === 'RADIO' ? (
-                            <select
-                              onChange={(event) =>
-                                setOptions((current) => ({
-                                  ...current,
-                                  [field.key]: event.target.value,
-                                }))
-                              }
-                              required={field.required}
-                              value={(options[field.key] as string | undefined) ?? ''}
-                            >
-                              <option value="">请选择</option>
-                              {field.options?.map((option) => (
-                                <option key={option}>{option}</option>
-                              ))}
-                            </select>
-                          ) : (
+                        </legend>
+                        <span className="radio-option-list">
+                          {field.options?.map((option) => (
+                            <label className="radio-option" key={option}>
+                              <input
+                                checked={options[field.key] === option}
+                                name={`gift-option-${field.key}`}
+                                onChange={() =>
+                                  setOptions((current) => ({
+                                    ...current,
+                                    [field.key]: option,
+                                  }))
+                                }
+                                required={field.required}
+                                type="radio"
+                              />
+                              {option}
+                            </label>
+                          ))}
+                        </span>
+                      </fieldset>
+                    ) : (
+                      <label
+                        className={field.type === 'CHECKBOX' ? 'check-field' : undefined}
+                        key={field.key}
+                      >
+                        {field.type === 'CHECKBOX' ? (
+                          <>
                             <input
+                              checked={options[field.key] === true}
                               onChange={(event) =>
                                 setOptions((current) => ({
                                   ...current,
-                                  [field.key]: event.target.value,
+                                  [field.key]: event.target.checked,
                                 }))
                               }
                               required={field.required}
-                              value={(options[field.key] as string | undefined) ?? ''}
+                              type="checkbox"
                             />
-                          )}
-                        </>
-                      )}
-                    </label>
-                  ))}
+                            {field.label}
+                          </>
+                        ) : (
+                          <>
+                            {field.label}
+                            {field.required ? <span className="required">*</span> : null}
+                            {field.type === 'TEXTAREA' ? (
+                              <textarea
+                                onChange={(event) =>
+                                  setOptions((current) => ({
+                                    ...current,
+                                    [field.key]: event.target.value,
+                                  }))
+                                }
+                                required={field.required}
+                                rows={4}
+                                value={(options[field.key] as string | undefined) ?? ''}
+                              />
+                            ) : field.type === 'SELECT' ? (
+                              <select
+                                onChange={(event) =>
+                                  setOptions((current) => ({
+                                    ...current,
+                                    [field.key]: event.target.value,
+                                  }))
+                                }
+                                required={field.required}
+                                value={(options[field.key] as string | undefined) ?? ''}
+                              >
+                                <option value="">请选择</option>
+                                {field.options?.map((option) => (
+                                  <option key={option}>{option}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                onChange={(event) =>
+                                  setOptions((current) => ({
+                                    ...current,
+                                    [field.key]: event.target.value,
+                                  }))
+                                }
+                                required={field.required}
+                                value={(options[field.key] as string | undefined) ?? ''}
+                              />
+                            )}
+                          </>
+                        )}
+                      </label>
+                    ),
+                  )}
                 </div>
               </div>
             </section>
@@ -308,12 +341,10 @@ export function GiftDetailPage() {
                 />
                 我已核对礼物、收货地址和填写内容；提交后将不能自行修改。
               </label>
-              {submit.isError ? (
-                <InlineNotice tone="danger">{submit.error.message}</InlineNotice>
-              ) : null}
+              {submit.isError ? <ErrorNotice error={submit.error} /> : null}
               <button
                 className="button primary large"
-                disabled={!addressId || !confirmed || submit.isPending || claimNotStarted}
+                disabled={!selectedAddressId || !confirmed || submit.isPending || claimNotStarted}
                 type="submit"
               >
                 {submit.isPending ? '正在提交…' : '确认领取礼物'}

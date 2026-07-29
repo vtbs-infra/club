@@ -1,6 +1,12 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { IdSchema } from '../../../shared/contracts/common.js';
+import {
+  VerificationRoomInputSchema,
+  VerificationRoomSchema,
+  VerificationRoomUpdateSchema,
+} from '../../../shared/contracts/verification-rooms.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
 import { createRequirePlatformAdmin } from '../auth/guards.js';
 import type { VerificationRoomService } from './verification-room-service.js';
@@ -14,38 +20,6 @@ interface RoomParameters {
   roomId: string;
 }
 
-interface CreateRoomBody {
-  biliOwnerUid: string;
-  biliRoomId: string;
-  displayName: string;
-  enabled?: boolean;
-  priority?: number;
-}
-
-interface UpdateRoomBody {
-  biliOwnerUid?: string;
-  displayName?: string;
-  enabled?: boolean;
-  priority?: number;
-}
-
-const IdSchema = Type.String({ format: 'uuid' });
-const HealthSchema = Type.Union([
-  Type.Literal('UNKNOWN'),
-  Type.Literal('CONNECTING'),
-  Type.Literal('HEALTHY'),
-  Type.Literal('UNHEALTHY'),
-]);
-const RoomSchema = Type.Object({
-  biliOwnerUid: Type.String(),
-  biliRoomId: Type.String(),
-  displayName: Type.String(),
-  enabled: Type.Boolean(),
-  healthStatus: HealthSchema,
-  id: IdSchema,
-  lastConnectedAt: Type.Union([Type.Null(), Type.String({ format: 'date-time' })]),
-  priority: Type.Integer(),
-});
 const RoomParametersSchema = Type.Object({ roomId: IdSchema });
 
 function auditContext(request: {
@@ -71,31 +45,27 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
     '/api/v1/admin/verification-rooms',
     {
       preHandler: requirePlatformAdmin,
-      schema: { response: { 200: Type.Array(RoomSchema) }, tags: ['verification-rooms'] },
+      schema: {
+        response: { 200: Type.Array(VerificationRoomSchema) },
+        tags: ['verification-rooms'],
+      },
     },
     async () => options.service.list(),
   );
 
-  app.post<{ Body: CreateRoomBody }>(
+  app.post<{ Body: typeof VerificationRoomInputSchema.static }>(
     '/api/v1/admin/verification-rooms',
     {
       preHandler: requirePlatformAdmin,
       schema: {
-        body: Type.Object({
-          biliOwnerUid: Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' }),
-          biliRoomId: Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' }),
-          displayName: Type.String({ maxLength: 120, minLength: 1 }),
-          enabled: Type.Optional(Type.Boolean({ default: true })),
-          priority: Type.Optional(Type.Integer({ default: 100, maximum: 10_000, minimum: 0 })),
-        }),
-        response: { 201: RoomSchema },
+        body: VerificationRoomInputSchema,
+        response: { 201: VerificationRoomSchema },
         tags: ['verification-rooms'],
       },
     },
     async (request, reply) => {
       const room = await options.service.create({
         ...auditContext(request),
-        biliOwnerUid: request.body.biliOwnerUid,
         biliRoomId: request.body.biliRoomId,
         displayName: request.body.displayName,
         enabled: request.body.enabled ?? true,
@@ -105,24 +75,14 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
     },
   );
 
-  app.patch<{ Body: UpdateRoomBody; Params: RoomParameters }>(
+  app.patch<{ Body: typeof VerificationRoomUpdateSchema.static; Params: RoomParameters }>(
     '/api/v1/admin/verification-rooms/:roomId',
     {
       preHandler: requirePlatformAdmin,
       schema: {
-        body: Type.Object(
-          {
-            biliOwnerUid: Type.Optional(
-              Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' }),
-            ),
-            displayName: Type.Optional(Type.String({ maxLength: 120, minLength: 1 })),
-            enabled: Type.Optional(Type.Boolean()),
-            priority: Type.Optional(Type.Integer({ maximum: 10_000, minimum: 0 })),
-          },
-          { minProperties: 1 },
-        ),
+        body: VerificationRoomUpdateSchema,
         params: RoomParametersSchema,
-        response: { 200: RoomSchema },
+        response: { 200: VerificationRoomSchema },
         tags: ['verification-rooms'],
       },
     },
@@ -141,7 +101,7 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
       schema: {
         body: Type.Object({}, { additionalProperties: false }),
         params: RoomParametersSchema,
-        response: { 200: RoomSchema },
+        response: { 200: VerificationRoomSchema },
         tags: ['verification-rooms'],
       },
     },

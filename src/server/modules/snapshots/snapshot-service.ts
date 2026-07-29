@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { gunzip, gzip } from 'node:zlib';
+import { gzip } from 'node:zlib';
 
-import { and, asc, count, desc, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
@@ -14,7 +14,7 @@ import {
   snapshotMembers,
   snapshotPages,
   snapshotRuns,
-} from '../../infrastructure/db/schema.js';
+} from '../../infrastructure/db/schema/index.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
@@ -23,17 +23,17 @@ import type {
   GuardRosterPage,
   GuardRosterSource,
 } from '../bilibili/guard-roster-source.js';
-import type { AuthSession } from '../auth/auth.js';
 import {
   calculateMonthlyCutoff,
   classifyPunctuality,
   relevantMonthlyPeriods,
 } from './month-end.js';
+import { SnapshotQueryService } from './snapshot-query-service.js';
 
 const gzipAsync = promisify(gzip);
-const gunzipAsync = promisify(gunzip);
 const PAGE_SIZE = 30;
 const MAX_PAGES = 1_000;
+const MAX_ATTEMPTS = 3;
 
 class CaptureFailure extends Error {
   public constructor(
@@ -68,27 +68,9 @@ function failure(error: unknown): CaptureFailure {
   return new CaptureFailure('SOURCE_FAILURE', message.slice(0, 500));
 }
 
-async function streamBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  const reader = stream.getReader();
-  let size = 0;
-  while (true) {
-    const result = await reader.read();
-    if (result.done) break;
-    chunks.push(result.value);
-    size += result.value.length;
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return bytes;
-}
-
 export class SnapshotService {
   private readonly audit: AuditService;
+  public readonly queries: SnapshotQueryService;
 
   public constructor(
     private readonly database: DatabaseService,
@@ -99,13 +81,14 @@ export class SnapshotService {
     private readonly onFinalized?: (runId: string, executor: AppDatabase) => Promise<unknown>,
   ) {
     this.audit = new AuditService(database);
+    this.queries = new SnapshotQueryService(database, storage);
   }
 
   public async precreateRuns(): Promise<number> {
     const enabled = await this.database.orm
       .select()
       .from(creators)
-      .where(and(eq(creators.active, true), isNull(creators.archivedAt)));
+      .where(eq(creators.active, true));
     let created = 0;
     for (const row of enabled) {
       for (const periodStart of relevantMonthlyPeriods(this.clock.now(), row.timezone)) {
@@ -163,37 +146,38 @@ export class SnapshotService {
     const due = await this.database.orm
       .select({ id: snapshotRuns.id })
       .from(snapshotRuns)
+      .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
       .where(
         and(
           inArray(snapshotRuns.status, ['SCHEDULED', 'FAILED']),
           lte(snapshotRuns.scheduledCutoffAt, this.clock.now()),
+          eq(creators.active, true),
         ),
       )
-      .orderBy(asc(snapshotRuns.scheduledCutoffAt))
-      .limit(10);
-    let started = 0;
-    for (const run of due) {
-      const [attempts] = await this.database.orm
-        .select({ value: count() })
-        .from(snapshotAttempts)
-        .where(eq(snapshotAttempts.snapshotRunId, run.id));
-      if ((attempts?.value ?? 0) >= 3) continue;
-      await this.capture(run.id);
-      started += 1;
-    }
-    return started;
+      .orderBy(asc(snapshotRuns.scheduledCutoffAt));
+    const results = await Promise.allSettled(due.map((run) => this.capture(run.id)));
+    return results.filter((result) => result.status === 'fulfilled').length;
   }
 
   private async beginAttempt(runId: string): Promise<{ attemptId: string; run: CaptureRun }> {
     return this.database.orm.transaction(async (transaction) => {
-      const [run] = await transaction
-        .select()
+      const [selection] = await transaction
+        .select({ active: creators.active, run: snapshotRuns })
         .from(snapshotRuns)
+        .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
         .where(eq(snapshotRuns.id, runId))
         .limit(1)
         .for('update');
+      const run = selection?.run;
       if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
-      if (run.status === 'FINALIZED' || run.status === 'PENDING_APPROVAL') {
+      if (!selection.active) {
+        throw new AppError(
+          'SNAPSHOT_CREATOR_INACTIVE',
+          'An inactive creator cannot start a snapshot capture.',
+          409,
+        );
+      }
+      if (!['SCHEDULED', 'FAILED', 'REJECTED'].includes(run.status)) {
         throw new AppError('SNAPSHOT_CAPTURE_NOT_ALLOWED', 'This snapshot cannot be retried.', 409);
       }
       if (run.scheduledCutoffAt > this.clock.now()) {
@@ -205,6 +189,13 @@ export class SnapshotService {
         .where(eq(snapshotAttempts.snapshotRunId, run.id))
         .orderBy(desc(snapshotAttempts.attemptNumber))
         .limit(1);
+      if ((latest?.attemptNumber ?? 0) >= MAX_ATTEMPTS) {
+        throw new AppError(
+          'SNAPSHOT_ATTEMPT_LIMIT_REACHED',
+          'This snapshot has reached its capture attempt limit.',
+          409,
+        );
+      }
       const [attempt] = await transaction
         .insert(snapshotAttempts)
         .values({
@@ -290,8 +281,7 @@ export class SnapshotService {
     })[];
   }
 
-  public async capture(runId: string): Promise<void> {
-    const { attemptId, run } = await this.beginAttempt(runId);
+  private async executeCapture(attemptId: string, run: CaptureRun): Promise<void> {
     const captureStartedAt = this.clock.now();
     const punctuality = classifyPunctuality(
       captureStartedAt,
@@ -414,6 +404,17 @@ export class SnapshotService {
     }
   }
 
+  public async capture(runId: string): Promise<void> {
+    const { attemptId, run } = await this.beginAttempt(runId);
+    await this.executeCapture(attemptId, run);
+  }
+
+  public async queueCapture(runId: string): Promise<{ attemptId: string }> {
+    const { attemptId, run } = await this.beginAttempt(runId);
+    void this.executeCapture(attemptId, run);
+    return { attemptId };
+  }
+
   public async approveLate(runId: string, context: RequestAuditContext): Promise<void> {
     await this.database.orm.transaction(async (transaction) => {
       const [run] = await transaction
@@ -505,106 +506,5 @@ export class SnapshotService {
       targetType: 'snapshot-run',
     });
     return run;
-  }
-
-  public listForCreator(creatorId: string) {
-    return this.database.orm
-      .select()
-      .from(snapshotRuns)
-      .where(eq(snapshotRuns.creatorId, creatorId))
-      .orderBy(desc(snapshotRuns.periodStart));
-  }
-
-  public listAll(creatorId?: string) {
-    return this.database.orm
-      .select({
-        creator: {
-          displayName: creators.displayName,
-          id: creators.id,
-        },
-        run: snapshotRuns,
-      })
-      .from(snapshotRuns)
-      .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
-      .where(creatorId ? eq(snapshotRuns.creatorId, creatorId) : undefined)
-      .orderBy(desc(snapshotRuns.periodStart), asc(creators.displayName));
-  }
-
-  public async getDetail(runId: string) {
-    const [run] = await this.database.orm
-      .select()
-      .from(snapshotRuns)
-      .where(eq(snapshotRuns.id, runId))
-      .limit(1);
-    if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
-    const attempts = await this.database.orm
-      .select()
-      .from(snapshotAttempts)
-      .where(eq(snapshotAttempts.snapshotRunId, run.id))
-      .orderBy(desc(snapshotAttempts.attemptNumber));
-    const pages =
-      attempts.length === 0
-        ? []
-        : await this.database.orm
-            .select()
-            .from(snapshotPages)
-            .where(
-              inArray(
-                snapshotPages.snapshotAttemptId,
-                attempts.map((attempt) => attempt.id),
-              ),
-            )
-            .orderBy(asc(snapshotPages.pageNumber));
-    return { attempts, pages, run };
-  }
-
-  public async assertAccess(
-    session: AuthSession,
-    input: { creatorId?: string; runId?: string },
-    mode: 'approve' | 'operate' | 'read' = 'read',
-  ): Promise<{ creatorId: string }> {
-    let creatorId = input.creatorId;
-    if (input.runId) {
-      const [run] = await this.database.orm
-        .select({ creatorId: snapshotRuns.creatorId })
-        .from(snapshotRuns)
-        .where(eq(snapshotRuns.id, input.runId))
-        .limit(1);
-      if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
-      creatorId = run.creatorId;
-    }
-    if (!creatorId) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot scope not found.', 404);
-    if (session.user.role === 'PLATFORM_ADMIN') return { creatorId };
-    if (mode !== 'read' || session.user.role !== 'CREATOR') {
-      throw new AppError('SNAPSHOT_ACCESS_DENIED', 'Snapshot access denied.', 403);
-    }
-    const [creator] = await this.database.orm
-      .select({ id: creators.id })
-      .from(creators)
-      .where(and(eq(creators.id, creatorId), eq(creators.userId, session.user.id)))
-      .limit(1);
-    if (!creator) {
-      throw new AppError('SNAPSHOT_ACCESS_DENIED', 'Snapshot access denied.', 403);
-    }
-    return { creatorId };
-  }
-
-  public async checkEvidenceIntegrity(runId: string) {
-    const detail = await this.getDetail(runId);
-    const results = [];
-    for (const page of detail.pages) {
-      try {
-        const compressed = await streamBytes(await this.storage.open(page.objectKey));
-        const raw = await gunzipAsync(compressed);
-        results.push({
-          objectKey: page.objectKey,
-          ok: createHash('sha256').update(raw).digest('hex') === page.contentHashSha256,
-          pageNumber: page.pageNumber,
-        });
-      } catch {
-        results.push({ objectKey: page.objectKey, ok: false, pageNumber: page.pageNumber });
-      }
-    }
-    return results;
   }
 }

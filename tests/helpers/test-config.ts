@@ -16,7 +16,6 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
     storageDriver: 'local',
     storageLocalPath: './data/test',
     trackingProvider: 'fake',
-    smtp: null,
     trustProxy: false,
     ...overrides,
   };

@@ -1,0 +1,352 @@
+@media (max-width: 1120px) {
+  .topbar-inner {
+    padding-inline: 1.2rem;
+  }
+  .main-nav {
+    margin-left: 1.2rem;
+  }
+  .nav-link {
+    padding-inline: 0.55rem;
+  }
+  .gift-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .public-hero {
+    gap: 2rem;
+    grid-template-columns: 1fr 420px;
+  }
+  .steps-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 920px) {
+  .menu-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-left: auto;
+    padding: 0.5rem;
+  }
+
+  .menu-toggle span {
+    background: #526176;
+    height: 2px;
+    width: 20px;
+  }
+
+  .main-nav {
+    align-items: stretch;
+    background: white;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 12px 30px rgb(30 56 92 / 8%);
+    display: none;
+    flex-direction: column;
+    left: 0;
+    margin: 0;
+    padding: 0.6rem 1rem;
+    position: absolute;
+    right: 0;
+    top: 68px;
+  }
+
+  .main-nav.nav-open {
+    display: flex;
+  }
+  .nav-link {
+    border: 0;
+    border-radius: 7px;
+    min-height: 42px;
+    padding: 0.7rem;
+  }
+  .nav-link.active {
+    background: var(--blue-soft);
+  }
+  .account-menu {
+    margin-left: 0.4rem;
+  }
+  .account-name {
+    display: none;
+  }
+
+  .public-hero {
+    grid-template-columns: 1fr;
+    padding-top: 6rem;
+  }
+
+  .hero-preview {
+    display: none;
+  }
+  .auth-card {
+    grid-template-columns: 1fr;
+    max-width: 520px;
+  }
+  .auth-welcome {
+    display: none;
+  }
+  .overview-grid,
+  .settings-grid,
+  .order-detail-grid,
+  .split-workspace,
+  .roster-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .roster-list-panel {
+    max-height: none;
+  }
+  .gift-detail-hero {
+    grid-template-columns: 1fr;
+  }
+  .detail-art {
+    min-height: 280px;
+  }
+  .cover-uploader {
+    grid-template-columns: 220px 1fr;
+  }
+  .order-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .search-field {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .page-shell {
+    padding: 1.35rem 1rem 3rem;
+  }
+  .topbar-inner {
+    height: 60px;
+    padding-inline: 1rem;
+  }
+  .main-nav {
+    top: 60px;
+  }
+  .brand small {
+    display: none;
+  }
+  .page-header,
+  .editor-header,
+  .order-detail-header,
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-actions {
+    width: 100%;
+  }
+  .page-actions .button {
+    flex: 1;
+  }
+  .page-header h1 {
+    font-size: 2rem;
+  }
+  .dashboard-banner {
+    min-height: 180px;
+    padding: 1.4rem;
+  }
+  .dashboard-banner h1 {
+    font-size: 2.3rem;
+  }
+  .news-list a {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .news-list .pin-label,
+  .news-list time {
+    display: none;
+  }
+  .action-callout {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .action-callout .button {
+    margin-left: 58px;
+    width: calc(100% - 58px);
+  }
+  .gift-grid,
+  .address-grid,
+  .package-list,
+  .claim-fields,
+  .address-choice-list,
+  .metric-grid,
+  .steps-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gift-card {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+  }
+  .gift-art {
+    aspect-ratio: auto;
+    min-height: 100%;
+  }
+  .gift-art .status-badge {
+    left: 0.45rem;
+    top: 0.45rem;
+  }
+  .gift-copy {
+    padding: 0.85rem;
+  }
+  .gift-copy h3 {
+    margin-top: 0.6rem;
+  }
+  .gift-progress {
+    display: none;
+  }
+  .filter-tabs {
+    max-width: 100%;
+  }
+  .detail-copy {
+    padding: 1.4rem;
+  }
+  .detail-copy h1 {
+    font-size: 2rem;
+  }
+  .detail-facts,
+  .detail-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .claim-step {
+    grid-template-columns: 1fr;
+  }
+  .step-number {
+    height: 28px;
+    width: 28px;
+  }
+  .progress-track {
+    overflow-x: auto;
+  }
+  .progress-step {
+    min-width: 95px;
+  }
+  .tracking-card {
+    grid-template-columns: 1fr;
+  }
+  .tracking-events {
+    grid-column: 1;
+  }
+  .tracking-events li {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+  .announcement-card > button {
+    grid-template-columns: auto 1fr auto;
+  }
+  .announcement-card time {
+    display: none;
+  }
+  .account-summary,
+  .identity-card {
+    align-items: flex-start;
+    grid-template-columns: auto 1fr;
+  }
+  .account-status,
+  .identity-card .button {
+    grid-column: 1 / -1;
+  }
+  .identity-card .button {
+    width: 100%;
+  }
+  .auth-page {
+    padding: 4.5rem 1rem 1rem;
+  }
+  .auth-brand {
+    left: 1rem;
+    top: 1rem;
+  }
+  .auth-form {
+    padding: 2rem 1.3rem;
+  }
+  .public-header {
+    padding-inline: 1rem;
+  }
+  .public-info-link {
+    display: none;
+  }
+  .public-hero {
+    min-height: 590px;
+    padding: 5.5rem 1.2rem 3rem;
+  }
+  .hero-copy h1 {
+    font-size: 2.8rem;
+  }
+  .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .public-section {
+    padding: 4rem 1rem;
+  }
+  .open-source-callout {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 0;
+    padding: 2rem 1.2rem;
+  }
+  .public-footer {
+    flex-direction: column;
+    gap: 0.4rem;
+    padding-inline: 1rem;
+  }
+  .release-row {
+    grid-template-columns: 78px 1fr auto;
+    min-height: 92px;
+  }
+  .release-window {
+    display: none;
+  }
+  .cover-uploader {
+    grid-template-columns: 1fr;
+  }
+  .item-editor {
+    grid-template-columns: 1fr 70px auto;
+  }
+  .item-editor input:nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .tier-mapping {
+    grid-template-columns: 1fr;
+  }
+  .field-editor {
+    grid-template-columns: 1fr;
+  }
+  .field-editor > * {
+    grid-column: 1 !important;
+  }
+  .editor-bottom-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .orders-table {
+    min-width: 760px;
+  }
+  .option-values {
+    grid-template-columns: 1fr;
+  }
+  .decision-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .attempt-list dl {
+    grid-template-columns: 1fr 1fr;
+  }
+  .audit-list > div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .span-full {
+    grid-column: 1;
+  }
+}

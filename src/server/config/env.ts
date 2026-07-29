@@ -1,7 +1,13 @@
 import { FormatRegistry, Type } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
-FormatRegistry.Set('uri', (value) => URL.canParse(value));
+FormatRegistry.Set('http-url', (value) => {
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+});
 
 const ConfigSchema = Type.Object(
   {
@@ -10,7 +16,7 @@ const ConfigSchema = Type.Object(
       Type.Literal('test'),
       Type.Literal('production'),
     ]),
-    appUrl: Type.String({ format: 'uri' }),
+    appUrl: Type.String({ format: 'http-url' }),
     databaseUrl: Type.String({ minLength: 1 }),
     authSecret: Type.String({ minLength: 32 }),
     addressEncryptionActiveKeyVersion: Type.Integer({ minimum: 1 }),
@@ -32,17 +38,6 @@ const ConfigSchema = Type.Object(
       Type.Literal('silent'),
     ]),
     trustProxy: Type.Boolean(),
-    smtp: Type.Union([
-      Type.Null(),
-      Type.Object({
-        from: Type.String({ minLength: 1 }),
-        host: Type.String({ minLength: 1 }),
-        password: Type.Union([Type.Null(), Type.String({ minLength: 1 })]),
-        port: Type.Integer({ minimum: 1, maximum: 65_535 }),
-        secure: Type.Boolean(),
-        username: Type.Union([Type.Null(), Type.String({ minLength: 1 })]),
-      }),
-    ]),
   },
   { additionalProperties: false },
 );
@@ -63,14 +58,6 @@ export interface AppConfig {
   readonly trackingProvider: 'none' | 'fake';
   readonly logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   readonly trustProxy: boolean;
-  readonly smtp: {
-    readonly from: string;
-    readonly host: string;
-    readonly password: string | null;
-    readonly port: number;
-    readonly secure: boolean;
-    readonly username: string | null;
-  } | null;
 }
 
 export class ConfigurationError extends Error {
@@ -104,26 +91,6 @@ function validEncryptionKeyRing(value: unknown, activeVersion: unknown): boolean
   return versions.has(activeVersion);
 }
 
-function parseSmtp(env: NodeJS.ProcessEnv): AppConfig['smtp'] | Record<string, unknown> {
-  const enabled = [
-    env.SMTP_FROM,
-    env.SMTP_HOST,
-    env.SMTP_PASSWORD,
-    env.SMTP_PORT,
-    env.SMTP_SECURE,
-    env.SMTP_USERNAME,
-  ].some((value) => value !== undefined);
-  if (!enabled) return null;
-  return {
-    from: env.SMTP_FROM,
-    host: env.SMTP_HOST,
-    password: env.SMTP_PASSWORD ?? null,
-    port: parsePort(env.SMTP_PORT ?? '587'),
-    secure: parseBoolean(env.SMTP_SECURE),
-    username: env.SMTP_USERNAME ?? null,
-  };
-}
-
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const nodeEnv = env.NODE_ENV ?? 'development';
   const developmentKey = '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
@@ -145,29 +112,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trackingProvider: env.TRACKING_PROVIDER ?? (nodeEnv === 'test' ? 'fake' : 'none'),
     logLevel: env.LOG_LEVEL ?? 'info',
     trustProxy: parseBoolean(env.TRUST_PROXY),
-    smtp: parseSmtp(env),
   };
 
-  const smtpCredentialsMatch =
-    candidate.smtp === null ||
-    (typeof candidate.smtp === 'object' &&
-      (candidate.smtp.username === null) === (candidate.smtp.password === null));
   const encryptionKeysValid = validEncryptionKeyRing(
     candidate.addressEncryptionKeyRing,
     candidate.addressEncryptionActiveKeyVersion,
   );
-  if (!Value.Check(ConfigSchema, candidate) || !smtpCredentialsMatch || !encryptionKeysValid) {
+  if (!Value.Check(ConfigSchema, candidate) || !encryptionKeysValid) {
     const details = [...Value.Errors(ConfigSchema, candidate)]
       .map((error) => `${error.path || '/'} ${error.message}`)
       .join('; ');
-    const smtpDetails = smtpCredentialsMatch
-      ? ''
-      : `${details ? '; ' : ''}/smtp username and password must be configured together`;
     const encryptionDetails = encryptionKeysValid
       ? ''
-      : `${details || smtpDetails ? '; ' : ''}/addressEncryptionKeyRing requires unique versioned 32-byte base64 keys and an active version`;
+      : `${details ? '; ' : ''}/addressEncryptionKeyRing requires unique versioned 32-byte base64 keys and an active version`;
     throw new ConfigurationError(
-      `Invalid application configuration: ${details}${smtpDetails}${encryptionDetails}`,
+      `Invalid application configuration: ${details}${encryptionDetails}`,
     );
   }
 

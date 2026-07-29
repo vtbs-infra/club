@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 
 import {
   createVerificationRoom,
@@ -10,15 +10,14 @@ import {
 } from '../../api/client';
 import {
   EmptyState,
+  ErrorNotice,
   ErrorState,
-  InlineNotice,
   LoadingState,
   PageHeader,
   StatusBadge,
 } from '../../components/Ui';
 
 interface RoomForm {
-  biliOwnerUid: string;
   biliRoomId: string;
   displayName: string;
   enabled: boolean;
@@ -26,7 +25,6 @@ interface RoomForm {
 }
 
 const emptyRoom: RoomForm = {
-  biliOwnerUid: '',
   biliRoomId: '',
   displayName: '',
   enabled: true,
@@ -35,32 +33,43 @@ const emptyRoom: RoomForm = {
 
 export function AdminVerificationPage() {
   const queryClient = useQueryClient();
+  const editorRef = useRef<HTMLFormElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const rooms = useQuery({
     queryFn: getVerificationRooms,
     queryKey: ['admin', 'verification'],
   });
   const [editing, setEditing] = useState<VerificationRoom | null>(null);
   const [form, setForm] = useState<RoomForm>(emptyRoom);
+  const focusEditor = () => {
+    requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      nameInputRef.current?.focus();
+    });
+  };
   const startEditing = (room: VerificationRoom) => {
     setEditing(room);
     setForm({
-      biliOwnerUid: room.biliOwnerUid,
       biliRoomId: room.biliRoomId,
       displayName: room.displayName,
       enabled: room.enabled,
       priority: room.priority,
     });
+    focusEditor();
   };
   const reset = () => {
     setEditing(null);
     setForm(emptyRoom);
+  };
+  const startNew = () => {
+    reset();
+    focusEditor();
   };
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'verification'] });
   const save = useMutation({
     mutationFn: () =>
       editing
         ? updateVerificationRoom(editing.id, {
-            biliOwnerUid: form.biliOwnerUid,
             displayName: form.displayName,
             enabled: form.enabled,
             priority: form.priority,
@@ -81,7 +90,7 @@ export function AdminVerificationPage() {
     <div className="stack-lg">
       <PageHeader
         actions={
-          <button className="button primary" onClick={reset} type="button">
+          <button className="button primary" onClick={startNew} type="button">
             添加直播间
           </button>
         }
@@ -137,6 +146,7 @@ export function AdminVerificationPage() {
             event.preventDefault();
             save.mutate();
           }}
+          ref={editorRef}
         >
           <div className="section-heading compact">
             <div>
@@ -144,7 +154,7 @@ export function AdminVerificationPage() {
               <h2>{editing?.displayName ?? '验证连接配置'}</h2>
             </div>
             {editing ? (
-              <button className="text-button" onClick={reset} type="button">
+              <button className="text-button" onClick={startNew} type="button">
                 新建
               </button>
             ) : null}
@@ -157,6 +167,7 @@ export function AdminVerificationPage() {
                 setForm((current) => ({ ...current, displayName: event.target.value }))
               }
               placeholder="例如：Club 主验证直播间"
+              ref={nameInputRef}
               required
               value={form.displayName}
             />
@@ -173,18 +184,6 @@ export function AdminVerificationPage() {
                 pattern="[0-9]+"
                 required
                 value={form.biliRoomId}
-              />
-            </label>
-            <label>
-              房主 UID
-              <input
-                inputMode="numeric"
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, biliOwnerUid: event.target.value }))
-                }
-                pattern="[0-9]+"
-                required
-                value={form.biliOwnerUid}
               />
             </label>
             <label>
@@ -212,9 +211,7 @@ export function AdminVerificationPage() {
               <small>停用不会删除历史验证记录。</small>
             </span>
           </label>
-          {save.isError || test.isError ? (
-            <InlineNotice tone="danger">{save.error?.message ?? test.error?.message}</InlineNotice>
-          ) : null}
+          {save.isError || test.isError ? <ErrorNotice error={save.error ?? test.error} /> : null}
           <div className="form-actions">
             <button className="button primary" disabled={save.isPending} type="submit">
               {save.isPending ? '正在保存…' : '保存配置'}

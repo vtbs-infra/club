@@ -8,6 +8,48 @@
       "when": 1785272190922,
       "tag": "0000_gifted_the_spike",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785319949016,
+      "tag": "0001_stabilize_core_invariants",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785320235561,
+      "tag": "0002_cancel_pending_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785320667010,
+      "tag": "0003_track_runtime_failures",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785320780628,
+      "tag": "0004_fix_shipment_lifecycle_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785321860199,
+      "tag": "0005_striped_hercules",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785322559085,
+      "tag": "0006_motionless_tana_nile",
+      "breakpoints": true
     }
   ]
 }

@@ -24,4 +24,20 @@ describe('in-memory request rate limiter', () => {
     expect(limiter.consume('user-a:ip-b', now).allowed).toBe(true);
     expect(limiter.consume('user-b:ip-a', now).allowed).toBe(true);
   });
+
+  it('prunes expired keys and keeps cardinality bounded for many distinct clients', () => {
+    const limiter = new InMemoryRateLimiter(2, 1_000, 100);
+
+    for (let index = 0; index < 1_000; index += 1) {
+      expect(limiter.consume(`ip:${index}`, new Date(0)).allowed).toBe(true);
+    }
+    expect(limiter.entryCount).toBeLessThanOrEqual(100);
+
+    limiter.consume('ip:fresh', new Date(2_000));
+    expect(limiter.entryCount).toBe(1);
+  });
+
+  it('rejects invalid resource limits', () => {
+    expect(() => new InMemoryRateLimiter(1, 1_000, 0)).toThrow(RangeError);
+  });
 });

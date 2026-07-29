@@ -7,7 +7,7 @@ import {
   announcements,
   bilibiliBindings,
   giftOrders,
-} from '../../infrastructure/db/schema.js';
+} from '../../infrastructure/db/schema/index.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
 
 export interface AnnouncementInput {

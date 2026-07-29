@@ -1,6 +1,12 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import {
+  AnnouncementInputSchema,
+  AnnouncementSchema,
+  AnnouncementUpdateSchema,
+} from '../../../shared/contracts/announcements.js';
+import { IdSchema } from '../../../shared/contracts/common.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
 import {
@@ -16,23 +22,7 @@ interface AnnouncementRoutesOptions {
   readonly service: AnnouncementService;
 }
 
-const Id = Type.String({ format: 'uuid' });
-const Parameters = Type.Object({ announcementId: Id });
-const Body = Type.Object(
-  {
-    body: Type.String({ maxLength: 20_000, minLength: 1 }),
-    expiresAt: Type.Optional(Type.Union([Type.Null(), Type.String({ format: 'date-time' })])),
-    pinned: Type.Boolean(),
-    publishNow: Type.Boolean(),
-    severity: Type.Union([Type.Literal('INFO'), Type.Literal('WARNING'), Type.Literal('CRITICAL')]),
-    title: Type.String({ maxLength: 200, minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
-const UpdateBody = Type.Intersect([
-  Body,
-  Type.Object({ expectedVersion: Type.Integer({ minimum: 1 }) }),
-]);
+const Parameters = Type.Object({ announcementId: IdSchema });
 
 function session(request: { readonly authSession: AuthSession | null }) {
   if (!request.authSession) throw new Error('Authenticated route is missing its session.');
@@ -64,7 +54,7 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
         querystring: Type.Object({
           limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
         }),
-        response: { 200: Type.Array(Type.Any()) },
+        response: { 200: Type.Array(AnnouncementSchema) },
         tags: ['announcements'],
       },
     },
@@ -103,7 +93,10 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
       prefix,
       {
         preHandler: guard,
-        schema: { response: { 200: Type.Array(Type.Any()) }, tags: ['manage-announcements'] },
+        schema: {
+          response: { 200: Type.Array(AnnouncementSchema) },
+          tags: ['manage-announcements'],
+        },
       },
       (request) => {
         const resolved = target(request);
@@ -111,13 +104,13 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
       },
     );
 
-    app.post<{ Body: typeof Body.static }>(
+    app.post<{ Body: typeof AnnouncementInputSchema.static }>(
       prefix,
       {
         preHandler: guard,
         schema: {
-          body: Body,
-          response: { 201: Type.Any() },
+          body: AnnouncementInputSchema,
+          response: { 201: AnnouncementSchema },
           tags: ['manage-announcements'],
         },
       },
@@ -128,16 +121,16 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
     );
 
     app.put<{
-      Body: typeof UpdateBody.static;
+      Body: typeof AnnouncementUpdateSchema.static;
       Params: { announcementId: string };
     }>(
       `${prefix}/:announcementId`,
       {
         preHandler: guard,
         schema: {
-          body: UpdateBody,
+          body: AnnouncementUpdateSchema,
           params: Parameters,
-          response: { 200: Type.Any() },
+          response: { 200: AnnouncementSchema },
           tags: ['manage-announcements'],
         },
       },

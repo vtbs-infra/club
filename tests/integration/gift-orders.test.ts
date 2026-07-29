@@ -15,13 +15,15 @@ import {
   creators,
   giftOrderItems,
   giftOrders,
+  shipments,
   snapshotMembers,
   snapshotRuns,
   users,
   verificationRooms,
-} from '../../src/server/infrastructure/db/schema.js';
+} from '../../src/server/infrastructure/db/schema/index.js';
 import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/key-ring.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
+import { TrackingRefreshService } from '../../src/server/modules/fulfillment/tracking-refresh-service.js';
 import { GiftOrderService } from '../../src/server/modules/gifts/order-service.js';
 import {
   GiftReleaseService,
@@ -98,6 +100,7 @@ integration('gift order lifecycle', () => {
   let verificationRoomId: string;
   let releaseService: GiftReleaseService;
   let addressService: AddressService;
+  let encryption: EncryptionKeyRing;
   let orderService: GiftOrderService;
 
   beforeAll(async () => {
@@ -150,14 +153,13 @@ integration('gift order lifecycle', () => {
     const [room] = await database.orm
       .insert(verificationRooms)
       .values({
-        biliOwnerUid: '70001',
         biliRoomId: '60001',
         displayName: 'Verification Room',
       })
       .returning({ id: verificationRooms.id });
     verificationRoomId = room!.id;
 
-    const encryption = new EncryptionKeyRing({
+    encryption = new EncryptionKeyRing({
       addressEncryptionActiveKeyVersion: 1,
       addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
@@ -245,7 +247,7 @@ integration('gift order lifecycle', () => {
   it('reconciles both event orders, keeps UID ownership until claim, and freezes fulfillment', async () => {
     const before = await database.orm.select({ value: count() }).from(giftOrders);
     const noGiftRun = await finalizeSnapshot('2026-05-01', [{ biliUid: '50001', tier: 'CAPTAIN' }]);
-    expect(await releaseService.reconcileSnapshot(noGiftRun, database.orm)).toBe(0);
+    expect(await releaseService.eligibility.reconcileSnapshot(noGiftRun, database.orm)).toBe(0);
     expect((await database.orm.select({ value: count() }).from(giftOrders))[0]?.value).toBe(
       before[0]?.value,
     );
@@ -260,12 +262,20 @@ integration('gift order lifecycle', () => {
       releaseDraft('2026-06-01'),
       requestContext(creatorUserId, 'create-june'),
     );
-    await releaseService.publish(creatorId, june.id, requestContext(creatorUserId, 'publish-june'));
-    await releaseService.publish(
-      creatorId,
-      june.id,
-      requestContext(creatorUserId, 'publish-june-again'),
-    );
+    await Promise.all([
+      releaseService.publish(
+        creatorId,
+        june.id,
+        { ...releaseDraft('2026-06-01'), expectedVersion: june.version },
+        requestContext(creatorUserId, 'publish-june'),
+      ),
+      releaseService.publish(
+        creatorId,
+        june.id,
+        { ...releaseDraft('2026-06-01'), expectedVersion: june.version },
+        requestContext(creatorUserId, 'publish-june-again'),
+      ),
+    ]);
     const juneOrders = await database.orm
       .select()
       .from(giftOrders)
@@ -318,6 +328,21 @@ integration('gift order lifecycle', () => {
     );
     expect(creatorView.deliveryAddress?.recipientName).toBe('原收件人');
     expect(creatorView.optionValues).toEqual([{ key: 'color', label: '颜色', value: '蓝色' }]);
+    await addressService.delete(
+      userTwoId,
+      address.id,
+      requestContext(userTwoId, 'delete-source-address'),
+    );
+    expect(await addressService.list(userTwoId)).toEqual([]);
+    expect(
+      (
+        await orderService.getForCreator(
+          creatorId,
+          captainOrder.id,
+          requestContext(creatorUserId, 'read-frozen-address-after-delete'),
+        )
+      ).deliveryAddress?.recipientName,
+    ).toBe('原收件人');
     await expect(
       orderService.getForCreator(
         otherCreatorId,
@@ -364,6 +389,39 @@ integration('gift order lifecycle', () => {
     );
     expect(shipped.status).toBe('SHIPPED');
     expect(shipped.shipments).toHaveLength(1);
+    await expect(
+      orderService.ship(
+        creatorId,
+        captainOrder.id,
+        {
+          carrierCode: 'ZTO',
+          carrierName: '中通快递',
+          trackingNumber: 'ZT987654321',
+        },
+        requestContext(creatorUserId, 'ship-order-again'),
+      ),
+    ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_SHIPPABLE' });
+    await database.orm
+      .update(shipments)
+      .set({ nextTrackingRefreshAt: new Date(0) })
+      .where(eq(shipments.giftOrderId, captainOrder.id));
+    const failingTrackingService = new TrackingRefreshService(database, {
+      query: () => Promise.reject(new Error('simulated provider outage')),
+    });
+    await expect(failingTrackingService.refreshDue()).rejects.toMatchObject({
+      code: 'TRACKING_REFRESH_FAILED',
+    });
+    const [failedShipment] = await database.orm
+      .select({
+        lastTrackingError: shipments.lastTrackingError,
+        trackingFailureCount: shipments.trackingFailureCount,
+      })
+      .from(shipments)
+      .where(eq(shipments.giftOrderId, captainOrder.id));
+    expect(failedShipment).toMatchObject({
+      lastTrackingError: 'simulated provider outage',
+      trackingFailureCount: 1,
+    });
     await orderService.complete(
       creatorId,
       captainOrder.id,
@@ -376,7 +434,12 @@ integration('gift order lifecycle', () => {
       releaseDraft('2026-07-01'),
       requestContext(creatorUserId, 'create-july'),
     );
-    await releaseService.publish(creatorId, july.id, requestContext(creatorUserId, 'publish-july'));
+    await releaseService.publish(
+      creatorId,
+      july.id,
+      { ...releaseDraft('2026-07-01'), expectedVersion: july.version },
+      requestContext(creatorUserId, 'publish-july'),
+    );
     expect(
       (
         await database.orm
@@ -386,8 +449,8 @@ integration('gift order lifecycle', () => {
       )[0]?.value,
     ).toBe(0);
     const julyRun = await finalizeSnapshot('2026-07-01', [{ biliUid: '12001', tier: 'ADMIRAL' }]);
-    expect(await releaseService.reconcileSnapshot(julyRun, database.orm)).toBe(1);
-    expect(await releaseService.reconcileSnapshot(julyRun, database.orm)).toBe(0);
+    expect(await releaseService.eligibility.reconcileSnapshot(julyRun, database.orm)).toBe(1);
+    expect(await releaseService.eligibility.reconcileSnapshot(julyRun, database.orm)).toBe(0);
     const [julyOrder] = await database.orm
       .select({ id: giftOrders.id })
       .from(giftOrders)
@@ -404,5 +467,32 @@ integration('gift order lifecycle', () => {
         requestContext(creatorUserId, 'duplicate-july'),
       ),
     ).rejects.toMatchObject({ code: 'GIFT_RELEASE_MONTH_CONFLICT' });
+  });
+
+  it('atomically publishes current unsaved content with optimistic locking', async () => {
+    const initial = releaseDraft('2026-08-01');
+    const draft = await releaseService.create(
+      creatorId,
+      { ...initial, title: '保存过的旧标题' },
+      requestContext(creatorUserId, 'create-august'),
+    );
+    const published = await releaseService.publish(
+      creatorId,
+      draft.id,
+      {
+        ...initial,
+        description: '直接发布时输入的新说明',
+        expectedVersion: draft.version,
+        title: '直接发布时输入的新标题',
+      },
+      requestContext(creatorUserId, 'publish-august-current-content'),
+    );
+
+    expect(published).toMatchObject({
+      description: '直接发布时输入的新说明',
+      status: 'PUBLISHED',
+      title: '直接发布时输入的新标题',
+      version: draft.version + 1,
+    });
   });
 });

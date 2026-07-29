@@ -3,6 +3,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly code = 'REQUEST_FAILED',
+    public readonly requestId: null | string = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -10,7 +11,11 @@ export class ApiError extends Error {
 }
 
 interface ApiErrorBody {
-  readonly error?: { readonly code?: string; readonly message?: string };
+  readonly error?: {
+    readonly code?: string;
+    readonly message?: string;
+    readonly requestId?: string;
+  };
   readonly message?: string;
 }
 
@@ -30,6 +35,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       body.error?.message ?? body.message ?? '请求未能完成，请稍后重试。',
       response.status,
       body.error?.code,
+      body.error?.requestId ?? response.headers.get('x-request-id'),
     );
   }
   if (response.status === 204) return undefined as T;

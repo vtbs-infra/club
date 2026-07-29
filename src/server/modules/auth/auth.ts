@@ -3,36 +3,14 @@ import { betterAuth } from 'better-auth';
 
 import type { AppConfig } from '../../config/env.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { schema } from '../../infrastructure/db/schema.js';
-import {
-  createAuthEmailSender,
-  type AuthEmailSender,
-} from '../../infrastructure/email/email-sender.js';
+import { schema } from '../../infrastructure/db/schema/index.js';
 
 export interface CreateAuthOptions {
   readonly config: AppConfig;
   readonly database: DatabaseService;
-  readonly emailSender?: AuthEmailSender | null;
 }
 
 export function createAuth(options: CreateAuthOptions) {
-  const emailSender = options.emailSender ?? createAuthEmailSender(options.config);
-  const emailAndPassword = emailSender
-    ? {
-        autoSignIn: false,
-        enabled: true as const,
-        requireEmailVerification: true,
-        revokeSessionsOnPasswordReset: true,
-        sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) =>
-          emailSender.sendPasswordReset({ email: user.email, url }),
-      }
-    : {
-        autoSignIn: false,
-        enabled: true as const,
-        requireEmailVerification: false,
-        revokeSessionsOnPasswordReset: true,
-      };
-
   return betterAuth({
     advanced: {
       database: { generateId: 'uuid' },
@@ -50,22 +28,12 @@ export function createAuth(options: CreateAuthOptions) {
       schema,
       usePlural: true,
     }),
-    emailAndPassword,
-    ...(emailSender
-      ? {
-          emailVerification: {
-            autoSignInAfterVerification: true,
-            sendOnSignUp: true,
-            sendVerificationEmail: async ({
-              user,
-              url,
-            }: {
-              user: { email: string };
-              url: string;
-            }) => emailSender.sendVerification({ email: user.email, url }),
-          },
-        }
-      : {}),
+    emailAndPassword: {
+      autoSignIn: false,
+      enabled: true,
+      requireEmailVerification: false,
+      revokeSessionsOnPasswordReset: true,
+    },
     secret: options.config.authSecret,
     trustedOrigins: [new URL(options.config.appUrl).origin],
     user: {

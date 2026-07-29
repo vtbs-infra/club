@@ -1,42 +1,44 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import { getAdminAuditLogs, getAdminSystem } from '../../api/client';
 import { AnnouncementManager } from '../../components/AnnouncementManager';
 import { ErrorState, LoadingState, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate } from '../../lib/format';
 
-interface SystemStatus {
-  readonly checks: { readonly database: string; readonly storage: string };
-  readonly integrityWarnings: readonly {
-    readonly creatorId: string;
-    readonly pageId: string;
-    readonly runId: string;
-  }[];
-  readonly recentSnapshotFailures: readonly {
-    readonly createdAt: string;
-    readonly failureCode: null | string;
-    readonly runId: string;
-  }[];
-  readonly rooms: readonly {
-    readonly displayName: string;
-    readonly enabled: boolean;
-    readonly healthStatus: string;
-    readonly lastConnectedAt: null | string;
-  }[];
-  readonly schedulers: {
-    readonly roster: { readonly lastTickAt: null | string; readonly running: boolean };
-    readonly tracking: {
-      readonly configured: boolean;
-      readonly lastTickAt: null | string;
-      readonly running: boolean;
-    };
-  };
-  readonly shipmentCounts: Readonly<Record<string, number>>;
-  readonly snapshotRunCounts: Readonly<Record<string, number>>;
-  readonly status: 'degraded' | 'ok';
-  readonly trackingDueCount: number;
-  readonly version: string;
-}
+const snapshotStatusLabel: Readonly<Record<string, string>> = {
+  CANCELLED: '已取消',
+  FAILED: '失败',
+  FINALIZED: '已冻结',
+  PENDING_APPROVAL: '待确认',
+  REJECTED: '已拒绝',
+  RUNNING: '同步中',
+  SCHEDULED: '已计划',
+};
+
+const shipmentStatusLabel: Readonly<Record<string, string>> = {
+  DELIVERED: '已送达',
+  EXCEPTION: '物流异常',
+  IN_TRANSIT: '运输中',
+  LABEL_CREATED: '已录单',
+  OUT_FOR_DELIVERY: '派送中',
+};
+
+const auditActionLabel: Readonly<Record<string, string>> = {
+  'address.created': '新增收货地址',
+  'address.deleted': '删除收货地址',
+  'address.updated': '修改收货地址',
+  'creator.created': '注册主播',
+  'creator.updated': '修改主播',
+  'gift-order.cancelled': '取消礼物单',
+  'gift-order.shipped': '礼物单发货',
+  'gift-release.created': '创建礼物草稿',
+  'gift-release.published': '发布礼物',
+  'snapshot.approved': '确认迟到名单',
+  'snapshot.rejected': '拒绝迟到名单',
+  'verification-room.created': '新增验证直播间',
+  'verification-room.updated': '修改验证直播间',
+};
 
 export function AdminAnnouncementsPage() {
   return (
@@ -52,11 +54,16 @@ export function AdminAnnouncementsPage() {
 }
 
 export function AdminSystemPage() {
+  const [auditBefore, setAuditBefore] = useState<string | undefined>();
   const system = useQuery({ queryFn: getAdminSystem, queryKey: ['admin', 'system'] });
-  const audit = useQuery({ queryFn: getAdminAuditLogs, queryKey: ['admin', 'audit'] });
+  const audit = useQuery({
+    queryFn: () => getAdminAuditLogs(auditBefore),
+    queryKey: ['admin', 'audit', auditBefore],
+  });
   if (system.isPending || audit.isPending) return <LoadingState label="正在检查系统…" />;
   if (system.isError || audit.isError) return <ErrorState error={system.error ?? audit.error} />;
-  const data = system.data as unknown as SystemStatus;
+  const data = system.data;
+  const auditItems = audit.data.items;
   return (
     <div className="stack-lg">
       <PageHeader
@@ -65,7 +72,11 @@ export function AdminSystemPage() {
         title="系统"
         actions={
           <StatusBadge status={data.status}>
-            {data.status === 'ok' ? '运行正常' : '需要检查'}
+            {data.status === 'ok'
+              ? '运行正常'
+              : data.status === 'needs_setup'
+                ? '需要配置'
+                : '需要检查'}
           </StatusBadge>
         }
       />
@@ -87,13 +98,25 @@ export function AdminSystemPage() {
           </div>
         </article>
         <article>
+          <span className="metric-icon">验</span>
+          <div>
+            <small>验证连接</small>
+            <strong>{data.runtimes.binding.state === 'RUNNING' ? '运行中' : '需要检查'}</strong>
+            <p>
+              {data.runtimes.binding.lastTickAt
+                ? `最近 ${formatDate(data.runtimes.binding.lastTickAt, true)}`
+                : '尚无执行记录'}
+            </p>
+          </div>
+        </article>
+        <article>
           <span className="metric-icon">月</span>
           <div>
             <small>名单调度器</small>
-            <strong>{data.schedulers.roster.running ? '运行中' : '已停止'}</strong>
+            <strong>{data.runtimes.roster.state === 'RUNNING' ? '运行中' : '需要检查'}</strong>
             <p>
-              {data.schedulers.roster.lastTickAt
-                ? `最近 ${formatDate(data.schedulers.roster.lastTickAt, true)}`
+              {data.runtimes.roster.lastTickAt
+                ? `最近 ${formatDate(data.runtimes.roster.lastTickAt, true)}`
                 : '尚无执行记录'}
             </p>
           </div>
@@ -103,11 +126,13 @@ export function AdminSystemPage() {
           <div>
             <small>物流刷新</small>
             <strong>
-              {data.schedulers.tracking.configured
-                ? data.schedulers.tracking.running
+              {data.runtimes.tracking.configured
+                ? data.runtimes.tracking.state === 'RUNNING'
                   ? '运行中'
-                  : '已停止'
-                : '未配置'}
+                  : '需要检查'
+                : data.runtimes.tracking.state === 'RUNNING'
+                  ? '定时清理运行中'
+                  : '需要检查'}
             </strong>
             <p>{data.trackingDueCount} 个物流等待刷新</p>
           </div>
@@ -127,7 +152,9 @@ export function AdminSystemPage() {
             ) : (
               Object.entries(data.snapshotRunCounts).map(([status, count]) => (
                 <div key={status}>
-                  <StatusBadge status={status}>{status}</StatusBadge>
+                  <StatusBadge status={status}>
+                    {snapshotStatusLabel[status] ?? '未知状态'}
+                  </StatusBadge>
                   <strong>{count}</strong>
                 </div>
               ))
@@ -147,7 +174,9 @@ export function AdminSystemPage() {
             ) : (
               Object.entries(data.shipmentCounts).map(([status, count]) => (
                 <div key={status}>
-                  <StatusBadge status={status}>{status}</StatusBadge>
+                  <StatusBadge status={status}>
+                    {shipmentStatusLabel[status] ?? '未知状态'}
+                  </StatusBadge>
                   <strong>{count}</strong>
                 </div>
               ))
@@ -178,7 +207,15 @@ export function AdminSystemPage() {
                     </small>
                   </span>
                   <StatusBadge status={room.enabled ? room.healthStatus : 'disabled'}>
-                    {room.enabled ? room.healthStatus : 'DISABLED'}
+                    {room.enabled
+                      ? room.healthStatus === 'HEALTHY'
+                        ? '健康'
+                        : room.healthStatus === 'CONNECTING'
+                          ? '连接中'
+                          : room.healthStatus === 'UNHEALTHY'
+                            ? '异常'
+                            : '未知'
+                      : '已停用'}
                   </StatusBadge>
                 </div>
               ))
@@ -215,17 +252,67 @@ export function AdminSystemPage() {
             <h2>最近平台操作</h2>
           </div>
         </div>
-        {audit.data.items.length === 0 ? (
+        {auditItems.length === 0 ? (
           <p className="quiet-line">暂无审计记录。</p>
         ) : (
           <div className="audit-list">
-            {audit.data.items.map((item) => (
-              <div key={item.id}>
-                <time>{formatDate(item.createdAt, true)}</time>
-                <strong>{item.action}</strong>
-                <span>{item.targetType}</span>
-              </div>
+            {auditItems.map((item) => (
+              <details key={item.id}>
+                <summary>
+                  <time>{formatDate(item.createdAt, true)}</time>
+                  <strong>{auditActionLabel[item.action] ?? item.action}</strong>
+                  <span>{item.actorName ?? item.actorEmail ?? '系统'}</span>
+                </summary>
+                <dl className="detail-grid">
+                  <div>
+                    <dt>目标</dt>
+                    <dd>
+                      {item.targetType} · {item.targetId}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>请求 ID</dt>
+                    <dd>{item.requestId ?? '—'}</dd>
+                  </div>
+                  {item.reason ? (
+                    <div>
+                      <dt>原因</dt>
+                      <dd>{item.reason}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                {item.beforeSummary || item.afterSummary ? (
+                  <pre>
+                    {JSON.stringify(
+                      { after: item.afterSummary, before: item.beforeSummary },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                ) : null}
+              </details>
             ))}
+            <div className="form-actions">
+              {auditBefore ? (
+                <button
+                  className="button ghost"
+                  onClick={() => setAuditBefore(undefined)}
+                  type="button"
+                >
+                  返回最新记录
+                </button>
+              ) : null}
+              {audit.data.nextBefore ? (
+                <button
+                  className="button secondary"
+                  disabled={audit.isFetching}
+                  onClick={() => setAuditBefore(audit.data.nextBefore ?? undefined)}
+                  type="button"
+                >
+                  {audit.isFetching ? '正在加载…' : '查看更早记录'}
+                </button>
+              ) : null}
+            </div>
           </div>
         )}
       </section>

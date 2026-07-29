@@ -1,6 +1,14 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
+import {
+  AdminSnapshotSchema,
+  CreatorSnapshotDetailSchema,
+  SnapshotDetailSchema,
+  SnapshotIntegrityResultSchema,
+  SnapshotRunSchema,
+} from '../../../shared/contracts/snapshots.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
 import { createRequireCreator, createRequirePlatformAdmin } from '../auth/guards.js';
@@ -12,9 +20,7 @@ interface SnapshotRoutesOptions {
   readonly service: SnapshotService;
 }
 
-const Id = Type.String({ format: 'uuid' });
-const EmptyBody = Type.Object({}, { additionalProperties: false });
-const RunParameters = Type.Object({ snapshotRunId: Id });
+const RunParameters = Type.Object({ snapshotRunId: IdSchema });
 
 function session(request: { readonly authSession: AuthSession | null }): AuthSession {
   if (!request.authSession) throw new Error('Authenticated route is missing its session.');
@@ -41,9 +47,12 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     '/api/v1/creator/rosters',
     {
       preHandler: requireCreator,
-      schema: { response: { 200: Type.Array(Type.Any()) }, tags: ['creator-rosters'] },
+      schema: {
+        response: { 200: Type.Array(SnapshotRunSchema) },
+        tags: ['creator-rosters'],
+      },
     },
-    (request) => options.service.listForCreator(request.creatorProfile!.id),
+    (request) => options.service.queries.listForCreator(request.creatorProfile!.id),
   );
 
   app.get<{ Params: { snapshotRunId: string } }>(
@@ -52,15 +61,15 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
       preHandler: requireCreator,
       schema: {
         params: RunParameters,
-        response: { 200: Type.Any() },
+        response: { 200: CreatorSnapshotDetailSchema },
         tags: ['creator-rosters'],
       },
     },
     async (request) => {
-      await options.service.assertAccess(session(request), {
+      await options.service.queries.assertAccess(session(request), {
         runId: request.params.snapshotRunId,
       });
-      const detail = await options.service.getDetail(request.params.snapshotRunId);
+      const detail = await options.service.queries.getDetail(request.params.snapshotRunId);
       return {
         attempts: detail.attempts.map((attempt) => ({
           attemptNumber: attempt.attemptNumber,
@@ -83,12 +92,12 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     {
       preHandler: requireAdmin,
       schema: {
-        querystring: Type.Object({ creatorId: Type.Optional(Id) }),
-        response: { 200: Type.Array(Type.Any()) },
+        querystring: Type.Object({ creatorId: Type.Optional(IdSchema) }),
+        response: { 200: Type.Array(AdminSnapshotSchema) },
         tags: ['admin-rosters'],
       },
     },
-    (request) => options.service.listAll(request.query.creatorId),
+    (request) => options.service.queries.listAll(request.query.creatorId),
   );
 
   app.get<{ Params: { snapshotRunId: string } }>(
@@ -97,11 +106,11 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
       preHandler: requireAdmin,
       schema: {
         params: RunParameters,
-        response: { 200: Type.Any() },
+        response: { 200: SnapshotDetailSchema },
         tags: ['admin-rosters'],
       },
     },
-    (request) => options.service.getDetail(request.params.snapshotRunId),
+    (request) => options.service.queries.getDetail(request.params.snapshotRunId),
   );
 
   app.get<{ Params: { snapshotRunId: string } }>(
@@ -110,11 +119,11 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
       preHandler: requireAdmin,
       schema: {
         params: RunParameters,
-        response: { 200: Type.Array(Type.Any()) },
+        response: { 200: Type.Array(SnapshotIntegrityResultSchema) },
         tags: ['admin-rosters'],
       },
     },
-    (request) => options.service.checkEvidenceIntegrity(request.params.snapshotRunId),
+    (request) => options.service.queries.checkEvidenceIntegrity(request.params.snapshotRunId),
   );
 
   app.post<{ Body: Record<string, never>; Params: { snapshotRunId: string } }>(
@@ -122,15 +131,15 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     {
       preHandler: requireAdmin,
       schema: {
-        body: EmptyBody,
+        body: EmptyBodySchema,
         params: RunParameters,
-        response: { 202: Type.Any() },
+        response: { 202: Type.Object({ attemptId: IdSchema }) },
         tags: ['admin-rosters'],
       },
     },
     async (request, reply) => {
-      await options.service.capture(request.params.snapshotRunId);
-      return reply.status(202).send(await options.service.getDetail(request.params.snapshotRunId));
+      const queued = await options.service.queueCapture(request.params.snapshotRunId);
+      return reply.status(202).send(queued);
     },
   );
 
@@ -139,7 +148,7 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     {
       preHandler: requireAdmin,
       schema: {
-        body: EmptyBody,
+        body: EmptyBodySchema,
         params: RunParameters,
         response: { 204: Type.Null() },
         tags: ['admin-rosters'],

@@ -11,7 +11,7 @@ import {
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
 import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
-import { creators, users } from '../../src/server/infrastructure/db/schema.js';
+import { creators, users } from '../../src/server/infrastructure/db/schema/index.js';
 import {
   createTemporaryStorage,
   type TemporaryStorage,

@@ -1,0 +1,1 @@
+export const EXPECTED_SCHEMA_MIGRATION_COUNT = 7;

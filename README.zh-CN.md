@@ -16,7 +16,7 @@ Club 是一个面向 B站 Vtuber、主播及其观众的自托管礼物领取与
 - 按月发布礼物并根据大航海等级配置礼包
 - 自动、幂等地生成礼物单
 - 地址簿、加密领取快照和自定义领取字段
-- 主播处理礼物单、拆分发货并维护物流记录
+- 主播处理礼物单、录入单次发货并维护物流记录
 - 平台公告与主播公告
 - 面向普通用户、主播和平台管理员的独立界面
 - 基于 TypeScript、PostgreSQL 和本地对象存储的自托管部署
@@ -44,7 +44,7 @@ B站直播间消息
 Copy-Item .env.example .env
 docker compose build app
 docker compose up -d postgres
-docker compose run --rm app pnpm db:migrate
+docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d app
 ```
 
@@ -52,7 +52,7 @@ docker compose up -d app
 
 ```powershell
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
-  pnpm club admin:create --email admin@example.com --name Admin
+  node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
 ```
 
 打开 <http://localhost:3000>，在平台管理界面中完成主播和验证直播间配置。
@@ -69,7 +69,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 | [技术架构](docs/architecture.md)         | 开发者与代码审查者         |
 | [运维手册](docs/operations.md)           | 生产环境维护者             |
 | [开发指南](docs/development.md)          | 项目贡献者                 |
-| [实施计划](docs/implementation-plan.md)  | 当前开发优先级与验收标准   |
+| [实施计划](docs/implementation-plan.md)  | 稳定版实现基线与验收标准   |
 | [B站集成](docs/integrations/bilibili.md) | 外部接口维护者             |
 
 运行中的实例通过 `/openapi.json` 提供 OpenAPI 3.1 文档。

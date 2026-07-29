@@ -26,6 +26,7 @@ export function AdminOverviewPage() {
   const unhealthyRooms = rooms.data.filter(
     (room) => room.enabled && room.healthStatus !== 'HEALTHY',
   );
+  const verificationNeedsSetup = !rooms.data.some((room) => room.enabled);
   return (
     <div className="stack-xl">
       <PageHeader
@@ -67,7 +68,10 @@ export function AdminOverviewPage() {
           </div>
         </article>
       </section>
-      {pendingApproval.length > 0 || failures.length > 0 || unhealthyRooms.length > 0 ? (
+      {pendingApproval.length > 0 ||
+      failures.length > 0 ||
+      unhealthyRooms.length > 0 ||
+      verificationNeedsSetup ? (
         <section className="panel attention-panel">
           <div className="section-heading compact">
             <div>
@@ -76,6 +80,16 @@ export function AdminOverviewPage() {
             </div>
           </div>
           <div className="attention-list">
+            {verificationNeedsSetup ? (
+              <Link to="/admin/verification">
+                <span className="attention-icon warning">验</span>
+                <div>
+                  <strong>需要配置验证直播间</strong>
+                  <p>至少启用一个房间后，普通用户才能绑定 B站 UID。</p>
+                </div>
+                <b>去配置 →</b>
+              </Link>
+            ) : null}
             {pendingApproval.map(({ creator, run }) => (
               <Link key={run.id} to={`/admin/rosters?run=${run.id}`}>
                 <span className="attention-icon warning">!</span>

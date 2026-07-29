@@ -1,0 +1,2 @@
+ALTER TABLE "snapshot_runs" DROP CONSTRAINT "snapshot_runs_status_check";--> statement-breakpoint
+ALTER TABLE "snapshot_runs" ADD CONSTRAINT "snapshot_runs_status_check" CHECK ("snapshot_runs"."status" in ('SCHEDULED', 'RUNNING', 'FAILED', 'PENDING_APPROVAL', 'FINALIZED', 'REJECTED', 'CANCELLED'));

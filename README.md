@@ -19,7 +19,7 @@ tracking.
 - Optional monthly gift releases with tier-based packages
 - Automatic and idempotent gift-order generation
 - Address book, encrypted claim snapshots, and configurable claim fields
-- Creator order processing, split shipments, and tracking history
+- Creator order processing, one shipment per order, and tracking history
 - Platform and creator announcements
 - Dedicated recipient, creator, and administrator interfaces
 - Self-hosted TypeScript application with PostgreSQL and local object storage
@@ -48,7 +48,7 @@ Requirements: Docker Engine and Docker Compose v2.
 Copy-Item .env.example .env
 docker compose build app
 docker compose up -d postgres
-docker compose run --rm app pnpm db:migrate
+docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d app
 ```
 
@@ -57,7 +57,7 @@ the first platform administrator with:
 
 ```powershell
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
-  pnpm club admin:create --email admin@example.com --name Admin
+  node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
 ```
 
 Open <http://localhost:3000> and complete creator and verification-room setup
@@ -78,7 +78,7 @@ The detailed guides are maintained in Simplified Chinese.
 | [Architecture](docs/architecture.md)                  | Developers and reviewers                 |
 | [Operations](docs/operations.md)                      | Production operators                     |
 | [Development](docs/development.md)                    | Contributors                             |
-| [Implementation plan](docs/implementation-plan.md)    | Current priorities and acceptance gates  |
+| [Implementation plan](docs/implementation-plan.md)    | Stable implementation and acceptance     |
 | [Bilibili integration](docs/integrations/bilibili.md) | Integration maintainers                  |
 
 A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.

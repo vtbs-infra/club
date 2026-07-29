@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 
 import {
   createAdminCreator,
@@ -10,8 +10,8 @@ import {
 } from '../../api/client';
 import {
   EmptyState,
+  ErrorNotice,
   ErrorState,
-  InlineNotice,
   LoadingState,
   PageHeader,
   StatusBadge,
@@ -37,6 +37,9 @@ const emptyForm: CreatorFormState = {
 
 export function AdminCreatorsPage() {
   const queryClient = useQueryClient();
+  const displayNameInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLFormElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CreatorRecord | null>(null);
   const [form, setForm] = useState<CreatorFormState>(emptyForm);
@@ -45,6 +48,12 @@ export function AdminCreatorsPage() {
     queryFn: () => getAdminUsers(search),
     queryKey: ['admin', 'users', search],
   });
+  const focusEditor = () => {
+    requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      (searchInputRef.current ?? displayNameInputRef.current)?.focus();
+    });
+  };
   const startEditing = (creator: CreatorRecord) => {
     setEditing(creator);
     setForm({
@@ -55,10 +64,15 @@ export function AdminCreatorsPage() {
       timezone: creator.timezone,
       userId: creator.userId,
     });
+    focusEditor();
   };
   const reset = () => {
     setEditing(null);
     setForm(emptyForm);
+  };
+  const startNew = () => {
+    reset();
+    focusEditor();
   };
   const save = useMutation({
     mutationFn: () =>
@@ -94,7 +108,7 @@ export function AdminCreatorsPage() {
     <div className="stack-lg">
       <PageHeader
         actions={
-          <button className="button primary" onClick={reset} type="button">
+          <button className="button primary" onClick={startNew} type="button">
             注册主播
           </button>
         }
@@ -142,6 +156,7 @@ export function AdminCreatorsPage() {
             event.preventDefault();
             save.mutate();
           }}
+          ref={editorRef}
         >
           <div className="section-heading compact">
             <div>
@@ -149,7 +164,7 @@ export function AdminCreatorsPage() {
               <h2>{editing?.displayName ?? '关联用户账号'}</h2>
             </div>
             {editing ? (
-              <button className="text-button" onClick={reset} type="button">
+              <button className="text-button" onClick={startNew} type="button">
                 新建
               </button>
             ) : null}
@@ -161,6 +176,7 @@ export function AdminCreatorsPage() {
                 <input
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="输入昵称或邮箱"
+                  ref={searchInputRef}
                   value={search}
                 />
               </label>
@@ -199,6 +215,7 @@ export function AdminCreatorsPage() {
                   setForm((current) => ({ ...current, displayName: event.target.value }))
                 }
                 required
+                ref={displayNameInputRef}
                 value={form.displayName}
               />
             </label>
@@ -253,7 +270,7 @@ export function AdminCreatorsPage() {
               </span>
             </label>
           ) : null}
-          {save.isError ? <InlineNotice tone="danger">{save.error.message}</InlineNotice> : null}
+          {save.isError ? <ErrorNotice error={save.error} /> : null}
           <button className="button primary" disabled={save.isPending} type="submit">
             {save.isPending ? '正在保存…' : editing ? '保存主播设置' : '注册为主播'}
           </button>

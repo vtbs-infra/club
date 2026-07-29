@@ -1,9 +1,9 @@
-import { and, asc, count, desc, eq, ilike, isNull, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, inArray, or } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { creators, users } from '../../infrastructure/db/schema.js';
-import { normalizeIanaTimezone } from '../snapshots/month-end.js';
+import { creators, snapshotRuns, users } from '../../infrastructure/db/schema/index.js';
+import { calculateMonthlyCutoff, normalizeIanaTimezone } from '../snapshots/month-end.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
 
 export interface CreateCreatorInput extends RequestAuditContext {
@@ -89,7 +89,7 @@ export class CreatorService {
               timezone: creators.timezone,
             })
             .from(creators)
-            .where(and(eq(creators.userId, user.id), isNull(creators.archivedAt)))
+            .where(eq(creators.userId, user.id))
             .limit(1)
         : [];
     return { creator: creator ?? null, user };
@@ -118,7 +118,6 @@ export class CreatorService {
     return this.database.orm
       .select({
         active: creators.active,
-        archivedAt: creators.archivedAt,
         bilibiliUid: creators.bilibiliUid,
         createdAt: creators.createdAt,
         displayName: creators.displayName,
@@ -224,6 +223,39 @@ export class CreatorService {
           .where(eq(creators.id, before.id))
           .returning();
         if (!updated) throw new Error('Creator update returned no row.');
+        if (!updated.active) {
+          await transaction
+            .update(snapshotRuns)
+            .set({ status: 'CANCELLED', updatedAt: new Date() })
+            .where(
+              and(eq(snapshotRuns.creatorId, updated.id), eq(snapshotRuns.status, 'SCHEDULED')),
+            );
+        } else {
+          const scheduled = await transaction
+            .select({ id: snapshotRuns.id, periodStart: snapshotRuns.periodStart })
+            .from(snapshotRuns)
+            .where(
+              and(
+                eq(snapshotRuns.creatorId, updated.id),
+                inArray(snapshotRuns.status, ['SCHEDULED', 'CANCELLED']),
+              ),
+            );
+          for (const run of scheduled) {
+            const cutoff = calculateMonthlyCutoff(run.periodStart, updated.timezone);
+            await transaction
+              .update(snapshotRuns)
+              .set({
+                creatorBilibiliUid: updated.bilibiliUid,
+                creatorRoomId: updated.roomId,
+                cutoffTimezone: cutoff.cutoffTimezone,
+                onTimeWindowEndAt: cutoff.onTimeWindowEndAt,
+                scheduledCutoffAt: cutoff.scheduledCutoffAt,
+                status: 'SCHEDULED',
+                updatedAt: new Date(),
+              })
+              .where(eq(snapshotRuns.id, run.id));
+          }
+        }
         await this.audit.record(
           {
             action: 'creator.updated',
@@ -250,7 +282,13 @@ export class CreatorService {
           },
           transaction,
         );
-        return updated;
+        const [account] = await transaction
+          .select({ email: users.email, name: users.name })
+          .from(users)
+          .where(eq(users.id, updated.userId))
+          .limit(1);
+        if (!account) throw new Error('Creator account disappeared during update.');
+        return { ...updated, email: account.email, userName: account.name };
       } catch (error) {
         if (uniqueViolation(error)) {
           throw new AppError(
@@ -288,7 +326,7 @@ export class CreatorService {
     const [active] = await this.database.orm
       .select({ value: count() })
       .from(creators)
-      .where(and(eq(creators.active, true), isNull(creators.archivedAt)));
+      .where(eq(creators.active, true));
     const recent = await this.database.orm
       .select({
         active: creators.active,

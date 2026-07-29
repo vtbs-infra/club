@@ -8,7 +8,7 @@ import {
   unbindBilibili,
   type IssuedBilibiliChallenge,
 } from '../api/client';
-import { InlineNotice, LoadingState } from './Ui';
+import { ConfirmDialog, ErrorNotice, InlineNotice, LoadingState } from './Ui';
 
 const pageLoadedAt = Date.now();
 
@@ -28,6 +28,7 @@ function timerLabel(seconds: number): string {
 export function BilibiliPanel() {
   const queryClient = useQueryClient();
   const [issued, setIssued] = useState<IssuedBilibiliChallenge | null>(null);
+  const [confirmUnbind, setConfirmUnbind] = useState(false);
   const binding = useQuery({
     queryFn: getBinding,
     queryKey: ['me', 'bilibili-binding'],
@@ -49,6 +50,7 @@ export function BilibiliPanel() {
   const remove = useMutation({
     mutationFn: unbindBilibili,
     onSuccess: async () => {
+      setConfirmUnbind(false);
       setIssued(null);
       await queryClient.invalidateQueries({ queryKey: ['me'] });
       await queryClient.invalidateQueries({ queryKey: ['gifts'] });
@@ -59,28 +61,37 @@ export function BilibiliPanel() {
   if (binding.isPending) return <LoadingState label="正在读取 B站绑定…" />;
   if (binding.data) {
     return (
-      <section className="identity-card verified">
-        <div className="identity-icon" aria-hidden="true">
-          ✓
-        </div>
-        <div>
-          <p className="eyebrow">已完成 B站身份验证</p>
-          <h2>{binding.data.biliDisplayName ?? `UID ${binding.data.biliUid}`}</h2>
-          <p>UID {binding.data.biliUid} · 礼物资格会通过这个 UID 自动匹配。</p>
-        </div>
-        <button
-          className="button ghost danger"
-          disabled={remove.isPending}
-          onClick={() => {
-            if (window.confirm('解绑后，尚未领取的礼物会暂时隐藏。确认继续吗？')) {
-              remove.mutate();
-            }
-          }}
-          type="button"
-        >
-          解除绑定
-        </button>
-      </section>
+      <>
+        <section className="identity-card verified">
+          <div className="identity-icon" aria-hidden="true">
+            ✓
+          </div>
+          <div>
+            <p className="eyebrow">已完成 B站身份验证</p>
+            <h2>{binding.data.biliDisplayName ?? `UID ${binding.data.biliUid}`}</h2>
+            <p>UID {binding.data.biliUid} · 礼物资格会通过这个 UID 自动匹配。</p>
+          </div>
+          <button
+            className="button ghost danger"
+            disabled={remove.isPending}
+            onClick={() => setConfirmUnbind(true)}
+            type="button"
+          >
+            解除绑定
+          </button>
+        </section>
+        {remove.isError ? <ErrorNotice error={remove.error} /> : null}
+        <ConfirmDialog
+          busy={remove.isPending}
+          confirmLabel="解除绑定"
+          description="解绑后，尚未领取的礼物会暂时隐藏；已经提交的礼物单和冻结资料不受影响。"
+          onCancel={() => setConfirmUnbind(false)}
+          onConfirm={() => remove.mutate()}
+          open={confirmUnbind}
+          title="确认解除 B站绑定？"
+          tone="danger"
+        />
+      </>
     );
   }
 
@@ -138,9 +149,7 @@ export function BilibiliPanel() {
           >
             {create.isPending ? '正在准备验证…' : active ? '生成新验证码' : '开始验证'}
           </button>
-          {create.isError ? (
-            <InlineNotice tone="danger">{create.error.message}</InlineNotice>
-          ) : null}
+          {create.isError ? <ErrorNotice error={create.error} /> : null}
         </div>
       )}
     </section>

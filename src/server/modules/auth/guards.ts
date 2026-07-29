@@ -1,11 +1,11 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest, preHandlerHookHandler } from 'fastify';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { creators } from '../../infrastructure/db/schema.js';
-import type { AccountRole } from '../../infrastructure/db/schema.js';
+import { creators } from '../../infrastructure/db/schema/index.js';
+import type { AccountRole } from '../../infrastructure/db/schema/index.js';
 import type { AppAuth, AuthSession } from './auth.js';
 
 export async function resolveSession(request: FastifyRequest, auth: AppAuth): Promise<AuthSession> {
@@ -60,13 +60,7 @@ export function createRequireCreator(
         userId: creators.userId,
       })
       .from(creators)
-      .where(
-        and(
-          eq(creators.userId, session.user.id),
-          eq(creators.active, true),
-          isNull(creators.archivedAt),
-        ),
-      )
+      .where(and(eq(creators.userId, session.user.id), eq(creators.active, true)))
       .limit(1);
     if (!creator) {
       throw new AppError(

@@ -1,8 +1,16 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
+import {
+  CreatorOrderSchema,
+  GiftOrderSchema,
+  GiftOrderStatusSchema,
+  ShipGiftSchema,
+  SubmitGiftSchema,
+  type GiftOrderStatus,
+} from '../../../shared/contracts/gifts.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import type { GiftOrderStatus } from '../../infrastructure/db/schema.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
 import { createRequireCreator, createRequireSession } from '../auth/guards.js';
 import type { GiftOrderService } from './order-service.js';
@@ -13,18 +21,7 @@ interface GiftOrderRoutesOptions {
   readonly service: GiftOrderService;
 }
 
-const Id = Type.String({ format: 'uuid' });
-const Parameters = Type.Object({ giftOrderId: Id });
-const EmptyBody = Type.Object({}, { additionalProperties: false });
-const Status = Type.Union([
-  Type.Literal('CLAIMABLE'),
-  Type.Literal('SUBMITTED'),
-  Type.Literal('PROCESSING'),
-  Type.Literal('SHIPPED'),
-  Type.Literal('COMPLETED'),
-  Type.Literal('EXPIRED'),
-  Type.Literal('CANCELLED'),
-]);
+const Parameters = Type.Object({ giftOrderId: IdSchema });
 
 function session(request: { readonly authSession: AuthSession | null }) {
   if (!request.authSession) throw new Error('Authenticated route is missing its session.');
@@ -55,7 +52,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
         querystring: Type.Object({
           limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
         }),
-        response: { 200: Type.Array(Type.Any()) },
+        response: { 200: Type.Array(GiftOrderSchema) },
         tags: ['my-gifts'],
       },
     },
@@ -68,7 +65,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       preHandler: requireSession,
       schema: {
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: GiftOrderSchema },
         tags: ['my-gifts'],
       },
     },
@@ -76,30 +73,16 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
   );
 
   app.post<{
-    Body: {
-      addressId: string;
-      expectedVersion: number;
-      options: Record<string, boolean | string>;
-    };
+    Body: typeof SubmitGiftSchema.static;
     Params: { giftOrderId: string };
   }>(
     '/api/v1/me/gifts/:giftOrderId/submit',
     {
       preHandler: requireSession,
       schema: {
-        body: Type.Object(
-          {
-            addressId: Id,
-            expectedVersion: Type.Integer({ minimum: 1 }),
-            options: Type.Record(
-              Type.String({ pattern: '^[a-z][a-z0-9_]{0,39}$' }),
-              Type.Union([Type.Boolean(), Type.String({ maxLength: 2_000 })]),
-            ),
-          },
-          { additionalProperties: false },
-        ),
+        body: SubmitGiftSchema,
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: GiftOrderSchema },
         tags: ['my-gifts'],
       },
     },
@@ -117,8 +100,8 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
     {
       preHandler: requireCreator,
       schema: {
-        querystring: Type.Object({ status: Type.Optional(Status) }),
-        response: { 200: Type.Array(Type.Any()) },
+        querystring: Type.Object({ status: Type.Optional(GiftOrderStatusSchema) }),
+        response: { 200: Type.Array(GiftOrderSchema) },
         tags: ['creator-orders'],
       },
     },
@@ -131,7 +114,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       preHandler: requireCreator,
       schema: {
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: CreatorOrderSchema },
         tags: ['creator-orders'],
       },
     },
@@ -148,9 +131,9 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
     {
       preHandler: requireCreator,
       schema: {
-        body: EmptyBody,
+        body: EmptyBodySchema,
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: CreatorOrderSchema },
         tags: ['creator-orders'],
       },
     },
@@ -169,31 +152,16 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
   );
 
   app.post<{
-    Body: {
-      carrierCode: string;
-      carrierName: string;
-      trackingNumber: string;
-      trackingUrl?: null | string;
-    };
+    Body: typeof ShipGiftSchema.static;
     Params: { giftOrderId: string };
   }>(
     '/api/v1/creator/orders/:giftOrderId/ship',
     {
       preHandler: requireCreator,
       schema: {
-        body: Type.Object(
-          {
-            carrierCode: Type.String({ maxLength: 80, minLength: 1 }),
-            carrierName: Type.String({ maxLength: 120, minLength: 1 }),
-            trackingNumber: Type.String({ maxLength: 160, minLength: 1 }),
-            trackingUrl: Type.Optional(
-              Type.Union([Type.Null(), Type.String({ maxLength: 1_000 })]),
-            ),
-          },
-          { additionalProperties: false },
-        ),
+        body: ShipGiftSchema,
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: CreatorOrderSchema },
         tags: ['creator-orders'],
       },
     },
@@ -211,9 +179,9 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
     {
       preHandler: requireCreator,
       schema: {
-        body: EmptyBody,
+        body: EmptyBodySchema,
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: CreatorOrderSchema },
         tags: ['creator-orders'],
       },
     },
@@ -241,7 +209,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
           { additionalProperties: false },
         ),
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: CreatorOrderSchema },
         tags: ['creator-orders'],
       },
     },

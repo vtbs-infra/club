@@ -14,6 +14,8 @@ export const ReadinessResponseSchema = Type.Object({
   status: HealthStatusSchema,
   checks: Type.Object({
     database: Type.Union([Type.Literal('ok'), Type.Literal('down')]),
+    runtimes: Type.Union([Type.Literal('ok'), Type.Literal('down'), Type.Literal('disabled')]),
+    schema: Type.Union([Type.Literal('ok'), Type.Literal('down')]),
     storage: Type.Union([Type.Literal('ok'), Type.Literal('down')]),
   }),
 });

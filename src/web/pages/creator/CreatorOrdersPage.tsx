@@ -34,7 +34,7 @@ export function CreatorOrdersPage() {
     ? orders.data.filter(
         (order) =>
           order.orderNumber.toLowerCase().includes(term) ||
-          order.biliDisplayName.toLowerCase().includes(term) ||
+          (order.biliDisplayName ?? '').toLowerCase().includes(term) ||
           order.biliUid.includes(term) ||
           order.release.title.toLowerCase().includes(term),
       )

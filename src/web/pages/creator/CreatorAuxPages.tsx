@@ -3,7 +3,13 @@ import { useState, type FormEvent } from 'react';
 
 import { getIdentity, updateCreatorProfile, type Identity } from '../../api/client';
 import { AnnouncementManager } from '../../components/AnnouncementManager';
-import { ErrorState, InlineNotice, LoadingState, PageHeader } from '../../components/Ui';
+import {
+  ErrorNotice,
+  ErrorState,
+  InlineNotice,
+  LoadingState,
+  PageHeader,
+} from '../../components/Ui';
 
 export function CreatorAnnouncementsPage() {
   return (
@@ -63,7 +69,7 @@ function CreatorSettingsForm({ creator }: { readonly creator: NonNullable<Identi
             />
           </label>
           {save.isSuccess ? <InlineNotice tone="success">设置已保存。</InlineNotice> : null}
-          {save.isError ? <InlineNotice tone="danger">{save.error.message}</InlineNotice> : null}
+          {save.isError ? <ErrorNotice error={save.error} /> : null}
           <button className="button primary" disabled={save.isPending} type="submit">
             保存设置
           </button>

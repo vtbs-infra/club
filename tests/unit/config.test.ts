@@ -42,30 +42,14 @@ describe('loadConfig', () => {
     ).toThrow(/trackingProvider/);
   });
 
-  it('enables mail only when the SMTP configuration is complete', () => {
-    const config = loadConfig({
-      APP_URL: 'https://club.example.com',
-      BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
-      DATABASE_URL: 'postgres://localhost/club',
-      SMTP_FROM: 'Club <club@example.com>',
-      SMTP_HOST: 'smtp.example.com',
-      SMTP_PASSWORD: 'mail-secret',
-      SMTP_PORT: '465',
-      SMTP_SECURE: 'true',
-      SMTP_USERNAME: 'club@example.com',
-    });
-
-    expect(config.smtp).toMatchObject({ host: 'smtp.example.com', port: 465, secure: true });
-  });
-
-  it('rejects partial SMTP credentials', () => {
+  it('rejects non-http application URLs', () => {
     expect(() =>
       loadConfig({
+        APP_URL: 'file:///tmp/club',
         BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
         DATABASE_URL: 'postgres://localhost/club',
-        SMTP_USERNAME: 'club@example.com',
       }),
-    ).toThrow(/smtp/i);
+    ).toThrow(/appUrl/);
   });
 
   it('requires a valid active encryption key in production', () => {

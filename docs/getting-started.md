@@ -65,7 +65,7 @@ docker compose ps
 迁移需要显式执行：
 
 ```powershell
-docker compose run --rm app pnpm db:migrate
+docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 ```
 
 同一批迁移可以重复调用；已经记录的迁移不会再次执行。
@@ -74,11 +74,10 @@ docker compose run --rm app pnpm db:migrate
 
 ```powershell
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
-  pnpm club admin:create --email admin@example.com --name Admin
+  node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
 ```
 
-密码至少 8 个字符。命令只用于创建首个平台管理员；已有同邮箱账号不会被改写为其他
-身份。
+密码至少 8 个字符。命令可以安全重复执行；已有同邮箱账号会被校准为平台管理员。
 
 ## 5. 启动 Club
 
@@ -94,7 +93,8 @@ Invoke-RestMethod http://localhost:3000/health/live
 Invoke-RestMethod http://localhost:3000/health/ready
 ```
 
-两个接口都应返回 `status: ok`。
+两个接口都应返回 `status: ok`。Readiness 还会列出数据库、迁移、私有存储和 Runtime
+检查结果。
 
 ## 6. 配置主播
 
@@ -124,7 +124,7 @@ America/Los_Angeles
 
 1. 打开 `/admin/verification`。
 2. 新建验证直播间。
-3. 填写显示名称、直播间 ID、房主 UID 和优先级。
+3. 填写显示名称、直播间 ID 和优先级。
 4. 启用直播间。
 5. 点击连接测试并确认状态为健康。
 

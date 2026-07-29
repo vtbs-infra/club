@@ -51,6 +51,23 @@ integration('database migration baseline', () => {
     return Boolean(rows[0]?.exists);
   }
 
+  async function columnExists(
+    database: DatabaseService,
+    tableName: string,
+    columnName: string,
+  ): Promise<boolean> {
+    const rows = await database.orm.execute<{ exists: boolean }>(
+      sql`select exists(
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = ${tableName}
+          and column_name = ${columnName}
+      ) as exists`,
+    );
+    return Boolean(rows[0]?.exists);
+  }
+
   it('creates the application schema on an empty database', async () => {
     const database = await temporaryDatabase();
     try {
@@ -68,6 +85,9 @@ integration('database migration baseline', () => {
       ]) {
         expect(await tableExists(database, table), table).toBe(true);
       }
+      expect(await tableExists(database, 'idempotency_records')).toBe(false);
+      expect(await columnExists(database, 'creators', 'archived_at')).toBe(false);
+      expect(await columnExists(database, 'verification_rooms', 'bili_owner_uid')).toBe(false);
       const migrations = await database.orm.execute<{ value: number }>(
         sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
       );

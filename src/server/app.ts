@@ -4,7 +4,6 @@ import { join, resolve } from 'node:path';
 
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
-import { Type } from '@sinclair/typebox';
 import Fastify, { LogController, type FastifyError } from 'fastify';
 import pino, { type DestinationStream } from 'pino';
 
@@ -84,12 +83,17 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const ownsDatabase = options.database === undefined;
   const storage = options.storage ?? new LocalStorageDriver(config.storageLocalPath);
   const clock = options.clock ?? new SystemClock();
+  const logger = pino(createLoggerOptions(config.logLevel), options.loggerStream);
+  const reportRuntimeError = (error: unknown, operation: string) => {
+    logger.error({ err: error, operation }, 'background runtime operation failed');
+  };
   const auth = options.auth ?? createAuth({ config, database });
   const encryption = new EncryptionKeyRing(config);
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
   const bindingRuntime =
-    options.bindingRuntime ?? createBindingRuntime({ clock, config, database });
+    options.bindingRuntime ??
+    createBindingRuntime({ clock, config, database, reportError: reportRuntimeError });
   const addressService = new AddressService(database, encryption);
   const creatorService = new CreatorService(database);
   const releaseService = new GiftReleaseService(database);
@@ -104,6 +108,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       config,
       database,
       encryption,
+      reportError: reportRuntimeError,
     });
   const snapshotRuntime =
     options.snapshotRuntime ??
@@ -111,10 +116,11 @@ export async function buildApp(options: BuildAppOptions = {}) {
       clock,
       config,
       database,
-      onFinalized: (runId, executor) => releaseService.reconcileSnapshot(runId, executor),
+      onFinalized: (runId, executor) =>
+        releaseService.eligibility.reconcileSnapshot(runId, executor),
+      reportError: reportRuntimeError,
       storage,
     });
-  const logger = pino(createLoggerOptions(config.logLevel), options.loggerStream);
 
   const app = Fastify({
     ajv: { customOptions: { removeAdditional: false } },
@@ -153,16 +159,24 @@ export async function buildApp(options: BuildAppOptions = {}) {
     app.addHook('onClose', async () => database.close());
   }
   app.addHook('onClose', async () => bindingRuntime.close());
-  app.addHook('onClose', () => snapshotRuntime.close());
-  app.addHook('onClose', () => fulfillmentRuntime.close());
-  if (options.startBackground ?? config.nodeEnv !== 'test') {
+  app.addHook('onClose', async () => snapshotRuntime.close());
+  app.addHook('onClose', async () => fulfillmentRuntime.close());
+  const backgroundRequired = options.startBackground ?? config.nodeEnv !== 'test';
+  if (backgroundRequired) {
     app.addHook('onReady', async () => {
-      try {
-        await bindingRuntime.start();
-        await snapshotRuntime.start();
-        await fulfillmentRuntime.start();
-      } catch (error) {
-        app.log.error({ err: error }, 'background runtime startup failed');
+      const runtimes = [
+        ['binding', bindingRuntime.start()],
+        ['snapshot', snapshotRuntime.start()],
+        ['fulfillment', fulfillmentRuntime.start()],
+      ] as const;
+      const results = await Promise.allSettled(runtimes.map(([, start]) => start));
+      for (const [index, result] of results.entries()) {
+        if (result.status === 'rejected') {
+          app.log.error(
+            { err: result.reason, runtime: runtimes[index]![0] },
+            'background runtime startup failed',
+          );
+        }
       }
     });
   }
@@ -232,6 +246,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   await app.register(systemStatusRoutes, {
     auth,
+    backgroundRequired,
+    bindingRuntime,
     clock,
     database,
     fulfillmentRuntime,
@@ -245,7 +261,6 @@ export async function buildApp(options: BuildAppOptions = {}) {
     {
       schema: {
         hide: true,
-        response: { 200: Type.Any() },
       },
     },
     () => app.swagger(),

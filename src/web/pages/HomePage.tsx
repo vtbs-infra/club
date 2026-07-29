@@ -18,8 +18,12 @@ export function HomePage() {
           <span>Club</span>
         </Link>
         <nav>
-          <a href="#how">如何使用</a>
-          <a href="#open-source">开源部署</a>
+          <a className="public-info-link" href="#how">
+            如何使用
+          </a>
+          <a className="public-info-link" href="#open-source">
+            开源部署
+          </a>
           {signedIn ? (
             <Link className="button small primary" to="/app">
               进入工作台

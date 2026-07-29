@@ -9,7 +9,7 @@ import {
   bilibiliBindings,
   bindingChallenges,
   verificationRooms,
-} from '../../infrastructure/db/schema.js';
+} from '../../infrastructure/db/schema/index.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
 import type { LiveMessageEvent } from '../bilibili/live-message-source.js';

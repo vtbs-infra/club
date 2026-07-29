@@ -1,0 +1,211 @@
+/* Application shell */
+
+.app-frame {
+  min-height: 100vh;
+}
+
+.topbar {
+  background: rgb(255 255 255 / 92%);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  backdrop-filter: blur(16px);
+}
+
+.topbar-inner {
+  align-items: center;
+  display: flex;
+  height: 68px;
+  margin: 0 auto;
+  max-width: 1440px;
+  padding: 0 2rem;
+}
+
+.brand {
+  align-items: center;
+  color: #145f96;
+  display: inline-flex;
+  font-size: 1.35rem;
+  font-weight: 900;
+  gap: 0.45rem;
+  letter-spacing: -0.04em;
+}
+
+.brand-mark {
+  align-items: center;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  border-radius: 9px;
+  color: white;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  transform: rotate(-6deg);
+  width: 32px;
+}
+
+.brand small {
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-left: 0.25rem;
+  padding-left: 0.7rem;
+}
+
+.main-nav {
+  align-items: stretch;
+  align-self: stretch;
+  display: flex;
+  gap: 0.15rem;
+  margin-left: 3rem;
+}
+
+.nav-link {
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  color: #657086;
+  display: flex;
+  font-size: 0.88rem;
+  font-weight: 650;
+  padding: 0 0.85rem;
+}
+
+.nav-link:hover {
+  color: var(--blue-dark);
+}
+
+.nav-link.active {
+  border-color: var(--blue);
+  color: var(--blue-dark);
+}
+
+.account-menu {
+  margin-left: auto;
+  position: relative;
+}
+
+.account-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.4rem;
+}
+
+.avatar,
+.mini-avatar,
+.large-avatar {
+  align-items: center;
+  background: linear-gradient(135deg, #d7f7ff, #e8edff);
+  border: 1px solid #cce8f5;
+  color: #29729e;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 850;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.avatar,
+.mini-avatar {
+  border-radius: 50%;
+}
+
+.avatar {
+  height: 34px;
+  width: 34px;
+}
+
+.mini-avatar {
+  height: 36px;
+  width: 36px;
+}
+
+.mini-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.large-avatar {
+  border-radius: 18px;
+  font-size: 2rem;
+  height: 78px;
+  width: 78px;
+}
+
+.account-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-popover {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 230px;
+  padding: 0.55rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.6rem);
+}
+
+.account-popover > div {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.35rem;
+  padding: 0.65rem 0.7rem 0.8rem;
+}
+
+.account-popover small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-top: 0.15rem;
+}
+
+.account-popover a,
+.account-popover button {
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  font-size: 0.84rem;
+  padding: 0.65rem 0.7rem;
+  text-align: left;
+}
+
+.account-popover a:hover,
+.account-popover button:hover {
+  background: var(--surface-soft);
+}
+
+.menu-toggle {
+  background: transparent;
+  border: 0;
+  display: none;
+}
+
+.page-shell {
+  margin: 0 auto;
+  max-width: 1360px;
+  min-height: calc(100vh - 130px);
+  padding: 2.2rem 2rem 4rem;
+}
+
+.app-footer {
+  border-top: 1px solid var(--line);
+  color: #8b94a4;
+  font-size: 0.75rem;
+  padding: 1.2rem 2rem;
+  text-align: center;
+}

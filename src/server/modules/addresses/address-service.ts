@@ -4,7 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
-import { addresses } from '../../infrastructure/db/schema.js';
+import { addresses } from '../../infrastructure/db/schema/index.js';
 import { EncryptionError, type EncryptedValue } from '../../infrastructure/encryption/key-ring.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import { AuditService } from '../audit/audit-service.js';
@@ -73,23 +73,13 @@ export class AddressService {
     };
   }
 
-  public async list(userId: string, context: RequestAuditContext) {
+  public async list(userId: string) {
     const rows = await this.database.orm
       .select()
       .from(addresses)
       .where(eq(addresses.userId, userId))
       .orderBy(desc(addresses.isDefault), desc(addresses.updatedAt));
-    const result = rows.map((row) => this.response(row));
-    await this.audit.record({
-      action: 'address.read',
-      actorUserId: context.actorUserId,
-      afterSummary: { count: result.length, source: 'address-book' },
-      ipAddress: context.ipAddress ?? null,
-      requestId: context.requestId ?? null,
-      targetId: userId,
-      targetType: 'user-address-book',
-    });
-    return result;
+    return rows.map((row) => this.response(row));
   }
 
   public async create(userId: string, input: AddressInput, context: RequestAuditContext) {

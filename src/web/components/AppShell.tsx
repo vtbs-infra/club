@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { getIdentity, signOut, type AccountRole, type Identity } from '../api/client';
 import { ApiError } from '../api/http';
@@ -96,12 +96,31 @@ function Shell({
   readonly identity: Identity;
 }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement>(null);
   const navigation =
     area === 'admin' ? adminNavigation : area === 'creator' ? creatorNavigation : userNavigation;
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!accountMenuRef.current?.contains(event.target as Node)) setAccountOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setAccountOpen(false);
+      accountTriggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [accountOpen]);
 
   return (
     <div className={`app-frame frame-${area}`}>
@@ -140,11 +159,13 @@ function Shell({
               </NavLink>
             ))}
           </nav>
-          <div className="account-menu">
+          <div className="account-menu" ref={accountMenuRef}>
             <button
               aria-expanded={accountOpen}
+              aria-haspopup="menu"
               className="account-trigger"
               onClick={() => setAccountOpen((open) => !open)}
+              ref={accountTriggerRef}
               type="button"
             >
               <span className="avatar">
@@ -156,30 +177,39 @@ function Shell({
               <span aria-hidden="true">⌄</span>
             </button>
             {accountOpen ? (
-              <div className="account-popover">
+              <div className="account-popover" role="menu">
                 <div>
                   <strong>{identity.user.name}</strong>
                   <small>{identity.user.email}</small>
                 </div>
                 {area === 'user' ? (
                   <>
-                    <Link onClick={() => setAccountOpen(false)} to="/account">
+                    <Link onClick={() => setAccountOpen(false)} role="menuitem" to="/account">
                       账号
                     </Link>
-                    <Link onClick={() => setAccountOpen(false)} to="/account/bilibili">
+                    <Link
+                      onClick={() => setAccountOpen(false)}
+                      role="menuitem"
+                      to="/account/bilibili"
+                    >
                       B站绑定
                     </Link>
-                    <Link onClick={() => setAccountOpen(false)} to="/account/addresses">
+                    <Link
+                      onClick={() => setAccountOpen(false)}
+                      role="menuitem"
+                      to="/account/addresses"
+                    >
                       收货地址
                     </Link>
                   </>
                 ) : null}
                 <button
+                  role="menuitem"
                   type="button"
                   onClick={async () => {
                     await signOut();
                     queryClient.clear();
-                    await navigate('/login', { replace: true });
+                    window.location.replace('/login');
                   }}
                 >
                   退出登录

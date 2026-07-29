@@ -2,13 +2,12 @@ import { asc, eq } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { verificationRooms } from '../../infrastructure/db/schema.js';
+import { verificationRooms } from '../../infrastructure/db/schema/index.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
 import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
 
 export interface CreateVerificationRoomInput extends RequestAuditContext {
-  readonly biliOwnerUid: string;
   readonly biliRoomId: string;
   readonly displayName: string;
   readonly enabled: boolean;
@@ -16,7 +15,6 @@ export interface CreateVerificationRoomInput extends RequestAuditContext {
 }
 
 export interface UpdateVerificationRoomInput extends RequestAuditContext {
-  readonly biliOwnerUid?: string;
   readonly displayName?: string;
   readonly enabled?: boolean;
   readonly priority?: number;
@@ -39,6 +37,7 @@ export class VerificationRoomService {
     private readonly database: DatabaseService,
     private readonly connections: RoomConnectionManager,
     private readonly onConfigurationChange?: () => void | Promise<void>,
+    private readonly reportError?: (error: unknown, operation: string) => void,
   ) {
     this.audit = new AuditService(database);
   }
@@ -46,7 +45,8 @@ export class VerificationRoomService {
   private async notifyConfigurationChange(): Promise<void> {
     try {
       await this.onConfigurationChange?.();
-    } catch {
+    } catch (error) {
+      this.reportError?.(error, 'verification-room.reconcile');
       // Periodic reconciliation will retry if the database or source is unavailable here.
     }
   }
@@ -64,7 +64,6 @@ export class VerificationRoomService {
         const [room] = await transaction
           .insert(verificationRooms)
           .values({
-            biliOwnerUid: input.biliOwnerUid,
             biliRoomId: input.biliRoomId,
             displayName: input.displayName,
             enabled: input.enabled,
@@ -77,7 +76,6 @@ export class VerificationRoomService {
             action: 'verification-room.created',
             actorUserId: input.actorUserId,
             afterSummary: {
-              biliOwnerUid: room.biliOwnerUid,
               biliRoomId: room.biliRoomId,
               displayName: room.displayName,
               enabled: room.enabled,
@@ -119,7 +117,6 @@ export class VerificationRoomService {
       const [room] = await transaction
         .update(verificationRooms)
         .set({
-          biliOwnerUid: input.biliOwnerUid ?? before.biliOwnerUid,
           displayName: input.displayName ?? before.displayName,
           enabled: input.enabled ?? before.enabled,
           priority: input.priority ?? before.priority,
@@ -133,13 +130,11 @@ export class VerificationRoomService {
           action: 'verification-room.updated',
           actorUserId: input.actorUserId,
           afterSummary: {
-            biliOwnerUid: room.biliOwnerUid,
             displayName: room.displayName,
             enabled: room.enabled,
             priority: room.priority,
           },
           beforeSummary: {
-            biliOwnerUid: before.biliOwnerUid,
             displayName: before.displayName,
             enabled: before.enabled,
             priority: before.priority,

@@ -1,16 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 
 import {
   createManagedAnnouncement,
   deleteManagedAnnouncement,
+  getIdentity,
   getManagedAnnouncements,
   updateManagedAnnouncement,
   type Announcement,
   type ManagedAnnouncementInput,
 } from '../api/client';
+import { dateTimeLocalToIso, isoToDateTimeLocal, PLATFORM_TIME_ZONE } from '../lib/date-time';
 import { formatDate } from '../lib/format';
-import { EmptyState, ErrorState, InlineNotice, LoadingState, StatusBadge } from './Ui';
+import {
+  ConfirmDialog,
+  EmptyState,
+  ErrorNotice,
+  ErrorState,
+  LoadingState,
+  StatusBadge,
+} from './Ui';
 
 const emptyDraft: ManagedAnnouncementInput = {
   body: '',
@@ -23,13 +32,31 @@ const emptyDraft: ManagedAnnouncementInput = {
 
 export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creator' }) {
   const queryClient = useQueryClient();
+  const editorRef = useRef<HTMLFormElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const queryKey = [area, 'announcements'] as const;
   const announcements = useQuery({
     queryFn: () => getManagedAnnouncements(area),
     queryKey,
   });
+  const identity = useQuery({
+    enabled: area === 'creator',
+    queryFn: getIdentity,
+    queryKey: ['identity'],
+  });
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [draft, setDraft] = useState<ManagedAnnouncementInput>(emptyDraft);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
+  const timeZone =
+    area === 'creator'
+      ? (identity.data?.creator?.timezone ?? PLATFORM_TIME_ZONE)
+      : PLATFORM_TIME_ZONE;
+  const focusEditor = () => {
+    requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      titleInputRef.current?.focus();
+    });
+  };
   const reset = () => {
     setEditing(null);
     setDraft(emptyDraft);
@@ -49,7 +76,11 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   });
   const remove = useMutation({
     mutationFn: (id: string) => deleteManagedAnnouncement(area, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: () => {
+      setDeleteConfirmation(null);
+      reset();
+      return queryClient.invalidateQueries({ queryKey });
+    },
   });
 
   if (announcements.isPending) return <LoadingState />;
@@ -63,7 +94,14 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             <h2>公告列表</h2>
             <p>草稿仅自己可见，发布后立即出现在相关用户的资讯中。</p>
           </div>
-          <button className="button secondary" onClick={reset} type="button">
+          <button
+            className="button secondary"
+            onClick={() => {
+              reset();
+              focusEditor();
+            }}
+            type="button"
+          >
             新建公告
           </button>
         </div>
@@ -85,6 +123,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
                     severity: announcement.severity,
                     title: announcement.title,
                   });
+                  focusEditor();
                 }}
                 type="button"
               >
@@ -111,6 +150,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           event.preventDefault();
           save.mutate();
         }}
+        ref={editorRef}
       >
         <div className="section-heading compact">
           <div>
@@ -124,6 +164,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             maxLength={200}
             onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
             required
+            ref={titleInputRef}
             value={draft.title}
           />
         </label>
@@ -160,12 +201,15 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,
-                  expiresAt: event.target.value ? new Date(event.target.value).toISOString() : null,
+                  expiresAt: event.target.value
+                    ? dateTimeLocalToIso(event.target.value, timeZone)
+                    : null,
                 }))
               }
               type="datetime-local"
-              value={draft.expiresAt ? draft.expiresAt.slice(0, 16) : ''}
+              value={draft.expiresAt ? isoToDateTimeLocal(draft.expiresAt, timeZone) : ''}
             />
+            <small>时区：{timeZone}</small>
           </label>
         </div>
         <div className="check-row">
@@ -190,7 +234,8 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             保存后立即发布
           </label>
         </div>
-        {save.isError ? <InlineNotice tone="danger">{save.error.message}</InlineNotice> : null}
+        {save.isError ? <ErrorNotice error={save.error} /> : null}
+        {remove.isError ? <ErrorNotice error={remove.error} /> : null}
         <div className="form-actions">
           <button className="button primary" disabled={save.isPending} type="submit">
             {save.isPending ? '正在保存…' : '保存公告'}
@@ -199,12 +244,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             <button
               className="button ghost danger"
               disabled={remove.isPending}
-              onClick={() => {
-                if (window.confirm('确认删除这份草稿吗？')) {
-                  remove.mutate(editing.id);
-                  reset();
-                }
-              }}
+              onClick={() => setDeleteConfirmation(editing.id)}
               type="button"
             >
               删除草稿
@@ -212,6 +252,18 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           ) : null}
         </div>
       </form>
+      <ConfirmDialog
+        busy={remove.isPending}
+        confirmLabel="删除草稿"
+        description="这份尚未发布的公告草稿会被永久删除。"
+        onCancel={() => setDeleteConfirmation(null)}
+        onConfirm={() => {
+          if (deleteConfirmation) remove.mutate(deleteConfirmation);
+        }}
+        open={deleteConfirmation !== null}
+        title="确认删除公告草稿？"
+        tone="danger"
+      />
     </div>
   );
 }

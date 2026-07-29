@@ -2,51 +2,24 @@ import { randomUUID } from 'node:crypto';
 
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 
+import type {
+  ReleaseInput,
+  ReleasePublishInput,
+  ReleaseUpdateInput,
+} from '../../../shared/contracts/gifts.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
-  giftOrderItems,
-  giftOrders,
   giftPackageItems,
   giftPackages,
   giftReleases,
   giftTierRules,
-  snapshotMembers,
-  snapshotRuns,
-  type GiftOrderPackageSnapshot,
-  type GiftReleaseField,
-  type GuardTier,
-} from '../../infrastructure/db/schema.js';
+} from '../../infrastructure/db/schema/index.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
+import { GiftEligibilityService } from './eligibility-service.js';
 
 const TIERS = ['CAPTAIN', 'ADMIRAL', 'GOVERNOR'] as const;
-const TIER_INDEX: Readonly<Record<GuardTier, number>> = {
-  CAPTAIN: 0,
-  ADMIRAL: 1,
-  GOVERNOR: 2,
-};
-
-export interface ReleasePackageInput {
-  readonly description: string;
-  readonly items: readonly {
-    readonly description: string;
-    readonly name: string;
-    readonly quantity: number;
-  }[];
-  readonly name: string;
-}
-
-export interface ReleaseDraftInput {
-  readonly claimDeadlineAt: string;
-  readonly claimStartAt: string;
-  readonly description: string;
-  readonly eligibilityMonth: string;
-  readonly formFields: readonly GiftReleaseField[];
-  readonly fulfillmentMode: 'HIGHEST_ONLY' | 'CUMULATIVE';
-  readonly packages: readonly ReleasePackageInput[];
-  readonly tierPackageIndexes: Readonly<Record<GuardTier, number>>;
-  readonly title: string;
-}
+export type ReleaseDraftInput = ReleaseInput;
 
 function validateDraft(input: ReleaseDraftInput) {
   if (!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(input.eligibilityMonth)) {
@@ -163,9 +136,11 @@ function uniqueViolation(error: unknown): boolean {
 
 export class GiftReleaseService {
   private readonly audit: AuditService;
+  public readonly eligibility: GiftEligibilityService;
 
   public constructor(private readonly database: DatabaseService) {
     this.audit = new AuditService(database);
+    this.eligibility = new GiftEligibilityService(database);
   }
 
   public list(creatorId: string) {
@@ -307,7 +282,7 @@ export class GiftReleaseService {
   public async update(
     creatorId: string,
     releaseId: string,
-    input: ReleaseDraftInput,
+    input: ReleaseUpdateInput,
     context: RequestAuditContext,
   ) {
     const validated = validateDraft(input);
@@ -327,6 +302,13 @@ export class GiftReleaseService {
             409,
           );
         }
+        if (before.version !== input.expectedVersion) {
+          throw new AppError(
+            'GIFT_RELEASE_VERSION_CONFLICT',
+            'The gift release changed after it was opened. Reload it and try again.',
+            409,
+          );
+        }
         await transaction
           .update(giftReleases)
           .set({
@@ -338,6 +320,7 @@ export class GiftReleaseService {
             fulfillmentMode: input.fulfillmentMode,
             title: validated.title,
             updatedAt: new Date(),
+            version: before.version + 1,
           })
           .where(eq(giftReleases.id, before.id));
         await this.replaceConfiguration(transaction, before.id, input);
@@ -376,61 +359,94 @@ export class GiftReleaseService {
     }
   }
 
-  public async publish(creatorId: string, releaseId: string, context: RequestAuditContext) {
-    await this.database.orm.transaction(async (transaction) => {
-      const [release] = await transaction
-        .select()
-        .from(giftReleases)
-        .where(and(eq(giftReleases.id, releaseId), eq(giftReleases.creatorId, creatorId)))
-        .limit(1)
-        .for('update');
-      if (!release) throw new AppError('GIFT_RELEASE_NOT_FOUND', 'Gift release not found.', 404);
-      if (release.status === 'PUBLISHED') {
-        await this.reconcileRelease(release.id, transaction);
-        return;
-      }
-      if (release.status !== 'DRAFT') {
-        throw new AppError(
-          'GIFT_RELEASE_NOT_PUBLISHABLE',
-          'This release cannot be published.',
-          409,
-        );
-      }
-      const rules = await transaction
-        .select()
-        .from(giftTierRules)
-        .where(eq(giftTierRules.giftReleaseId, release.id));
-      if (new Set(rules.map((rule) => rule.tier)).size !== 3) {
-        throw new AppError(
-          'GIFT_RELEASE_INCOMPLETE',
-          'Every guard tier must have a gift package.',
-          409,
-        );
-      }
-      const now = new Date();
-      await transaction
-        .update(giftReleases)
-        .set({ publishedAt: now, status: 'PUBLISHED', updatedAt: now })
-        .where(eq(giftReleases.id, release.id));
-      const createdOrders = await this.reconcileRelease(release.id, transaction);
-      await this.audit.record(
-        {
-          action: 'gift-release.published',
-          actorUserId: context.actorUserId,
-          afterSummary: {
-            eligibilityMonth: release.eligibilityMonth,
-            generatedOrders: createdOrders,
+  public async publish(
+    creatorId: string,
+    releaseId: string,
+    input: ReleasePublishInput,
+    context: RequestAuditContext,
+  ) {
+    const validated = validateDraft(input);
+    try {
+      await this.database.orm.transaction(async (transaction) => {
+        const [release] = await transaction
+          .select()
+          .from(giftReleases)
+          .where(and(eq(giftReleases.id, releaseId), eq(giftReleases.creatorId, creatorId)))
+          .limit(1)
+          .for('update');
+        if (!release) throw new AppError('GIFT_RELEASE_NOT_FOUND', 'Gift release not found.', 404);
+        if (release.status === 'PUBLISHED') {
+          await this.eligibility.reconcileRelease(release.id, transaction);
+          return;
+        }
+        if (release.status !== 'DRAFT') {
+          throw new AppError(
+            'GIFT_RELEASE_NOT_PUBLISHABLE',
+            'This release cannot be published.',
+            409,
+          );
+        }
+        if (release.version !== input.expectedVersion) {
+          throw new AppError(
+            'GIFT_RELEASE_VERSION_CONFLICT',
+            'The gift release changed after it was opened. Reload it and try again.',
+            409,
+          );
+        }
+
+        await this.replaceConfiguration(transaction, release.id, input);
+        const now = new Date();
+        await transaction
+          .update(giftReleases)
+          .set({
+            claimDeadlineAt: validated.claimDeadlineAt,
+            claimStartAt: validated.claimStartAt,
+            description: validated.description,
+            eligibilityMonth: input.eligibilityMonth,
+            formSchema: input.formFields,
+            fulfillmentMode: input.fulfillmentMode,
+            publishedAt: now,
+            status: 'PUBLISHED',
+            title: validated.title,
+            updatedAt: now,
+            version: release.version + 1,
+          })
+          .where(eq(giftReleases.id, release.id));
+        const createdOrders = await this.eligibility.reconcileRelease(release.id, transaction);
+        await this.audit.record(
+          {
+            action: 'gift-release.published',
+            actorUserId: context.actorUserId,
+            afterSummary: {
+              eligibilityMonth: input.eligibilityMonth,
+              generatedOrders: createdOrders,
+              packageCount: input.packages.length,
+              title: validated.title,
+            },
+            beforeSummary: {
+              eligibilityMonth: release.eligibilityMonth,
+              title: release.title,
+            },
+            creatorId,
+            ipAddress: context.ipAddress,
+            requestId: context.requestId,
+            targetId: release.id,
+            targetType: 'gift-release',
           },
-          creatorId,
-          ipAddress: context.ipAddress,
-          requestId: context.requestId,
-          targetId: release.id,
-          targetType: 'gift-release',
-        },
-        transaction,
-      );
-    });
-    return this.get(creatorId, releaseId);
+          transaction,
+        );
+      });
+      return this.get(creatorId, releaseId);
+    } catch (error) {
+      if (uniqueViolation(error)) {
+        throw new AppError(
+          'GIFT_RELEASE_MONTH_CONFLICT',
+          'This creator already has a gift release for that month.',
+          409,
+        );
+      }
+      throw error;
+    }
   }
 
   public async close(creatorId: string, releaseId: string, context: RequestAuditContext) {
@@ -485,142 +501,5 @@ export class GiftReleaseService {
       targetId: releaseId,
       targetType: 'gift-release',
     });
-  }
-
-  public async reconcileSnapshot(runId: string, executor: AppDatabase): Promise<number> {
-    const [run] = await executor
-      .select({
-        creatorId: snapshotRuns.creatorId,
-        periodStart: snapshotRuns.periodStart,
-        status: snapshotRuns.status,
-      })
-      .from(snapshotRuns)
-      .where(eq(snapshotRuns.id, runId))
-      .limit(1);
-    if (!run || run.status !== 'FINALIZED') return 0;
-    const [release] = await executor
-      .select({ id: giftReleases.id })
-      .from(giftReleases)
-      .where(
-        and(
-          eq(giftReleases.creatorId, run.creatorId),
-          eq(giftReleases.eligibilityMonth, run.periodStart),
-          eq(giftReleases.status, 'PUBLISHED'),
-        ),
-      )
-      .limit(1);
-    return release ? this.reconcileRelease(release.id, executor) : 0;
-  }
-
-  public async reconcileRelease(
-    releaseId: string,
-    executor: AppDatabase = this.database.orm,
-  ): Promise<number> {
-    const [release] = await executor
-      .select()
-      .from(giftReleases)
-      .where(eq(giftReleases.id, releaseId))
-      .limit(1);
-    if (!release || release.status !== 'PUBLISHED') return 0;
-    const [run] = await executor
-      .select({ id: snapshotRuns.id })
-      .from(snapshotRuns)
-      .where(
-        and(
-          eq(snapshotRuns.creatorId, release.creatorId),
-          eq(snapshotRuns.periodStart, release.eligibilityMonth),
-          eq(snapshotRuns.status, 'FINALIZED'),
-        ),
-      )
-      .limit(1);
-    if (!run) return 0;
-    const members = await executor
-      .select()
-      .from(snapshotMembers)
-      .where(eq(snapshotMembers.snapshotRunId, run.id));
-    if (members.length === 0) return 0;
-
-    const packages = await executor
-      .select()
-      .from(giftPackages)
-      .where(eq(giftPackages.giftReleaseId, release.id))
-      .orderBy(asc(giftPackages.sortOrder));
-    const packageIds = packages.map((package_) => package_.id);
-    const [items, rules] = await Promise.all([
-      executor
-        .select()
-        .from(giftPackageItems)
-        .where(inArray(giftPackageItems.giftPackageId, packageIds))
-        .orderBy(asc(giftPackageItems.sortOrder)),
-      executor.select().from(giftTierRules).where(eq(giftTierRules.giftReleaseId, release.id)),
-    ]);
-    const packageById = new Map(packages.map((package_) => [package_.id, package_]));
-    const ruleByTier = new Map(
-      rules.map((rule) => [rule.tier as GuardTier, rule.giftPackageId] as const),
-    );
-    const packageSnapshot = new Map<string, GiftOrderPackageSnapshot>(
-      packages.map((package_) => [
-        package_.id,
-        {
-          description: package_.description,
-          items: items
-            .filter((item) => item.giftPackageId === package_.id)
-            .map((item) => ({
-              description: item.description,
-              name: item.name,
-              quantity: item.quantity,
-            })),
-          name: package_.name,
-        },
-      ]),
-    );
-    const candidates = members.map((member) => ({
-      biliDisplayName: member.displayNameAtSnapshot,
-      biliUid: member.biliUid,
-      creatorId: release.creatorId,
-      expiresAt: release.claimDeadlineAt,
-      giftReleaseId: release.id,
-      id: randomUUID(),
-      orderNumber: `G${release.eligibilityMonth.slice(0, 7).replace('-', '')}-${randomUUID()
-        .slice(0, 8)
-        .toUpperCase()}`,
-      snapshotMemberId: member.id,
-      tier: member.tier,
-      userId: null,
-    }));
-    const inserted = await executor
-      .insert(giftOrders)
-      .values(candidates)
-      .onConflictDoNothing()
-      .returning({
-        id: giftOrders.id,
-        snapshotMemberId: giftOrders.snapshotMemberId,
-        tier: giftOrders.tier,
-      });
-    if (inserted.length === 0) return 0;
-    const candidateByMember = new Map(members.map((member) => [member.id, member] as const));
-    const orderItems = inserted.flatMap((order) => {
-      const member = candidateByMember.get(order.snapshotMemberId);
-      if (!member) throw new Error('Inserted gift order lost its snapshot member.');
-      const tier = member.tier as GuardTier;
-      const eligibleTiers =
-        release.fulfillmentMode === 'CUMULATIVE' ? TIERS.slice(0, TIER_INDEX[tier] + 1) : [tier];
-      const eligiblePackageIds = [
-        ...new Set(eligibleTiers.map((eligibleTier) => ruleByTier.get(eligibleTier))),
-      ].filter((id): id is string => Boolean(id));
-      return eligiblePackageIds.map((giftPackageId, index) => {
-        if (!packageById.has(giftPackageId) || !packageSnapshot.has(giftPackageId)) {
-          throw new Error('Published release contains an invalid tier package.');
-        }
-        return {
-          giftOrderId: order.id,
-          giftPackageId,
-          packageSnapshot: packageSnapshot.get(giftPackageId)!,
-          sortOrder: index,
-        };
-      });
-    });
-    if (orderItems.length > 0) await executor.insert(giftOrderItems).values(orderItems);
-    return inserted.length;
   }
 }

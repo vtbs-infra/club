@@ -52,7 +52,9 @@ Vite 会把 API 与健康检查请求代理到 Fastify。
 | `pnpm build`            | 生成生产服务端和 Web 输出       |
 | `pnpm db:generate`      | 根据 Drizzle Schema 生成迁移    |
 | `pnpm db:migrate`       | 应用迁移                        |
-| `pnpm club`             | 运行 Club CLI                   |
+| `pnpm club`             | 运行开发版 Club CLI             |
+| `pnpm club:prod`        | 运行编译后的 Club CLI           |
+| `pnpm db:migrate:prod`  | 运行编译后的迁移入口            |
 
 ## 代码组织
 
@@ -61,7 +63,7 @@ src/server/app.ts                     应用组装与 Fastify 生命周期
 src/server/config/                    环境变量解析
 src/server/infrastructure/            数据库、加密、日志、安全、存储
 src/server/modules/                   业务模块与 HTTP 路由
-src/shared/                           服务端与 Web 共用类型
+src/shared/contracts/                 TypeBox API Schema 与共用类型
 src/web/api/                          浏览器 API Client
 src/web/components/                   通用界面组件
 src/web/pages/                        路由页面
@@ -118,7 +120,7 @@ throw new AppError('GIFT_ORDER_NOT_CLAIMABLE', 'This gift cannot be claimed.', 4
 约定：
 
 - TanStack Query 管理 API 服务端状态；
-- `src/web/api/client.ts` 定义请求和响应类型；
+- `src/web/api/` 按领域组织请求，并从共享契约取得响应类型；
 - `src/web/api/http.ts` 统一处理凭据、JSON 和 API Error；
 - 表单在提交前显示明确校验错误；
 - 状态修改成功后使相关 Query 失效；
@@ -129,7 +131,7 @@ throw new AppError('GIFT_ORDER_NOT_CLAIMABLE', 'This gift cannot be claimed.', 4
 Schema 位于：
 
 ```text
-src/server/infrastructure/db/schema.ts
+src/server/infrastructure/db/schema/
 ```
 
 修改数据结构后：
@@ -169,16 +171,10 @@ pnpm test
 
 ## PostgreSQL 集成测试
 
-创建隔离测试数据库：
+设置 PostgreSQL 管理连接并运行：
 
 ```powershell
-docker compose exec -T postgres createdb -U club club_test
-```
-
-设置连接并运行：
-
-```powershell
-$env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/club_test'
+$env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 Remove-Item Env:TEST_DATABASE_URL
 ```
@@ -186,7 +182,8 @@ Remove-Item Env:TEST_DATABASE_URL
 集成测试从该连接创建临时数据库，执行迁移后验证认证、UID 绑定、名单、礼物单、状态
 机、数据库触发器和就绪检查。测试完成后会删除自己的临时数据库。
 
-测试地址必须指向可用于创建和删除临时数据库的隔离 PostgreSQL 实例。
+测试地址对应的账号必须具备创建和删除临时数据库的权限。套件只把该 URL 用作管理
+入口，不会清空 URL 中指定的数据库。
 
 ## 浏览器测试
 
@@ -203,7 +200,7 @@ pnpm test:e2e
 ```
 
 该命令先执行生产构建，再启动测试服务并运行 Playwright。E2E 覆盖生产 React Shell、
-健康接口和手机宽度普通用户仪表盘。
+注册反馈、手机仪表盘、默认地址领取、主播当前内容发布和 800px 管理编辑器。
 
 对领取、主播发货或管理员流程进行界面修改时，应增加相应的浏览器场景。
 
@@ -213,7 +210,7 @@ pnpm test:e2e
 pnpm install --frozen-lockfile
 pnpm check
 pnpm test
-$env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/club_test'
+$env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 pnpm build
 pnpm test:e2e

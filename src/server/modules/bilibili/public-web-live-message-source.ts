@@ -212,8 +212,8 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
             .sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime());
           for (const event of events) {
             if (closedByClient || seenHistoryEvents.has(event.eventId)) continue;
+            await Promise.resolve(listener.onMessage(event));
             rememberHistoryEvent(event.eventId);
-            await Promise.resolve(listener.onMessage(event)).catch(() => undefined);
           }
         } catch {
           // WebSocket delivery remains primary; history polling retries on the next interval.

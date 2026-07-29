@@ -1,25 +1,100 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { lazy, Suspense } from 'react';
 import { Link, RouterProvider, createBrowserRouter } from 'react-router-dom';
 
 import { ProtectedLayout, RoleLanding } from '../components/AppShell';
-import { AccountPage, AddressesAccountPage, BilibiliAccountPage } from '../pages/AccountPages';
-import { AnnouncementsPage } from '../pages/AnnouncementsPage';
+import { LoadingState } from '../components/Ui';
 import { AuthPage } from '../pages/AuthPage';
-import { DashboardPage } from '../pages/DashboardPage';
-import { GiftDetailPage } from '../pages/GiftDetailPage';
-import { GiftsPage } from '../pages/GiftsPage';
 import { HomePage } from '../pages/HomePage';
-import { AdminAnnouncementsPage, AdminSystemPage } from '../pages/admin/AdminAuxPages';
-import { AdminCreatorsPage } from '../pages/admin/AdminCreatorsPage';
-import { AdminOverviewPage } from '../pages/admin/AdminOverviewPage';
-import { AdminRostersPage } from '../pages/admin/AdminRostersPage';
-import { AdminVerificationPage } from '../pages/admin/AdminVerificationPage';
-import { CreatorAnnouncementsPage, CreatorSettingsPage } from '../pages/creator/CreatorAuxPages';
-import { CreatorOrderDetailPage } from '../pages/creator/CreatorOrderDetailPage';
-import { CreatorOrdersPage } from '../pages/creator/CreatorOrdersPage';
-import { CreatorOverviewPage } from '../pages/creator/CreatorOverviewPage';
-import { CreatorReleasesPage } from '../pages/creator/CreatorReleasesPage';
-import { ReleaseEditorPage } from '../pages/creator/ReleaseEditorPage';
+
+const AccountPage = lazy(() =>
+  import('../pages/AccountPages').then((module) => ({ default: module.AccountPage })),
+);
+const AddressesAccountPage = lazy(() =>
+  import('../pages/AccountPages').then((module) => ({ default: module.AddressesAccountPage })),
+);
+const BilibiliAccountPage = lazy(() =>
+  import('../pages/AccountPages').then((module) => ({ default: module.BilibiliAccountPage })),
+);
+const AnnouncementsPage = lazy(() =>
+  import('../pages/AnnouncementsPage').then((module) => ({
+    default: module.AnnouncementsPage,
+  })),
+);
+const DashboardPage = lazy(() =>
+  import('../pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
+);
+const GiftDetailPage = lazy(() =>
+  import('../pages/GiftDetailPage').then((module) => ({ default: module.GiftDetailPage })),
+);
+const GiftsPage = lazy(() =>
+  import('../pages/GiftsPage').then((module) => ({ default: module.GiftsPage })),
+);
+const AdminAnnouncementsPage = lazy(() =>
+  import('../pages/admin/AdminAuxPages').then((module) => ({
+    default: module.AdminAnnouncementsPage,
+  })),
+);
+const AdminSystemPage = lazy(() =>
+  import('../pages/admin/AdminAuxPages').then((module) => ({
+    default: module.AdminSystemPage,
+  })),
+);
+const AdminCreatorsPage = lazy(() =>
+  import('../pages/admin/AdminCreatorsPage').then((module) => ({
+    default: module.AdminCreatorsPage,
+  })),
+);
+const AdminOverviewPage = lazy(() =>
+  import('../pages/admin/AdminOverviewPage').then((module) => ({
+    default: module.AdminOverviewPage,
+  })),
+);
+const AdminRostersPage = lazy(() =>
+  import('../pages/admin/AdminRostersPage').then((module) => ({
+    default: module.AdminRostersPage,
+  })),
+);
+const AdminVerificationPage = lazy(() =>
+  import('../pages/admin/AdminVerificationPage').then((module) => ({
+    default: module.AdminVerificationPage,
+  })),
+);
+const CreatorAnnouncementsPage = lazy(() =>
+  import('../pages/creator/CreatorAuxPages').then((module) => ({
+    default: module.CreatorAnnouncementsPage,
+  })),
+);
+const CreatorSettingsPage = lazy(() =>
+  import('../pages/creator/CreatorAuxPages').then((module) => ({
+    default: module.CreatorSettingsPage,
+  })),
+);
+const CreatorOrderDetailPage = lazy(() =>
+  import('../pages/creator/CreatorOrderDetailPage').then((module) => ({
+    default: module.CreatorOrderDetailPage,
+  })),
+);
+const CreatorOrdersPage = lazy(() =>
+  import('../pages/creator/CreatorOrdersPage').then((module) => ({
+    default: module.CreatorOrdersPage,
+  })),
+);
+const CreatorOverviewPage = lazy(() =>
+  import('../pages/creator/CreatorOverviewPage').then((module) => ({
+    default: module.CreatorOverviewPage,
+  })),
+);
+const CreatorReleasesPage = lazy(() =>
+  import('../pages/creator/CreatorReleasesPage').then((module) => ({
+    default: module.CreatorReleasesPage,
+  })),
+);
+const ReleaseEditorPage = lazy(() =>
+  import('../pages/creator/ReleaseEditorPage').then((module) => ({
+    default: module.ReleaseEditorPage,
+  })),
+);
 
 function NotFoundPage() {
   return (
@@ -87,7 +162,9 @@ const router = createBrowserRouter([
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <Suspense fallback={<LoadingState label="正在打开页面…" />}>
+        <RouterProvider router={router} />
+      </Suspense>
     </QueryClientProvider>
   );
 }

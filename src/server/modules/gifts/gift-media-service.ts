@@ -5,7 +5,7 @@ import sharp from 'sharp';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { giftReleases } from '../../infrastructure/db/schema.js';
+import { giftReleases } from '../../infrastructure/db/schema/index.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
 

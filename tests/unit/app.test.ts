@@ -26,8 +26,12 @@ afterEach(async () => {
   await Promise.all(openApps.splice(0).map(async (app) => app.close()));
 });
 
-function fakeDatabase(ping: () => Promise<void>): DatabaseService {
+function fakeDatabase(
+  ping: () => Promise<void>,
+  checkSchema: () => Promise<void> = ping,
+): DatabaseService {
   return {
+    checkSchema,
     close: vi.fn(() => Promise.resolve()),
     orm: {} as AppDatabase,
     ping,
@@ -58,7 +62,12 @@ describe('application factory', () => {
       const ready = await app.inject({ method: 'GET', url: '/health/ready' });
       expect(ready.statusCode).toBe(503);
       expect(ready.json()).toEqual({
-        checks: { database: 'down', storage: 'ok' },
+        checks: {
+          database: 'down',
+          runtimes: 'disabled',
+          schema: 'down',
+          storage: 'ok',
+        },
         status: 'not_ready',
       });
     } finally {
@@ -197,6 +206,15 @@ describe('application factory', () => {
         bindings: {},
         close: bindingClose,
         connections: {},
+        getStatus: () => ({
+          lastErrorAt: null,
+          lastErrorCode: null,
+          lastSuccessAt: null,
+          lastTickAt: null,
+          nextRetryAt: null,
+          startedAt: null,
+          state: 'STOPPED',
+        }),
         rooms: {},
         source: {},
         start: () => Promise.resolve(),
@@ -205,7 +223,16 @@ describe('application factory', () => {
       database: { ...database, close: databaseClose },
       fulfillmentRuntime: {
         close: fulfillmentClose,
-        getStatus: () => ({ configured: false, lastTickAt: null, running: false }),
+        getStatus: () => ({
+          configured: false,
+          lastErrorAt: null,
+          lastErrorCode: null,
+          lastSuccessAt: null,
+          lastTickAt: null,
+          nextRetryAt: null,
+          startedAt: null,
+          state: 'STOPPED',
+        }),
         provider: null,
         service: {},
         start: () => Promise.resolve(),
@@ -213,7 +240,15 @@ describe('application factory', () => {
       } as unknown as FulfillmentRuntime,
       snapshotRuntime: {
         close: snapshotClose,
-        getStatus: () => ({ lastTickAt: null, running: false }),
+        getStatus: () => ({
+          lastErrorAt: null,
+          lastErrorCode: null,
+          lastSuccessAt: null,
+          lastTickAt: null,
+          nextRetryAt: null,
+          startedAt: null,
+          state: 'STOPPED',
+        }),
         service: {},
         source: {},
         start: () => Promise.resolve(),
@@ -227,6 +262,86 @@ describe('application factory', () => {
     expect(snapshotClose).toHaveBeenCalledOnce();
     expect(fulfillmentClose).toHaveBeenCalledOnce();
     expect(databaseClose).not.toHaveBeenCalled();
+    await storage.cleanup();
+  });
+
+  it('rejects readiness when PostgreSQL is reachable but migrations are incomplete', async () => {
+    const storage = await createTemporaryStorage();
+    try {
+      const app = await buildApp({
+        config: createTestConfig(),
+        database: fakeDatabase(
+          () => Promise.resolve(),
+          () => Promise.reject(new Error('schema incomplete')),
+        ),
+        storage: storage.driver,
+      });
+      openApps.push(app);
+      const response = await app.inject({ method: 'GET', url: '/health/ready' });
+      expect(response.statusCode).toBe(503);
+      expect(response.json<ReadinessResponse>()).toMatchObject({
+        checks: { database: 'ok', schema: 'down' },
+        status: 'not_ready',
+      });
+    } finally {
+      await storage.cleanup();
+    }
+  });
+
+  it('starts background runtimes independently and reports a degraded runtime as not ready', async () => {
+    const storage = await createTemporaryStorage();
+    const bindingStart = vi.fn(() => Promise.reject(new Error('binding startup failed')));
+    const snapshotStart = vi.fn(() => Promise.resolve());
+    const fulfillmentStart = vi.fn(() => Promise.resolve());
+    const runtimeStatus = (state: 'DEGRADED' | 'RUNNING') => ({
+      lastErrorAt: state === 'DEGRADED' ? new Date() : null,
+      lastErrorCode: state === 'DEGRADED' ? 'START_FAILED' : null,
+      lastSuccessAt: state === 'RUNNING' ? new Date() : null,
+      lastTickAt: state === 'RUNNING' ? new Date() : null,
+      nextRetryAt: state === 'DEGRADED' ? new Date(Date.now() + 30_000) : null,
+      startedAt: new Date(),
+      state,
+    });
+    const app = await buildApp({
+      bindingRuntime: {
+        bindings: {},
+        close: () => Promise.resolve(),
+        connections: {},
+        getStatus: () => runtimeStatus('DEGRADED'),
+        rooms: {},
+        source: {},
+        start: bindingStart,
+      } as unknown as BindingRuntime,
+      config: createTestConfig(),
+      database: fakeDatabase(() => Promise.resolve()),
+      fulfillmentRuntime: {
+        close: () => undefined,
+        getStatus: () => ({ ...runtimeStatus('RUNNING'), configured: false }),
+        provider: null,
+        service: {},
+        start: fulfillmentStart,
+        tick: () => Promise.resolve(),
+      } as unknown as FulfillmentRuntime,
+      snapshotRuntime: {
+        close: () => undefined,
+        getStatus: () => runtimeStatus('RUNNING'),
+        service: {},
+        source: {},
+        start: snapshotStart,
+        tick: () => Promise.resolve(),
+      } as unknown as SnapshotRuntime,
+      startBackground: true,
+      storage: storage.driver,
+    });
+    openApps.push(app);
+
+    await app.ready();
+    expect(bindingStart).toHaveBeenCalledOnce();
+    expect(snapshotStart).toHaveBeenCalledOnce();
+    expect(fulfillmentStart).toHaveBeenCalledOnce();
+    const ready = await app.inject({ method: 'GET', url: '/health/ready' });
+    expect(ready.statusCode).toBe(503);
+    expect(ready.json<ReadinessResponse>().checks.runtimes).toBe('down');
     await storage.cleanup();
   });
 });

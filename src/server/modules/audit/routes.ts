@@ -1,6 +1,7 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { AuditLogPageSchema } from '../../../shared/contracts/audit.js';
 import type { AppAuth } from '../auth/auth.js';
 import { createRequirePlatformAdmin } from '../auth/guards.js';
 import type { AuditQueryService } from './audit-query-service.js';
@@ -24,7 +25,7 @@ const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = (app, options) => {
     '/api/v1/admin/audit-logs',
     {
       preHandler: requirePlatformAdmin,
-      schema: { querystring: Query, response: { 200: Type.Any() }, tags: ['audit'] },
+      schema: { querystring: Query, response: { 200: AuditLogPageSchema }, tags: ['audit'] },
     },
     (request) =>
       options.service.listPlatform({

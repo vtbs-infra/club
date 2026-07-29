@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { users } from '../../infrastructure/db/schema.js';
+import { users } from '../../infrastructure/db/schema/index.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { AppAuth } from '../auth/auth.js';
 

@@ -60,10 +60,12 @@ docker compose logs --tail 100 postgres
 
 检查：
 
-- PostgreSQL 查询；
-- 对象存储的隔离写入、读取和删除。
+- PostgreSQL 查询和当前迁移版本；
+- 对象存储的隔离写入、读取和删除；
+- B站绑定、名单调度和物流刷新 Runtime 已完成初始化且未长期停止 Tick。
 
-任一检查失败时，实例不具备完整业务处理能力。
+任一技术检查失败时返回非 2xx。没有启用验证直播间属于业务 `NEEDS_SETUP`，管理员仍
+可登录并完成首次配置。
 
 ### `/api/v1/admin/system`
 
@@ -71,7 +73,7 @@ docker compose logs --tail 100 postgres
 
 - 应用版本；
 - 数据库与存储状态；
-- 名单和物流运行时状态；
+- B站绑定、名单和物流运行时状态、最近成功、最近错误与下次重试时间；
 - 名单任务与运单状态计数；
 - 验证直播间状态；
 - 近期名单失败；
@@ -90,7 +92,6 @@ Club 使用 Pino 输出结构化日志。每个 HTTP 请求都有 `x-request-id`
 - Session Cookie 和认证 Token；
 - B站验证码；
 - 收件人姓名、电话和详细地址；
-- SMTP 凭据；
 - 地址加密密钥。
 
 ## 备份范围
@@ -138,7 +139,7 @@ docker compose start app
 2. 启动 PostgreSQL；
 3. 使用 `pg_restore` 恢复数据库；
 4. 恢复匹配的对象存储归档；
-5. 执行 `pnpm db:migrate`；
+5. 使用对应镜像的编译迁移入口应用后续迁移；
 6. 启动一个 Club 应用实例；
 7. 检查 `/health/ready`；
 8. 验证登录、地址解密、名单证据、礼物单和发货记录。
@@ -190,7 +191,7 @@ docker compose up -d app
 
 ```powershell
 docker compose build app
-docker compose run --rm app pnpm db:migrate
+docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d app
 ```
 
@@ -211,7 +212,7 @@ Invoke-RestMethod http://localhost:3000/health/ready
 检查：
 
 - 宿主机到 B站 HTTPS 与 WebSocket 的连接；
-- 直播间 ID 和房主 UID；
+- 直播间 ID 是否正确；
 - 验证直播间是否启用；
 - `/admin/verification` 中的最后连接时间；
 - 应用日志中的请求与连接错误。

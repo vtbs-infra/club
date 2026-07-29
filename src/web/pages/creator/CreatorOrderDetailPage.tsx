@@ -9,8 +9,32 @@ import {
   processCreatorOrder,
   shipCreatorOrder,
 } from '../../api/client';
-import { ErrorState, InlineNotice, LoadingState, StatusBadge } from '../../components/Ui';
+import {
+  ConfirmDialog,
+  ErrorNotice,
+  ErrorState,
+  LoadingState,
+  StatusBadge,
+} from '../../components/Ui';
 import { formatDate, formatMonth, orderStatusLabel, tierLabel } from '../../lib/format';
+
+const carrierCodes: Readonly<Record<string, string>> = {
+  EMS: 'EMS',
+  京东物流: 'JD',
+  圆通速递: 'YTO',
+  申通快递: 'STO',
+  顺丰速运: 'SF',
+  韵达快递: 'YD',
+  中通快递: 'ZTO',
+};
+
+const shipmentStatusLabel: Readonly<Record<string, string>> = {
+  DELIVERED: '已送达',
+  EXCEPTION: '物流异常',
+  IN_TRANSIT: '运输中',
+  LABEL_CREATED: '已录单',
+  OUT_FOR_DELIVERY: '派送中',
+};
 
 export function CreatorOrderDetailPage() {
   const { giftOrderId = '' } = useParams();
@@ -21,9 +45,10 @@ export function CreatorOrderDetailPage() {
     queryKey: ['creator', 'orders', giftOrderId],
   });
   const [carrierName, setCarrierName] = useState('');
-  const [carrierCode, setCarrierCode] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [trackingUrl, setTrackingUrl] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   const update = async (updated: Awaited<ReturnType<typeof getCreatorOrder>>) => {
     queryClient.setQueryData(['creator', 'orders', giftOrderId], updated);
     await queryClient.invalidateQueries({ queryKey: ['creator', 'orders'] });
@@ -35,7 +60,7 @@ export function CreatorOrderDetailPage() {
   const ship = useMutation({
     mutationFn: () =>
       shipCreatorOrder(giftOrderId, {
-        carrierCode,
+        carrierCode: carrierCodes[carrierName.trim()] ?? 'OTHER',
         carrierName,
         trackingNumber,
         ...(trackingUrl ? { trackingUrl } : {}),
@@ -48,7 +73,11 @@ export function CreatorOrderDetailPage() {
   });
   const cancel = useMutation({
     mutationFn: (reason: string) => cancelCreatorOrder(giftOrderId, reason),
-    onSuccess: update,
+    onSuccess: async (updated) => {
+      setCancelOpen(false);
+      setCancelReason('');
+      await update(updated);
+    },
   });
 
   if (order.isPending) return <LoadingState label="正在读取礼物单…" />;
@@ -96,10 +125,7 @@ export function CreatorOrderDetailPage() {
             <button
               className="button ghost danger"
               disabled={cancel.isPending}
-              onClick={() => {
-                const reason = window.prompt('请输入取消原因（用户会看到礼物单已取消）：');
-                if (reason) cancel.mutate(reason);
-              }}
+              onClick={() => setCancelOpen(true)}
               type="button"
             >
               取消礼物单
@@ -107,7 +133,7 @@ export function CreatorOrderDetailPage() {
           ) : null}
         </div>
       </header>
-      {mutationError ? <InlineNotice tone="danger">{mutationError.message}</InlineNotice> : null}
+      {mutationError ? <ErrorNotice error={mutationError} /> : null}
       <div className="order-detail-grid">
         <div className="stack-lg">
           <section className="panel">
@@ -229,20 +255,17 @@ export function CreatorOrderDetailPage() {
               <label>
                 快递公司
                 <input
+                  list="carrier-options"
                   onChange={(event) => setCarrierName(event.target.value)}
                   placeholder="例如：中通快递"
                   required
                   value={carrierName}
                 />
-              </label>
-              <label>
-                快递代码
-                <input
-                  onChange={(event) => setCarrierCode(event.target.value)}
-                  placeholder="例如：ZTO"
-                  required
-                  value={carrierCode}
-                />
+                <datalist id="carrier-options">
+                  {Object.keys(carrierCodes).map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
               </label>
               <label>
                 运单号
@@ -273,7 +296,9 @@ export function CreatorOrderDetailPage() {
                 <div key={shipment.id}>
                   <strong>{shipment.carrierName}</strong>
                   <p>{shipment.trackingNumber}</p>
-                  <StatusBadge status={shipment.status}>{shipment.status}</StatusBadge>
+                  <StatusBadge status={shipment.status}>
+                    {shipmentStatusLabel[shipment.status] ?? '状态更新中'}
+                  </StatusBadge>
                   {shipment.trackingUrl ? (
                     <a href={shipment.trackingUrl} rel="noreferrer" target="_blank">
                       查询物流 →
@@ -285,6 +310,28 @@ export function CreatorOrderDetailPage() {
           ) : null}
         </aside>
       </div>
+      <ConfirmDialog
+        busy={cancel.isPending}
+        confirmDisabled={cancelReason.trim().length < 3}
+        confirmLabel="取消礼物单"
+        description={
+          <label>
+            取消原因
+            <textarea
+              maxLength={500}
+              onChange={(event) => setCancelReason(event.target.value)}
+              placeholder="用户会在礼物单中看到已取消状态"
+              rows={4}
+              value={cancelReason}
+            />
+          </label>
+        }
+        onCancel={() => setCancelOpen(false)}
+        onConfirm={() => cancel.mutate(cancelReason.trim())}
+        open={cancelOpen}
+        title="确认取消这张礼物单？"
+        tone="danger"
+      />
     </div>
   );
 }

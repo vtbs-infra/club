@@ -1,6 +1,12 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import {
+  AddressInputSchema,
+  AddressRecordSchema,
+  AddressUpdateSchema,
+} from '../../../shared/contracts/addresses.js';
+import { IdSchema } from '../../../shared/contracts/common.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
 import { createRequireSession } from '../auth/guards.js';
 import type { AddressService } from './address-service.js';
@@ -10,31 +16,7 @@ interface AddressRoutesOptions {
   readonly service: AddressService;
 }
 
-const Id = Type.String({ format: 'uuid' });
-const Parameters = Type.Object({ addressId: Id });
-const Payload = Type.Object(
-  {
-    city: Type.String({ maxLength: 100 }),
-    countryRegion: Type.String({ maxLength: 100 }),
-    detailedAddress: Type.String({ maxLength: 500 }),
-    district: Type.String({ maxLength: 100 }),
-    phone: Type.String({ maxLength: 40 }),
-    postalCode: Type.String({ maxLength: 20 }),
-    province: Type.String({ maxLength: 100 }),
-    recipientName: Type.String({ maxLength: 100 }),
-    userNote: Type.String({ maxLength: 500 }),
-  },
-  { additionalProperties: false },
-);
-const CreateBody = Type.Object(
-  {
-    isDefault: Type.Boolean(),
-    label: Type.String({ maxLength: 80, minLength: 1 }),
-    payload: Payload,
-  },
-  { additionalProperties: false },
-);
-const UpdateBody = Type.Partial(CreateBody);
+const Parameters = Type.Object({ addressId: IdSchema });
 
 function session(request: { readonly authSession: AuthSession | null }) {
   if (!request.authSession) throw new Error('Authenticated route is missing its session.');
@@ -60,16 +42,20 @@ const addressRoutes: FastifyPluginAsync<AddressRoutesOptions> = (app, options) =
     '/api/v1/me/addresses',
     {
       preHandler: requireSession,
-      schema: { response: { 200: Type.Array(Type.Any()) }, tags: ['addresses'] },
+      schema: { response: { 200: Type.Array(AddressRecordSchema) }, tags: ['addresses'] },
     },
-    (request) => options.service.list(session(request).user.id, context(request)),
+    (request) => options.service.list(session(request).user.id),
   );
 
-  app.post<{ Body: typeof CreateBody.static }>(
+  app.post<{ Body: typeof AddressInputSchema.static }>(
     '/api/v1/me/addresses',
     {
       preHandler: requireSession,
-      schema: { body: CreateBody, response: { 201: Type.Any() }, tags: ['addresses'] },
+      schema: {
+        body: AddressInputSchema,
+        response: { 201: AddressRecordSchema },
+        tags: ['addresses'],
+      },
     },
     async (request, reply) =>
       reply
@@ -79,14 +65,14 @@ const addressRoutes: FastifyPluginAsync<AddressRoutesOptions> = (app, options) =
         ),
   );
 
-  app.patch<{ Body: typeof UpdateBody.static; Params: { addressId: string } }>(
+  app.patch<{ Body: typeof AddressUpdateSchema.static; Params: { addressId: string } }>(
     '/api/v1/me/addresses/:addressId',
     {
       preHandler: requireSession,
       schema: {
-        body: UpdateBody,
+        body: AddressUpdateSchema,
         params: Parameters,
-        response: { 200: Type.Any() },
+        response: { 200: AddressRecordSchema },
         tags: ['addresses'],
       },
     },

@@ -9,7 +9,7 @@ import {
   type AddressPayload,
   type AddressRecord,
 } from '../api/client';
-import { ErrorState, InlineNotice, LoadingState } from './Ui';
+import { ConfirmDialog, ErrorNotice, ErrorState, LoadingState } from './Ui';
 
 const emptyAddress: AddressPayload = {
   city: '',
@@ -122,7 +122,7 @@ export function AddressForm({
           </label>
         ))}
       </div>
-      {save.isError ? <InlineNotice tone="danger">{save.error.message}</InlineNotice> : null}
+      {save.isError ? <ErrorNotice error={save.error} /> : null}
       <div className="form-actions">
         <button className="button primary" disabled={save.isPending} type="submit">
           {save.isPending ? '正在保存…' : initial ? '保存修改' : '保存并使用'}
@@ -142,9 +142,13 @@ export function AddressBook() {
   const addresses = useQuery({ queryFn: getAddresses, queryKey: ['me', 'addresses'] });
   const [editing, setEditing] = useState<AddressRecord | null>(null);
   const [adding, setAdding] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AddressRecord | null>(null);
   const remove = useMutation({
     mutationFn: deleteAddress,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] }),
+    onSuccess: () => {
+      setDeleteTarget(null);
+      return queryClient.invalidateQueries({ queryKey: ['me', 'addresses'] });
+    },
   });
   if (addresses.isPending) return <LoadingState label="正在读取地址…" />;
   if (addresses.isError) return <ErrorState error={addresses.error} />;
@@ -193,11 +197,7 @@ export function AddressBook() {
                 <button
                   className="text-button danger"
                   disabled={remove.isPending}
-                  onClick={() => {
-                    if (window.confirm(`确认删除“${address.label}”吗？`)) {
-                      remove.mutate(address.id);
-                    }
-                  }}
+                  onClick={() => setDeleteTarget(address)}
                   type="button"
                 >
                   删除
@@ -218,11 +218,27 @@ export function AddressBook() {
           <h3>编辑“{editing.label}”</h3>
           <AddressForm
             initial={editing}
+            key={editing.id}
             onCancel={() => setEditing(null)}
             onSaved={() => setEditing(null)}
           />
         </section>
       ) : null}
+      {remove.isError ? <ErrorNotice error={remove.error} /> : null}
+      <ConfirmDialog
+        busy={remove.isPending}
+        confirmLabel="删除地址"
+        description={
+          <>地址簿中的“{deleteTarget?.label}”会被删除。已经提交的礼物单仍保留各自冻结的地址副本。</>
+        }
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) remove.mutate(deleteTarget.id);
+        }}
+        open={deleteTarget !== null}
+        title="确认删除收货地址？"
+        tone="danger"
+      />
     </div>
   );
 }

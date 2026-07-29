@@ -1,6 +1,16 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { IdSchema } from '../../../shared/contracts/common.js';
+import {
+  CreatorInputSchema,
+  CreatorOverviewSchema,
+  CreatorProfileSchema,
+  CreatorRecordSchema,
+  CreatorUpdateSchema,
+  IdentitySchema,
+  UserRecordSchema,
+} from '../../../shared/contracts/creators.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
 import {
   createRequireCreator,
@@ -16,18 +26,6 @@ interface CreatorRoutesOptions {
   readonly service: CreatorService;
 }
 
-const Id = Type.String({ format: 'uuid' });
-const CreatorBody = Type.Object(
-  {
-    bilibiliUid: Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' }),
-    displayName: Type.String({ maxLength: 120, minLength: 1 }),
-    roomId: Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' }),
-    timezone: Type.String({ maxLength: 100, minLength: 1 }),
-    userId: Id,
-  },
-  { additionalProperties: false },
-);
-const CreatorUpdateBody = Type.Partial(Type.Omit(CreatorBody, ['userId']), { minProperties: 1 });
 const OwnUpdateBody = Type.Object(
   {
     displayName: Type.Optional(Type.String({ maxLength: 120, minLength: 1 })),
@@ -61,7 +59,7 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     '/api/v1/me',
     {
       preHandler: requireSession,
-      schema: { response: { 200: Type.Any() }, tags: ['identity'] },
+      schema: { response: { 200: IdentitySchema }, tags: ['identity'] },
     },
     (request) => options.service.getIdentity(session(request).user.id),
   );
@@ -72,7 +70,7 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
       preHandler: requireAdmin,
       schema: {
         querystring: Type.Object({ search: Type.Optional(Type.String({ maxLength: 120 })) }),
-        response: { 200: Type.Array(Type.Any()) },
+        response: { 200: Type.Array(UserRecordSchema) },
         tags: ['admin-creators'],
       },
     },
@@ -83,7 +81,7 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     '/api/v1/admin/creators',
     {
       preHandler: requireAdmin,
-      schema: { response: { 200: Type.Array(Type.Any()) }, tags: ['admin-creators'] },
+      schema: { response: { 200: Type.Array(CreatorRecordSchema) }, tags: ['admin-creators'] },
     },
     () => options.service.listCreators(),
   );
@@ -92,18 +90,18 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     '/api/v1/admin/overview',
     {
       preHandler: requireAdmin,
-      schema: { response: { 200: Type.Any() }, tags: ['admin'] },
+      schema: { response: { 200: CreatorOverviewSchema }, tags: ['admin'] },
     },
     () => options.service.summary(),
   );
 
-  app.post<{ Body: typeof CreatorBody.static }>(
+  app.post<{ Body: typeof CreatorInputSchema.static }>(
     '/api/v1/admin/creators',
     {
       preHandler: requireAdmin,
       schema: {
-        body: CreatorBody,
-        response: { 201: Type.Any() },
+        body: CreatorInputSchema,
+        response: { 201: CreatorRecordSchema },
         tags: ['admin-creators'],
       },
     },
@@ -113,14 +111,14 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
         .send(await options.service.create({ ...context(request), ...request.body })),
   );
 
-  app.patch<{ Body: typeof CreatorUpdateBody.static; Params: { creatorId: string } }>(
+  app.patch<{ Body: typeof CreatorUpdateSchema.static; Params: { creatorId: string } }>(
     '/api/v1/admin/creators/:creatorId',
     {
       preHandler: requireAdmin,
       schema: {
-        body: CreatorUpdateBody,
-        params: Type.Object({ creatorId: Id }),
-        response: { 200: Type.Any() },
+        body: CreatorUpdateSchema,
+        params: Type.Object({ creatorId: IdSchema }),
+        response: { 200: CreatorRecordSchema },
         tags: ['admin-creators'],
       },
     },
@@ -136,7 +134,7 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     '/api/v1/creator/profile',
     {
       preHandler: requireCreator,
-      schema: { response: { 200: Type.Any() }, tags: ['creator'] },
+      schema: { response: { 200: CreatorProfileSchema }, tags: ['creator'] },
     },
     (request) => request.creatorProfile,
   );
@@ -147,7 +145,7 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
       preHandler: requireCreator,
       schema: {
         body: OwnUpdateBody,
-        response: { 200: Type.Any() },
+        response: { 200: CreatorProfileSchema },
         tags: ['creator'],
       },
     },

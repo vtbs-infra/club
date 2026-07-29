@@ -3,7 +3,11 @@ import { eq } from 'drizzle-orm';
 import type { AppConfig } from '../../config/env.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { verificationRooms } from '../../infrastructure/db/schema.js';
+import { verificationRooms } from '../../infrastructure/db/schema/index.js';
+import {
+  RuntimeStatusTracker,
+  type RuntimeStatus,
+} from '../../infrastructure/runtime/runtime-status.js';
 import { FakeLiveMessageSource } from '../bilibili/fake-live-message-source.js';
 import type { LiveMessageSource } from '../bilibili/live-message-source.js';
 import { PublicWebLiveMessageSource } from '../bilibili/public-web-live-message-source.js';
@@ -17,6 +21,7 @@ export interface BindingRuntime {
   readonly rooms: VerificationRoomService;
   readonly source: LiveMessageSource;
   close(): Promise<void>;
+  getStatus(): RuntimeStatus;
   start(): Promise<void>;
 }
 
@@ -26,6 +31,8 @@ export interface CreateBindingRuntimeOptions {
   readonly database: DatabaseService;
   readonly idleGraceMs?: number;
   readonly reconnectDelaysMs?: readonly number[];
+  readonly reportError?: (error: unknown, operation: string) => void;
+  readonly retryDelayMs?: number;
   readonly source?: LiveMessageSource;
 }
 
@@ -65,11 +72,62 @@ export function createBindingRuntime(options: CreateBindingRuntimeOptions): Bind
     connections,
   );
   serviceReference.bindings = bindings;
-  const rooms = new VerificationRoomService(options.database, connections, async () =>
-    bindings.reconcileConnections(),
+  const rooms = new VerificationRoomService(
+    options.database,
+    connections,
+    async () => bindings.reconcileConnections(),
+    options.reportError,
   );
   let interval: ReturnType<typeof setInterval> | null = null;
-  let started = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let starting: Promise<void> | null = null;
+  let closed = false;
+  const retryDelayMs = options.retryDelayMs ?? 30_000;
+  const status = new RuntimeStatusTracker(options.clock);
+
+  const reconcile = async (): Promise<void> => {
+    try {
+      await bindings.reconcileConnections();
+      status.markSuccess();
+    } catch (error) {
+      const nextRetryAt = new Date(options.clock.now().getTime() + retryDelayMs);
+      status.markFailure(error, nextRetryAt);
+      options.reportError?.(error, 'binding.reconcile');
+      throw error;
+    }
+  };
+
+  const scheduleStartRetry = (): void => {
+    if (closed || retryTimer) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void start().catch((error) => options.reportError?.(error, 'binding.retry'));
+    }, retryDelayMs);
+    retryTimer.unref();
+  };
+
+  const start = async (): Promise<void> => {
+    if (closed || interval) return;
+    if (starting) return starting;
+    status.markStarting();
+    starting = (async () => {
+      try {
+        await reconcile();
+        if (closed) return;
+        interval = setInterval(
+          () => void reconcile().catch((error) => options.reportError?.(error, 'binding.timer')),
+          30_000,
+        );
+        interval.unref();
+      } catch (error) {
+        scheduleStartRetry();
+        throw error;
+      } finally {
+        starting = null;
+      }
+    })();
+    return starting;
+  };
 
   return {
     bindings,
@@ -77,18 +135,15 @@ export function createBindingRuntime(options: CreateBindingRuntimeOptions): Bind
     rooms,
     source,
     async close() {
+      closed = true;
       if (interval) clearInterval(interval);
       interval = null;
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
       await connections.close();
+      status.markStopped();
     },
-    async start() {
-      if (started) return;
-      started = true;
-      await bindings.reconcileConnections();
-      interval = setInterval(() => {
-        void bindings.reconcileConnections().catch(() => undefined);
-      }, 30_000);
-      interval.unref();
-    },
+    getStatus: () => status.get(),
+    start,
   };
 }

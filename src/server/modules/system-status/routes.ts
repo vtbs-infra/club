@@ -6,17 +6,21 @@ import {
   ReadinessResponseSchema,
   type ReadinessResponse,
 } from '../../../shared/contracts/health.js';
+import { SystemStatusSchema } from '../../../shared/contracts/system.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import type { AppAuth } from '../auth/auth.js';
 import { createRequirePlatformAdmin } from '../auth/guards.js';
+import type { BindingRuntime } from '../binding/binding-runtime.js';
 import type { FulfillmentRuntime } from '../fulfillment/fulfillment-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 import { SystemStatusService } from './system-status-service.js';
 
 interface SystemStatusOptions {
   readonly auth: AppAuth;
+  readonly backgroundRequired: boolean;
+  readonly bindingRuntime: BindingRuntime;
   readonly clock: Clock;
   readonly database: DatabaseService;
   readonly fulfillmentRuntime: FulfillmentRuntime;
@@ -47,23 +51,43 @@ const systemStatusRoutes: FastifyPluginCallback<SystemStatusOptions> = (app, opt
     '/health/ready',
     {
       schema: {
-        description: 'Readiness check for PostgreSQL and private storage.',
+        description: 'Readiness check for PostgreSQL, schema, storage, and background runtimes.',
         response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema },
         tags: ['system'],
       },
     },
     async (_request, reply) => {
-      const [database, storage] = await Promise.allSettled([
+      const [database, schema, storage] = await Promise.allSettled([
         options.database.ping(),
+        options.database.checkSchema(),
         options.storage.checkHealth(),
       ]);
+      const runtimeStatuses = [
+        options.bindingRuntime.getStatus(),
+        options.snapshotRuntime.getStatus(),
+        options.fulfillmentRuntime.getStatus(),
+      ];
+      const runtimes =
+        options.backgroundRequired &&
+        runtimeStatuses.every((runtime) => runtime.state === 'RUNNING')
+          ? 'ok'
+          : options.backgroundRequired
+            ? 'down'
+            : 'disabled';
       const response: ReadinessResponse = {
         checks: {
           database: database.status === 'fulfilled' ? 'ok' : 'down',
+          runtimes,
+          schema: schema.status === 'fulfilled' ? 'ok' : 'down',
           storage: storage.status === 'fulfilled' ? 'ok' : 'down',
         },
         status:
-          database.status === 'fulfilled' && storage.status === 'fulfilled' ? 'ok' : 'not_ready',
+          database.status === 'fulfilled' &&
+          schema.status === 'fulfilled' &&
+          storage.status === 'fulfilled' &&
+          runtimes !== 'down'
+            ? 'ok'
+            : 'not_ready',
       };
       return reply.status(response.status === 'ok' ? 200 : 503).send(response);
     },
@@ -79,7 +103,7 @@ const systemStatusRoutes: FastifyPluginCallback<SystemStatusOptions> = (app, opt
     '/api/v1/admin/system',
     {
       preHandler: requirePlatformAdmin,
-      schema: { response: { 200: Type.Any() }, tags: ['system'] },
+      schema: { response: { 200: SystemStatusSchema }, tags: ['system'] },
     },
     () => service.platform(),
   );
