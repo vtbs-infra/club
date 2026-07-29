@@ -27,6 +27,8 @@ import { createBindingRuntime, type BindingRuntime } from './modules/binding/bin
 import bindingRoutes from './modules/binding/routes.js';
 import { AnnouncementService } from './modules/announcements/announcement-service.js';
 import announcementRoutes from './modules/announcements/routes.js';
+import { AppearanceService } from './modules/appearance/appearance-service.js';
+import appearanceRoutes from './modules/appearance/routes.js';
 import { AuditQueryService } from './modules/audit/audit-query-service.js';
 import auditRoutes from './modules/audit/routes.js';
 import { CreatorService } from './modules/creators/creator-service.js';
@@ -47,6 +49,9 @@ import {
   type SnapshotRuntime,
 } from './modules/snapshots/snapshot-runtime.js';
 import verificationRoomRoutes from './modules/verification-rooms/routes.js';
+import { SiteAssetsService } from './modules/site-content/site-assets-service.js';
+import { SiteContentService } from './modules/site-content/site-content-service.js';
+import siteContentRoutes from './modules/site-content/routes.js';
 
 const APPLICATION_VERSION = '0.1.0';
 
@@ -98,6 +103,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const creatorService = new CreatorService(database);
   const releaseService = new GiftReleaseService(database);
   const announcementService = new AnnouncementService(database);
+  const appearanceService = new AppearanceService(database, config);
+  const siteContentService = new SiteContentService(database, clock);
+  const siteAssetsService = new SiteAssetsService(database, storage);
   const giftMediaService = new GiftMediaService(database, storage);
   const auditQueryService = new AuditQueryService(database);
   const fulfillmentRuntime =
@@ -242,6 +250,15 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(auditRoutes, {
     auth,
     service: auditQueryService,
+  });
+  await app.register(appearanceRoutes, {
+    auth,
+    service: appearanceService,
+  });
+  await app.register(siteContentRoutes, {
+    assets: siteAssetsService,
+    auth,
+    service: siteContentService,
   });
 
   await app.register(systemStatusRoutes, {

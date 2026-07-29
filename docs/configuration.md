@@ -20,6 +20,7 @@ Copy-Item .env.example .env
 | `HOST`        | `0.0.0.0`              | HTTP 监听地址                           |
 | `PORT`        | `3000`                 | 容器内 HTTP 端口                        |
 | `CLUB_PORT`   | `3000`                 | Compose 映射到宿主机的端口              |
+| `UI_THEME`    | `archive`              | 部署默认主题，见下方“界面主题”          |
 | `LOG_LEVEL`   | `info`                 | Pino 日志级别                           |
 | `TRUST_PROXY` | `false`                | 位于可信反向代理后时设为 `true`         |
 
@@ -27,6 +28,20 @@ Copy-Item .env.example .env
 Better Auth 会拒绝请求并返回 `Invalid origin`。
 
 启用 `TRUST_PROXY` 前应确认应用只通过受控代理访问，否则客户端可伪造转发头。
+
+## 界面主题
+
+`UI_THEME` 只接受以下四个值：
+
+| 值        | 界面方案               |
+| --------- | ---------------------- |
+| `moe`     | 方案 1：超元气补给站   |
+| `neon`    | 方案 2：直播间控制台   |
+| `archive` | 方案 3：舰长礼物档案馆 |
+| `pixel`   | 方案 4：像素补给舰     |
+
+默认值为 `archive`。部署后，平台管理员可以在“主题与外观”页面发布一个全站覆盖值，
+或恢复为 `UI_THEME` 指定的部署默认值。普通用户和主播不能修改全站主题。
 
 ## PostgreSQL
 
@@ -117,7 +132,8 @@ openssl rand -base64 32
 存储内容包括：
 
 - gzip 压缩的名单原始分页证据；
-- 礼物封面 WebP。
+- 礼物封面 WebP；
+- 首页内容系统上传的 WebP 原图与缩略图。
 
 对象键保存于 PostgreSQL，但文件内容不应通过静态目录直接公开。Compose 使用
 `club-storage` 卷保存 `/data/club`。

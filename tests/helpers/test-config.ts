@@ -17,6 +17,7 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
     storageLocalPath: './data/test',
     trackingProvider: 'fake',
     trustProxy: false,
+    uiTheme: 'archive',
     ...overrides,
   };
 }

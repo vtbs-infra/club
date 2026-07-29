@@ -18,6 +18,11 @@ import {
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
+import {
+  defaultSitePageContent,
+  type SiteAdminState,
+  type SiteHomeResponse,
+} from '../../src/shared/site-content.js';
 import { createTestConfig } from '../helpers/test-config.js';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -33,6 +38,13 @@ interface IdentityResponse {
 interface CreatorResponse {
   readonly id: string;
   readonly userId: string;
+}
+
+interface AppearanceResponse {
+  readonly activeTheme: string;
+  readonly deploymentTheme: string;
+  readonly overrideTheme: string | null;
+  readonly version: number;
 }
 
 function cookieFrom(response: LightMyRequestResponse): string {
@@ -172,7 +184,25 @@ integration('exclusive platform roles and creator ownership', () => {
         await app.inject({
           headers: { cookie: recipientCookie },
           method: 'GET',
+          url: '/api/v1/creator/orders/current-month.xlsx',
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          headers: { cookie: recipientCookie },
+          method: 'GET',
           url: '/api/v1/creator/releases',
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          headers: { cookie: adminCookie },
+          method: 'GET',
+          url: '/api/v1/creator/orders/current-month.xlsx',
         })
       ).statusCode,
     ).toBe(403);
@@ -278,5 +308,117 @@ integration('exclusive platform roles and creator ownership', () => {
     });
     expect(ownReleases.json<unknown[]>()).toHaveLength(1);
     expect(otherReleases.json<unknown[]>()).toHaveLength(0);
+
+    const ownExport = await app.inject({
+      headers: { cookie: creatorOneCookie },
+      method: 'GET',
+      url: '/api/v1/creator/orders/current-month.xlsx',
+    });
+    const otherExport = await app.inject({
+      headers: { cookie: creatorTwoCookie },
+      method: 'GET',
+      url: '/api/v1/creator/orders/current-month.xlsx',
+    });
+    expect(ownExport.statusCode, ownExport.body).toBe(200);
+    expect(ownExport.headers['x-export-row-count']).toBe('0');
+    expect(otherExport.statusCode, otherExport.body).toBe(200);
+    expect(otherExport.headers['x-export-row-count']).toBe('0');
+    const injectedCreatorId = await app.inject({
+      headers: { cookie: creatorOneCookie },
+      method: 'GET',
+      query: { creatorId: creatorOne.id },
+      url: '/api/v1/creator/orders/current-month.xlsx',
+    });
+    expect(injectedCreatorId.statusCode).toBe(400);
+  });
+
+  it('publishes administrator-owned appearance and homepage configuration', async () => {
+    const adminCookie = await signIn('admin@example.com');
+    const publicAppearance = await app.inject({
+      method: 'GET',
+      url: '/api/v1/ui-theme',
+    });
+    expect(publicAppearance.json<{ theme: string }>()).toEqual({ theme: 'archive' });
+
+    const appearance = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: '/api/v1/admin/appearance',
+    });
+    expect(appearance.json<AppearanceResponse>()).toMatchObject({
+      activeTheme: 'archive',
+      deploymentTheme: 'archive',
+      overrideTheme: null,
+      version: 0,
+    });
+    const updatedAppearance = await app.inject({
+      headers: { cookie: adminCookie, origin },
+      method: 'PUT',
+      payload: { expectedVersion: 0, theme: 'neon' },
+      url: '/api/v1/admin/appearance',
+    });
+    expect(updatedAppearance.statusCode, updatedAppearance.body).toBe(200);
+    expect(updatedAppearance.json<AppearanceResponse>()).toMatchObject({
+      activeTheme: 'neon',
+      overrideTheme: 'neon',
+      version: 1,
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/ui-theme',
+        })
+      ).json<{ theme: string }>(),
+    ).toEqual({ theme: 'neon' });
+
+    const initialHome = await app.inject({
+      method: 'GET',
+      url: '/api/v1/site/home',
+    });
+    expect(initialHome.json<SiteHomeResponse>().content.site.name).toBe('舰长礼物站');
+    const adminHome = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: '/api/v1/admin/site/home',
+    });
+    expect(adminHome.json<SiteAdminState>().draft.id).toBeNull();
+    const content = structuredClone(defaultSitePageContent);
+    content.site.name = '集成测试舰长站';
+    const draftResponse = await app.inject({
+      headers: { cookie: adminCookie, origin },
+      method: 'PUT',
+      payload: { content, expectedDraftId: null },
+      url: '/api/v1/admin/site/home/draft',
+    });
+    expect(draftResponse.statusCode, draftResponse.body).toBe(200);
+    const draft = draftResponse.json<SiteAdminState>();
+    expect(draft.draft.id).not.toBeNull();
+    expect(draft.draft.content.site.name).toBe('集成测试舰长站');
+
+    const publishResponse = await app.inject({
+      headers: { cookie: adminCookie, origin },
+      method: 'POST',
+      payload: { expectedDraftId: draft.draft.id },
+      url: '/api/v1/admin/site/home/publish',
+    });
+    expect(publishResponse.statusCode, publishResponse.body).toBe(200);
+    const publishedHome = await app.inject({
+      method: 'GET',
+      url: '/api/v1/site/home',
+    });
+    expect(publishedHome.json<SiteHomeResponse>().content.site.name).toBe('集成测试舰长站');
+
+    const unsafeContent = structuredClone(content);
+    const hero = unsafeContent.blocks.find((block) => block.type === 'hero');
+    if (!hero || hero.type !== 'hero') throw new Error('Missing default homepage hero.');
+    hero.content.primaryAction = { href: 'javascript:alert(1)', label: 'Unsafe' };
+    const unsafeDraft = await app.inject({
+      headers: { cookie: adminCookie, origin },
+      method: 'PUT',
+      payload: { content: unsafeContent, expectedDraftId: draft.draft.id },
+      url: '/api/v1/admin/site/home/draft',
+    });
+    expect(unsafeDraft.statusCode).toBe(400);
   });
 });

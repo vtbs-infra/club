@@ -40,7 +40,13 @@ export function createFulfillmentRuntime(input: {
         ? new FakeTrackingProvider(input.clock)
         : null
       : input.provider;
-  const service = new GiftOrderService(input.database, input.encryption, input.addresses, provider);
+  const service = new GiftOrderService(
+    input.database,
+    input.encryption,
+    input.addresses,
+    provider,
+    input.clock,
+  );
   const tracking = new TrackingRefreshService(input.database, provider);
   let interval: ReturnType<typeof setInterval> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;

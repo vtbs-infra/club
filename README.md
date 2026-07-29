@@ -20,7 +20,11 @@ tracking.
 - Automatic and idempotent gift-order generation
 - Address book, encrypted claim snapshots, and configurable claim fields
 - Creator order processing, one shipment per order, and tracking history
+- One-click Excel export of the signed-in creator's current-month guard fulfillment data
 - Platform and creator announcements
+- A publishable fan portal homepage with preview, asset management, and rollback
+- Four deployment/admin-selectable themes, defaulting to scheme 3, “Guard Gift Archive”
+- Chinese and English interface switching, with Chinese as the first-visit default
 - Dedicated recipient, creator, and administrator interfaces
 - Self-hosted TypeScript application with PostgreSQL and local object storage
 
@@ -65,6 +69,18 @@ from the administrator interface.
 
 The complete setup procedure is in
 [Getting started](docs/getting-started.md).
+
+## Data boundaries
+
+Each creator account maps to exactly one creator profile. Creator releases,
+order reads, fulfillment mutations, and Excel exports resolve that profile
+from the authenticated session and never accept another creator ID from the
+client. Exported addresses come from encrypted claim-time snapshots and only
+include the signed-in creator's current-month orders that have been submitted.
+
+Platform administrators manage accounts and site-wide configuration, but the
+creator fulfillment endpoints do not grant them access to creator address
+exports.
 
 ## Documentation
 

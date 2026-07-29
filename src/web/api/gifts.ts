@@ -10,7 +10,7 @@ import type {
   ReleasePublishInput,
   ReleaseUpdateInput,
 } from '../../shared/contracts/gifts';
-import { apiRequest } from './http';
+import { apiDownload, apiRequest } from './http';
 
 export type {
   CreatorOrder,
@@ -107,6 +107,10 @@ export function uploadCreatorReleaseCover(
 
 export function getCreatorOrders(status?: GiftOrderStatus): Promise<readonly GiftOrder[]> {
   return apiRequest(`/api/v1/creator/orders${status ? `?status=${status}` : ''}`);
+}
+
+export function downloadCurrentMonthGuardWorkbook() {
+  return apiDownload('/api/v1/creator/orders/current-month.xlsx');
 }
 
 export function getCreatorOrder(giftOrderId: string): Promise<CreatorOrder> {

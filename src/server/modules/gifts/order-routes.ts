@@ -40,6 +40,23 @@ function context(request: {
   };
 }
 
+function workbookContentDisposition(creatorDisplayName: string, periodStart: string): string {
+  const safeCreatorName =
+    Array.from(creatorDisplayName, (character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code <= 31 || code === 127 || '"*/:<>?\\|'.includes(character) ? '_' : character;
+    })
+      .join('')
+      .trim() || 'creator';
+  const period = periodStart.slice(0, 7);
+  const utf8Name = `${safeCreatorName}-${period}-当月舰长收货名单.xlsx`;
+  const encodedName = encodeURIComponent(utf8Name)
+    .replaceAll("'", '%27')
+    .replaceAll('(', '%28')
+    .replaceAll(')', '%29');
+  return `attachment; filename="guard-addresses-${period}.xlsx"; filename*=UTF-8''${encodedName}`;
+}
+
 const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, options) => {
   const requireSession = createRequireSession(options.auth);
   const requireCreator = createRequireCreator(options.auth, options.database);
@@ -106,6 +123,32 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       },
     },
     (request) => options.service.listForCreator(request.creatorProfile!.id, request.query.status),
+  );
+
+  app.get<{ Querystring: Record<string, never> }>(
+    '/api/v1/creator/orders/current-month.xlsx',
+    {
+      preHandler: requireCreator,
+      schema: {
+        querystring: Type.Object({}, { additionalProperties: false }),
+        response: { 200: Type.Any() },
+        tags: ['creator-orders'],
+      },
+    },
+    async (request, reply) => {
+      const exported = await options.service.exports.exportCurrentMonth(
+        request.creatorProfile!,
+        context(request),
+      );
+      return reply
+        .header(
+          'content-disposition',
+          workbookContentDisposition(exported.creatorDisplayName, exported.periodStart),
+        )
+        .header('x-export-row-count', String(exported.rowCount))
+        .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .send(exported.content);
+    },
   );
 
   app.get<{ Params: { giftOrderId: string } }>(

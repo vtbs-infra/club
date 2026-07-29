@@ -19,7 +19,7 @@ interface ApiErrorBody {
   readonly message?: string;
 }
 
-export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+async function request(path: string, init?: RequestInit): Promise<Response> {
   const isFormData = init?.body instanceof FormData;
   const response = await fetch(path, {
     ...init,
@@ -38,6 +38,25 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
       body.error?.requestId ?? response.headers.get('x-request-id'),
     );
   }
+  return response;
+}
+
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await request(path, init);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+export async function apiDownload(
+  path: string,
+): Promise<{ readonly blob: Blob; readonly filename: string | null; readonly rowCount: number }> {
+  const response = await request(path);
+  const disposition = response.headers.get('content-disposition');
+  const utf8Name = disposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const fallbackName = disposition?.match(/filename="([^"]+)"/i)?.[1];
+  return {
+    blob: await response.blob(),
+    filename: utf8Name ? decodeURIComponent(utf8Name) : fallbackName ? fallbackName : null,
+    rowCount: Number(response.headers.get('x-export-row-count') ?? '0'),
+  };
 }

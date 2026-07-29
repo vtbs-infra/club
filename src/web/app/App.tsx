@@ -6,6 +6,8 @@ import { ProtectedLayout, RoleLanding } from '../components/AppShell';
 import { LoadingState } from '../components/Ui';
 import { AuthPage } from '../pages/AuthPage';
 import { HomePage } from '../pages/HomePage';
+import { I18nProvider } from '../i18n/I18nProvider';
+import { ThemeProvider } from '../theme/ThemeProvider';
 
 const AccountPage = lazy(() =>
   import('../pages/AccountPages').then((module) => ({ default: module.AccountPage })),
@@ -38,6 +40,16 @@ const AdminAnnouncementsPage = lazy(() =>
 const AdminSystemPage = lazy(() =>
   import('../pages/admin/AdminAuxPages').then((module) => ({
     default: module.AdminSystemPage,
+  })),
+);
+const AdminAppearancePage = lazy(() =>
+  import('../pages/admin/AdminAppearancePage').then((module) => ({
+    default: module.AdminAppearancePage,
+  })),
+);
+const AdminSitePage = lazy(() =>
+  import('../pages/admin/AdminSitePage').then((module) => ({
+    default: module.AdminSitePage,
   })),
 );
 const AdminCreatorsPage = lazy(() =>
@@ -153,6 +165,8 @@ const router = createBrowserRouter([
       { element: <AdminRostersPage />, path: '/admin/rosters' },
       { element: <AdminVerificationPage />, path: '/admin/verification' },
       { element: <AdminAnnouncementsPage />, path: '/admin/announcements' },
+      { element: <AdminSitePage />, path: '/admin/site' },
+      { element: <AdminAppearancePage />, path: '/admin/appearance' },
       { element: <AdminSystemPage />, path: '/admin/system' },
     ],
   },
@@ -161,10 +175,14 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Suspense fallback={<LoadingState label="正在打开页面…" />}>
-        <RouterProvider router={router} />
-      </Suspense>
-    </QueryClientProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <Suspense fallback={<LoadingState label="正在打开页面…" />}>
+            <RouterProvider router={router} />
+          </Suspense>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }

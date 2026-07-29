@@ -1,9 +1,21 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
-import { getCreatorOrders, type GiftOrderStatus } from '../../api/client';
-import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../../components/Ui';
+import {
+  downloadCurrentMonthGuardWorkbook,
+  getCreatorOrders,
+  type GiftOrderStatus,
+} from '../../api/client';
+import {
+  EmptyState,
+  ErrorNotice,
+  ErrorState,
+  InlineNotice,
+  LoadingState,
+  PageHeader,
+  StatusBadge,
+} from '../../components/Ui';
 import { formatDate, formatMonth, orderStatusLabel, tierLabel } from '../../lib/format';
 
 const filters: readonly { readonly label: string; readonly value?: GiftOrderStatus }[] = [
@@ -27,6 +39,19 @@ export function CreatorOrdersPage() {
     queryFn: () => getCreatorOrders(status),
     queryKey: ['creator', 'orders', status ?? 'all'],
   });
+  const exportWorkbook = useMutation({
+    mutationFn: downloadCurrentMonthGuardWorkbook,
+    onSuccess: ({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename ?? 'current-month-guard-addresses.xlsx';
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    },
+  });
   if (orders.isPending) return <LoadingState label="正在读取礼物单…" />;
   if (orders.isError) return <ErrorState error={orders.error} />;
   const term = search.trim().toLowerCase();
@@ -45,7 +70,23 @@ export function CreatorOrdersPage() {
         eyebrow="GIFT ORDERS"
         intro="按礼物单状态处理领取信息和发货，不需要接触资格或内部发货标识。"
         title="礼物单"
+        actions={
+          <button
+            className="button secondary"
+            disabled={exportWorkbook.isPending}
+            onClick={() => exportWorkbook.mutate()}
+            type="button"
+          >
+            {exportWorkbook.isPending ? '正在生成 Excel…' : '下载当月舰长地址 Excel'}
+          </button>
+        }
       />
+      {exportWorkbook.error ? <ErrorNotice error={exportWorkbook.error} /> : null}
+      {exportWorkbook.data ? (
+        <InlineNotice tone="success">
+          Excel 已下载，共 {exportWorkbook.data.rowCount} 条属于当前主播的已领取记录。
+        </InlineNotice>
+      ) : null}
       <div className="order-toolbar">
         <div aria-label="按礼物单状态筛选" className="filter-tabs" role="group">
           {filters.map((filter) => (

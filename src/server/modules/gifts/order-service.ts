@@ -1,4 +1,5 @@
 import type { DatabaseService } from '../../infrastructure/db/database.js';
+import { SystemClock, type Clock } from '../../infrastructure/clock/clock.js';
 import type { GiftOrderStatus } from '../../infrastructure/db/schema/index.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import type { AddressService } from '../addresses/address-service.js';
@@ -6,6 +7,7 @@ import type { RequestAuditContext } from '../audit/audit-service.js';
 import type { TrackingProvider } from '../fulfillment/tracking-provider.js';
 import { GiftClaimService } from './claim-service.js';
 import { GiftFulfillmentService } from './fulfillment-service.js';
+import { GuardAddressExportService } from './guard-address-export-service.js';
 import { GiftOrderQueryService } from './order-query-service.js';
 
 type ClaimValue = boolean | string;
@@ -18,6 +20,7 @@ type ClaimValue = boolean | string;
 export class GiftOrderService {
   public readonly claims: GiftClaimService;
   public readonly fulfillment: GiftFulfillmentService;
+  public readonly exports: GuardAddressExportService;
   public readonly queries: GiftOrderQueryService;
 
   public constructor(
@@ -25,9 +28,11 @@ export class GiftOrderService {
     encryption: EncryptionKeyRing,
     addresses: AddressService,
     trackingProvider: TrackingProvider | null,
+    clock: Clock = new SystemClock(),
   ) {
     this.claims = new GiftClaimService(database, encryption, addresses);
     this.fulfillment = new GiftFulfillmentService(database, trackingProvider);
+    this.exports = new GuardAddressExportService(database, encryption, clock);
     this.queries = new GiftOrderQueryService(database, encryption, () =>
       this.claims.expireClaimable(),
     );

@@ -82,6 +82,10 @@ integration('database migration baseline', () => {
         'gift_order_addresses',
         'shipments',
         'announcements',
+        'platform_appearance',
+        'site_pages',
+        'site_page_versions',
+        'site_assets',
       ]) {
         expect(await tableExists(database, table), table).toBe(true);
       }

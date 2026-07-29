@@ -95,6 +95,7 @@ integration('gift order lifecycle', () => {
   let creatorId: string;
   let otherCreatorId: string;
   let creatorUserId: string;
+  let otherCreatorUserId: string;
   let userOneId: string;
   let userTwoId: string;
   let verificationRoomId: string;
@@ -129,6 +130,7 @@ integration('gift order lifecycle', () => {
       return account.id;
     };
     creatorUserId = accountId('creator-one@example.com');
+    otherCreatorUserId = accountId('creator-two@example.com');
     userOneId = accountId('recipient-one@example.com');
     userTwoId = accountId('recipient-two@example.com');
     const creatorRows = await database.orm
@@ -165,7 +167,9 @@ integration('gift order lifecycle', () => {
     });
     addressService = new AddressService(database, encryption);
     releaseService = new GiftReleaseService(database);
-    orderService = new GiftOrderService(database, encryption, addressService, null);
+    orderService = new GiftOrderService(database, encryption, addressService, null, {
+      now: () => new Date('2026-06-20T08:00:00.000Z'),
+    });
   });
 
   afterAll(async () => {
@@ -351,6 +355,13 @@ integration('gift order lifecycle', () => {
       ),
     ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_FOUND' });
     await expect(
+      orderService.markProcessing(
+        otherCreatorId,
+        captainOrder.id,
+        requestContext(otherCreatorUserId, 'cross-creator-process'),
+      ),
+    ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_FOUND' });
+    await expect(
       orderService.complete(
         creatorId,
         captainOrder.id,
@@ -428,6 +439,25 @@ integration('gift order lifecycle', () => {
       requestContext(creatorUserId, 'complete-order'),
     );
     expect((await orderService.getForUser(userTwoId, captainOrder.id)).status).toBe('COMPLETED');
+    const ownWorkbook = await orderService.exports.exportCurrentMonth(
+      {
+        displayName: 'Creator One',
+        id: creatorId,
+        timezone: 'Asia/Shanghai',
+      },
+      requestContext(creatorUserId, 'export-own-orders'),
+    );
+    expect(ownWorkbook.rowCount).toBe(1);
+    expect(ownWorkbook.content.subarray(0, 2).toString('ascii')).toBe('PK');
+    const otherWorkbook = await orderService.exports.exportCurrentMonth(
+      {
+        displayName: 'Creator Two',
+        id: otherCreatorId,
+        timezone: 'Asia/Shanghai',
+      },
+      requestContext(otherCreatorUserId, 'export-other-orders'),
+    );
+    expect(otherWorkbook.rowCount).toBe(0);
 
     const july = await releaseService.create(
       creatorId,
