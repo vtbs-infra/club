@@ -69,6 +69,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 | [技术架构](docs/architecture.md)         | 开发者与代码审查者         |
 | [运维手册](docs/operations.md)           | 生产环境维护者             |
 | [开发指南](docs/development.md)          | 项目贡献者                 |
+| [实施计划](docs/implementation-plan.md)  | 当前开发优先级与验收标准   |
 | [B站集成](docs/integrations/bilibili.md) | 外部接口维护者             |
 
 运行中的实例通过 `/openapi.json` 提供 OpenAPI 3.1 文档。

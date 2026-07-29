@@ -78,6 +78,7 @@ The detailed guides are maintained in Simplified Chinese.
 | [Architecture](docs/architecture.md)                  | Developers and reviewers                 |
 | [Operations](docs/operations.md)                      | Production operators                     |
 | [Development](docs/development.md)                    | Contributors                             |
+| [Implementation plan](docs/implementation-plan.md)    | Current priorities and acceptance gates  |
 | [Bilibili integration](docs/integrations/bilibili.md) | Integration maintainers                  |
 
 A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.
