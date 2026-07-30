@@ -140,7 +140,6 @@ export const giftOrders = pgTable(
     status: text('status').default('CLAIMABLE').notNull(),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
     submittedAt: timestamp('submitted_at', { mode: 'date', withTimezone: true }),
-    processingAt: timestamp('processing_at', { mode: 'date', withTimezone: true }),
     shippedAt: timestamp('shipped_at', { mode: 'date', withTimezone: true }),
     completedAt: timestamp('completed_at', { mode: 'date', withTimezone: true }),
     expiredAt: timestamp('expired_at', { mode: 'date', withTimezone: true }),
@@ -161,7 +160,7 @@ export const giftOrders = pgTable(
     index('gift_orders_creator_status_idx').on(table.creatorId, table.status),
     check(
       'gift_orders_status_check',
-      sql`${table.status} in ('CLAIMABLE', 'SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
+      sql`${table.status} in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
     ),
     check('gift_orders_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
     check('gift_orders_version_positive', sql`${table.version} > 0`),
@@ -261,11 +260,11 @@ export const giftOrderStatusHistory = pgTable(
     index('gift_order_status_history_order_created_idx').on(table.giftOrderId, table.createdAt),
     check(
       'gift_order_status_history_from_check',
-      sql`${table.fromStatus} is null or ${table.fromStatus} in ('CLAIMABLE', 'SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
+      sql`${table.fromStatus} is null or ${table.fromStatus} in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
     ),
     check(
       'gift_order_status_history_to_check',
-      sql`${table.toStatus} in ('CLAIMABLE', 'SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
+      sql`${table.toStatus} in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
     ),
   ],
 );

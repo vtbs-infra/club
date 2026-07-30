@@ -29,7 +29,6 @@ export function CreatorOverviewPage() {
   }
   const activeRelease = releases.data.find((release) => release.status === 'PUBLISHED');
   const waiting = orders.data.filter((order) => order.status === 'SUBMITTED').length;
-  const processing = orders.data.filter((order) => order.status === 'PROCESSING').length;
   const shipped = orders.data.filter((order) => order.status === 'SHIPPED').length;
   const nextRoster = rosters.data
     .filter((roster) => roster.status === 'SCHEDULED')
@@ -57,17 +56,9 @@ export function CreatorOverviewPage() {
         <article>
           <span className="metric-icon">◷</span>
           <div>
-            <small>待开始处理</small>
+            <small>待发货</small>
             <strong>{waiting}</strong>
-            <p>已提交的礼物单</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">⌁</span>
-          <div>
-            <small>处理中</small>
-            <strong>{processing}</strong>
-            <p>等待录入物流</p>
+            <p>等待录入运单</p>
           </div>
         </article>
         <article>
@@ -191,21 +182,14 @@ export function CreatorOverviewPage() {
             进入礼物单 →
           </Link>
         </div>
-        {waiting + processing === 0 ? (
-          <p className="quiet-line">目前没有需要处理的礼物单。</p>
+        {waiting === 0 ? (
+          <p className="quiet-line">目前没有待发货的礼物单。</p>
         ) : (
           <div className="task-strips">
             {waiting > 0 ? (
               <Link to="/creator/orders?status=SUBMITTED">
                 <strong>{waiting}</strong>
-                <span>份新提交等待确认</span>
-                <b>去处理 →</b>
-              </Link>
-            ) : null}
-            {processing > 0 ? (
-              <Link to="/creator/orders?status=PROCESSING">
-                <strong>{processing}</strong>
-                <span>份礼物等待录入物流</span>
+                <span>份礼物等待发货</span>
                 <b>去发货 →</b>
               </Link>
             ) : null}

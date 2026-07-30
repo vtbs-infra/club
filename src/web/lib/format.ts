@@ -5,9 +5,8 @@ export const orderStatusLabel: Readonly<Record<GiftOrderStatus, string>> = {
   CLAIMABLE: '待领取',
   COMPLETED: '已完成',
   EXPIRED: '已过期',
-  PROCESSING: '处理中',
   SHIPPED: '已发货',
-  SUBMITTED: '已提交',
+  SUBMITTED: '待发货',
 };
 
 export const tierLabel: Readonly<Record<GuardTier, string>> = {

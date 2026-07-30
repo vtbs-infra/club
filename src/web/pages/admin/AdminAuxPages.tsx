@@ -32,6 +32,7 @@ const auditActionLabel: Readonly<Record<string, string>> = {
   'creator.updated': '修改主播',
   'gift-order.cancelled': '取消礼物单',
   'gift-order.shipped': '礼物单发货',
+  'gift-release.fulfillment-exported': '导出待发货清单',
   'gift-release.created': '创建礼物草稿',
   'gift-release.published': '发布礼物',
   'snapshot.approved': '确认迟到名单',

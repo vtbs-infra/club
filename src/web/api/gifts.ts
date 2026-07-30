@@ -10,7 +10,7 @@ import type {
   ReleasePublishInput,
   ReleaseUpdateInput,
 } from '../../shared/contracts/gifts';
-import { apiRequest } from './http';
+import { apiDownload, apiRequest } from './http';
 
 export type {
   CreatorOrder,
@@ -113,9 +113,9 @@ export function getCreatorOrder(giftOrderId: string): Promise<CreatorOrder> {
   return apiRequest(`/api/v1/creator/orders/${giftOrderId}`);
 }
 
-export function processCreatorOrder(giftOrderId: string): Promise<CreatorOrder> {
-  return apiRequest(`/api/v1/creator/orders/${giftOrderId}/process`, {
-    body: JSON.stringify({}),
+export function downloadFulfillmentWorkbook(releaseId: string) {
+  return apiDownload('/api/v1/creator/orders/fulfillment-export', {
+    body: JSON.stringify({ releaseId }),
     method: 'POST',
   });
 }

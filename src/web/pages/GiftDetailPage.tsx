@@ -372,8 +372,7 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
       </div>
       <div className="progress-track">
         {[
-          { done: order.submittedAt !== null, label: '已提交', time: order.submittedAt },
-          { done: order.processingAt !== null, label: '处理中', time: order.processingAt },
+          { done: order.submittedAt !== null, label: '已领取', time: order.submittedAt },
           { done: order.shippedAt !== null, label: '已发货', time: order.shippedAt },
           { done: order.completedAt !== null, label: '已完成', time: order.completedAt },
         ].map((step) => (
@@ -421,7 +420,7 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
             ? '这份礼物未在领取期限内提交。'
             : order.status === 'CANCELLED'
               ? '这份礼物单已取消。'
-              : '主播处理后，物流信息会显示在这里。'}
+              : '主播发货后，物流信息会显示在这里。'}
         </p>
       )}
     </section>

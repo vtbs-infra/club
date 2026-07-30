@@ -4,7 +4,7 @@ export type AccountRole = 'USER' | 'CREATOR' | 'PLATFORM_ADMIN';
 export type GuardTier = 'CAPTAIN' | 'ADMIRAL' | 'GOVERNOR';
 export type GiftReleaseStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED';
 export type GiftOrderStatus =
-  'CLAIMABLE' | 'SUBMITTED' | 'PROCESSING' | 'SHIPPED' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
+  'CLAIMABLE' | 'SUBMITTED' | 'SHIPPED' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
 
 export interface GiftReleaseField {
   readonly key: string;

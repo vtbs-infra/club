@@ -48,7 +48,7 @@ docker compose logs --tail 100 postgres
 - `/admin/system` 中的数据库、存储和调度状态；
 - `/admin/verification` 中的直播间健康状态；
 - `/admin/rosters` 中的失败或等待确认任务；
-- 待处理礼物单和到期领取任务。
+- 待发货礼物单和到期领取任务。
 
 ## 健康接口
 

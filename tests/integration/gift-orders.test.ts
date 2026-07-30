@@ -1,19 +1,24 @@
 import { resolve } from 'node:path';
 
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
+import ExcelJS from 'exceljs';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { buildApp } from '../../src/server/app.js';
 import {
   createDatabase,
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
+import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
 import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
 import {
   bilibiliBindings,
   bindingChallenges,
   creators,
+  auditLogs,
   giftOrderItems,
+  giftOrderStatusHistory,
   giftOrders,
   shipments,
   snapshotMembers,
@@ -22,13 +27,16 @@ import {
   verificationRooms,
 } from '../../src/server/infrastructure/db/schema/index.js';
 import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/key-ring.js';
+import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
+import type { AppAuth } from '../../src/server/modules/auth/auth.js';
 import { TrackingRefreshService } from '../../src/server/modules/fulfillment/tracking-refresh-service.js';
 import { GiftOrderService } from '../../src/server/modules/gifts/order-service.js';
 import {
   GiftReleaseService,
   type ReleaseDraftInput,
 } from '../../src/server/modules/gifts/release-service.js';
+import { createTestConfig } from '../helpers/test-config.js';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const integration = testDatabaseUrl ? describe : describe.skip;
@@ -165,7 +173,13 @@ integration('gift order lifecycle', () => {
     });
     addressService = new AddressService(database, encryption);
     releaseService = new GiftReleaseService(database);
-    orderService = new GiftOrderService(database, encryption, addressService, null);
+    orderService = new GiftOrderService(
+      database,
+      encryption,
+      addressService,
+      null,
+      new SystemClock(),
+    );
   });
 
   afterAll(async () => {
@@ -351,6 +365,104 @@ integration('gift order lifecycle', () => {
       ),
     ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_FOUND' });
     await expect(
+      orderService.exportFulfillment(
+        { displayName: 'Creator Two', id: otherCreatorId, timezone: 'Asia/Shanghai' },
+        june.id,
+        requestContext(creatorUserId, 'cross-creator-export'),
+      ),
+    ).rejects.toMatchObject({ code: 'GIFT_RELEASE_NOT_FOUND' });
+    const exported = await orderService.exportFulfillment(
+      { displayName: 'Creator One', id: creatorId, timezone: 'Asia/Shanghai' },
+      june.id,
+      requestContext(creatorUserId, 'export-fulfillment'),
+    );
+    expect(exported.rowCount).toBe(1);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(
+      exported.content as unknown as Parameters<typeof workbook.xlsx.load>[0],
+    );
+    const fulfillmentSheet = workbook.getWorksheet('待发货清单');
+    expect(fulfillmentSheet?.getCell('B2').value).toBe('原收件人');
+    expect(fulfillmentSheet?.getCell('O2').value).toContain('舰长徽章 × 1');
+    expect(fulfillmentSheet?.getCell('R2').value).toBe('蓝色');
+    expect(
+      (
+        await database.orm
+          .select({ status: giftOrders.status })
+          .from(giftOrders)
+          .where(eq(giftOrders.id, captainOrder.id))
+      )[0]?.status,
+    ).toBe('SUBMITTED');
+    expect(
+      (
+        await database.orm
+          .select({ value: count() })
+          .from(auditLogs)
+          .where(
+            and(
+              eq(auditLogs.action, 'gift-release.fulfillment-exported'),
+              eq(auditLogs.targetId, june.id),
+            ),
+          )
+      )[0]?.value,
+    ).toBe(1);
+    const storage = await createTemporaryStorage();
+    const routeApp = await buildApp({
+      auth: {
+        api: {
+          getSession: () =>
+            Promise.resolve({
+              session: {
+                createdAt: new Date(),
+                expiresAt: new Date(Date.now() + 60_000),
+                id: 'route-session',
+                ipAddress: null,
+                token: 'route-token',
+                updatedAt: new Date(),
+                userAgent: null,
+                userId: creatorUserId,
+              },
+              user: {
+                createdAt: new Date(),
+                email: 'creator-one@example.com',
+                emailVerified: true,
+                id: creatorUserId,
+                image: null,
+                name: 'Creator One',
+                role: 'CREATOR',
+                updatedAt: new Date(),
+              },
+            }),
+        },
+        handler: () => Promise.resolve(new Response(null, { status: 404 })),
+      } as unknown as AppAuth,
+      config: createTestConfig(),
+      database,
+      startBackground: false,
+      storage: storage.driver,
+    });
+    try {
+      const download = await routeApp.inject({
+        headers: { origin: 'http://localhost:3000' },
+        method: 'POST',
+        payload: { releaseId: june.id },
+        url: '/api/v1/creator/orders/fulfillment-export',
+      });
+      expect(download.statusCode, download.body).toBe(200);
+      expect(download.headers['content-type']).toContain(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect(download.headers['content-disposition']).toContain(
+        "filename*=UTF-8''Creator%20One-2026-06-",
+      );
+      expect(download.headers['cache-control']).toBe('no-store');
+      expect(download.headers['x-export-row-count']).toBe('1');
+      expect(download.rawPayload.subarray(0, 2).toString()).toBe('PK');
+    } finally {
+      await routeApp.close();
+      await storage.cleanup();
+    }
+    await expect(
       orderService.complete(
         creatorId,
         captainOrder.id,
@@ -358,12 +470,7 @@ integration('gift order lifecycle', () => {
       ),
     ).rejects.toMatchObject({ code: 'GIFT_ORDER_TRANSITION_INVALID' });
 
-    await orderService.markProcessing(
-      creatorId,
-      captainOrder.id,
-      requestContext(creatorUserId, 'process-order'),
-    );
-    const [processing] = await database.orm
+    const [submitted] = await database.orm
       .select({ version: giftOrders.version })
       .from(giftOrders)
       .where(eq(giftOrders.id, captainOrder.id));
@@ -373,7 +480,7 @@ integration('gift order lifecycle', () => {
         .set({
           completedAt: new Date(),
           status: 'COMPLETED',
-          version: processing!.version + 1,
+          version: submitted!.version + 1,
         })
         .where(eq(giftOrders.id, captainOrder.id)),
     ).rejects.toThrow();
@@ -389,6 +496,24 @@ integration('gift order lifecycle', () => {
     );
     expect(shipped.status).toBe('SHIPPED');
     expect(shipped.shipments).toHaveLength(1);
+    expect(
+      (
+        await database.orm
+          .select({
+            fromStatus: giftOrderStatusHistory.fromStatus,
+            toStatus: giftOrderStatusHistory.toStatus,
+          })
+          .from(giftOrderStatusHistory)
+          .where(eq(giftOrderStatusHistory.giftOrderId, captainOrder.id))
+      ).map((transition) => `${transition.fromStatus}->${transition.toStatus}`),
+    ).toContain('SUBMITTED->SHIPPED');
+    await expect(
+      orderService.exportFulfillment(
+        { displayName: 'Creator One', id: creatorId, timezone: 'Asia/Shanghai' },
+        june.id,
+        requestContext(creatorUserId, 'empty-fulfillment-export'),
+      ),
+    ).rejects.toMatchObject({ code: 'FULFILLMENT_EXPORT_EMPTY' });
     await expect(
       orderService.ship(
         creatorId,

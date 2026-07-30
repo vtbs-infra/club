@@ -19,7 +19,7 @@ tracking.
 - Optional monthly gift releases with tier-based packages
 - Automatic and idempotent gift-order generation
 - Address book, encrypted claim snapshots, and configurable claim fields
-- Creator order processing, one shipment per order, and tracking history
+- Release-scoped fulfillment export, one shipment per order, and tracking history
 - Platform and creator announcements
 - Dedicated recipient, creator, and administrator interfaces
 - Self-hosted TypeScript application with PostgreSQL and local object storage
