@@ -12,7 +12,6 @@ import {
 export const GiftOrderStatusSchema = Type.Union([
   Type.Literal('CLAIMABLE'),
   Type.Literal('SUBMITTED'),
-  Type.Literal('PROCESSING'),
   Type.Literal('SHIPPED'),
   Type.Literal('COMPLETED'),
   Type.Literal('EXPIRED'),
@@ -182,7 +181,6 @@ export const GiftOrderSchema = Type.Object({
   id: IdSchema,
   items: Type.Array(GiftOrderItemSchema),
   orderNumber: Type.String(),
-  processingAt: Nullable(DateTimeSchema),
   release: Type.Object({
     claimDeadlineAt: DateTimeSchema,
     claimStartAt: DateTimeSchema,
@@ -235,5 +233,10 @@ export const ShipGiftSchema = Type.Object(
     trackingNumber: Type.String({ maxLength: 160, minLength: 1 }),
     trackingUrl: Type.Optional(Nullable(Type.String({ maxLength: 1_000, pattern: '^https?://' }))),
   },
+  { additionalProperties: false },
+);
+
+export const FulfillmentExportInputSchema = Type.Object(
+  { releaseId: IdSchema },
   { additionalProperties: false },
 );

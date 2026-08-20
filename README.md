@@ -19,8 +19,7 @@ tracking.
 - Optional monthly gift releases with tier-based packages
 - Automatic and idempotent gift-order generation
 - Address book, encrypted claim snapshots, and configurable claim fields
-- Creator order processing, one shipment per order, and tracking history
-- One-click Excel export of the signed-in creator's current-month guard fulfillment data
+- Release-scoped fulfillment export, one shipment per order, and tracking history
 - Platform and creator announcements
 - A publishable fan portal homepage with preview, asset management, and rollback
 - Four deployment/admin-selectable themes, defaulting to scheme 3, “Guard Gift Archive”
@@ -76,7 +75,7 @@ Each creator account maps to exactly one creator profile. Creator releases,
 order reads, fulfillment mutations, and Excel exports resolve that profile
 from the authenticated session and never accept another creator ID from the
 client. Exported addresses come from encrypted claim-time snapshots and only
-include the signed-in creator's current-month orders that have been submitted.
+include submitted orders from the selected release.
 
 Platform administrators manage accounts and site-wide configuration, but the
 creator fulfillment endpoints do not grant them access to creator address

@@ -1,13 +1,13 @@
+import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { SystemClock, type Clock } from '../../infrastructure/clock/clock.js';
 import type { GiftOrderStatus } from '../../infrastructure/db/schema/index.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import type { AddressService } from '../addresses/address-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
 import type { TrackingProvider } from '../fulfillment/tracking-provider.js';
 import { GiftClaimService } from './claim-service.js';
+import { GiftFulfillmentExportService } from './fulfillment-export-service.js';
 import { GiftFulfillmentService } from './fulfillment-service.js';
-import { GuardAddressExportService } from './guard-address-export-service.js';
 import { GiftOrderQueryService } from './order-query-service.js';
 
 type ClaimValue = boolean | string;
@@ -19,8 +19,8 @@ type ClaimValue = boolean | string;
  */
 export class GiftOrderService {
   public readonly claims: GiftClaimService;
+  private readonly exporter: GiftFulfillmentExportService;
   public readonly fulfillment: GiftFulfillmentService;
-  public readonly exports: GuardAddressExportService;
   public readonly queries: GiftOrderQueryService;
 
   public constructor(
@@ -28,11 +28,11 @@ export class GiftOrderService {
     encryption: EncryptionKeyRing,
     addresses: AddressService,
     trackingProvider: TrackingProvider | null,
-    clock: Clock = new SystemClock(),
+    clock: Clock,
   ) {
     this.claims = new GiftClaimService(database, encryption, addresses);
+    this.exporter = new GiftFulfillmentExportService(database, encryption, clock);
     this.fulfillment = new GiftFulfillmentService(database, trackingProvider);
-    this.exports = new GuardAddressExportService(database, encryption, clock);
     this.queries = new GiftOrderQueryService(database, encryption, () =>
       this.claims.expireClaimable(),
     );
@@ -72,8 +72,12 @@ export class GiftOrderService {
     return this.queries.getForCreator(creatorId, orderId, context);
   }
 
-  public markProcessing(creatorId: string, orderId: string, context: RequestAuditContext) {
-    return this.fulfillment.markProcessing(creatorId, orderId, context);
+  public exportFulfillment(
+    creator: { readonly displayName: string; readonly id: string; readonly timezone: string },
+    releaseId: string,
+    context: RequestAuditContext,
+  ) {
+    return this.exporter.exportRelease(creator, releaseId, context);
   }
 
   public complete(creatorId: string, orderId: string, context: RequestAuditContext) {

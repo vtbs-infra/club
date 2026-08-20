@@ -16,7 +16,7 @@ All notable Club changes are documented here. The format follows
   and version rollback.
 - Four deployable themes with a platform-administrator override and scheme 3 as the default.
 - Chinese/English interface switching with Chinese as the first-visit default.
-- Current-month guard fulfillment Excel exports scoped to the signed-in creator.
+- Release-scoped fulfillment Excel exports for submitted orders, scoped to the signed-in creator.
 
 ### Changed
 
@@ -27,8 +27,8 @@ All notable Club changes are documented here. The format follows
 - Order, snapshot, API, database-schema, release-editor, and stylesheet code is split by workflow.
 - Production images contain compiled migration and administrator CLI entry points and production
   dependencies only.
-- Creator fulfillment export routes derive ownership exclusively from the authenticated session and
-  reject client-supplied creator identifiers.
+- Creator fulfillment export routes derive ownership exclusively from the authenticated session,
+  reject client-supplied creator identifiers, and do not change order state.
 
 ### Fixed
 

@@ -158,7 +158,6 @@ test('lands a recipient on the mobile dashboard', async ({ page }) => {
             },
           ],
           orderNumber: 'G202607-TEST0001',
-          processingAt: null,
           release: {
             claimDeadlineAt: '2026-08-31T15:59:00.000Z',
             claimStartAt: '2026-07-01T00:00:00.000Z',
@@ -272,7 +271,6 @@ test('uses the default address and real radio choice when claiming a gift', asyn
       },
     ],
     orderNumber: 'G202607-CLAIM001',
-    processingAt: null,
     release: {
       claimDeadlineAt: '2026-08-31T15:59:00.000Z',
       claimStartAt: '2026-07-01T00:00:00.000Z',
@@ -490,6 +488,129 @@ test('publishes the creator current edits without a separate save', async ({ pag
     title: '当前页面的新标题',
   });
   await expect(page.getByText('已发布')).toBeVisible();
+});
+
+test('exports submitted orders by release without changing the active list filter', async ({
+  page,
+}) => {
+  const releaseId = '00000000-0000-4000-8000-000000000034';
+  let exportInput: Record<string, unknown> | null = null;
+  const release = {
+    claimDeadlineAt: '2099-08-31T15:59:00.000Z',
+    claimStartAt: '2026-07-01T00:00:00.000Z',
+    closedAt: null,
+    coverObjectKey: null,
+    createdAt: '2026-07-20T00:00:00.000Z',
+    description: '七月纪念礼物',
+    eligibilityMonth: '2026-07-01',
+    fulfillmentMode: 'HIGHEST_ONLY',
+    id: releaseId,
+    publishedAt: '2026-07-01T00:00:00.000Z',
+    status: 'PUBLISHED',
+    title: '七月舰长礼物',
+    updatedAt: '2026-07-20T00:00:00.000Z',
+    version: 1,
+  };
+  const order = (id: string, status: 'SHIPPED' | 'SUBMITTED') => ({
+    biliDisplayName: status === 'SUBMITTED' ? '待发货用户' : '已发货用户',
+    biliUid: status === 'SUBMITTED' ? '11001' : '11002',
+    cancelledAt: null,
+    completedAt: null,
+    creator: {
+      displayName: '测试主播',
+      id: '00000000-0000-4000-8000-000000000032',
+    },
+    expiresAt: '2099-08-31T15:59:00.000Z',
+    id,
+    items: [],
+    orderNumber: status === 'SUBMITTED' ? 'G-SUBMITTED' : 'G-SHIPPED',
+    release: {
+      claimDeadlineAt: release.claimDeadlineAt,
+      claimStartAt: release.claimStartAt,
+      coverImageUrl: null,
+      description: release.description,
+      eligibilityMonth: release.eligibilityMonth,
+      formFields: [],
+      id: release.id,
+      title: release.title,
+    },
+    shipments: [],
+    shippedAt: status === 'SHIPPED' ? '2026-07-29T01:00:00.000Z' : null,
+    status,
+    submittedAt: '2026-07-29T00:00:00.000Z',
+    tier: 'CAPTAIN',
+    updatedAt: '2026-07-29T01:00:00.000Z',
+    version: status === 'SUBMITTED' ? 2 : 3,
+  });
+
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/v1/me') {
+      await route.fulfill({
+        body: JSON.stringify({
+          creator: {
+            active: true,
+            bilibiliUid: '90001',
+            displayName: '测试主播',
+            id: '00000000-0000-4000-8000-000000000032',
+            roomId: '80001',
+            timezone: 'Asia/Shanghai',
+          },
+          user: {
+            email: 'creator@example.com',
+            id: '00000000-0000-4000-8000-000000000033',
+            image: null,
+            name: '主播账号',
+            role: 'CREATOR',
+          },
+        }),
+        contentType: 'application/json',
+        status: 200,
+      });
+      return;
+    }
+    if (pathname === '/api/v1/creator/orders/fulfillment-export') {
+      exportInput = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        body: 'workbook',
+        headers: {
+          'content-disposition': 'attachment; filename="fulfillment.xlsx"',
+          'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'x-export-row-count': '1',
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (pathname === '/api/v1/creator/orders') {
+      await route.fulfill({
+        body: JSON.stringify([
+          order('00000000-0000-4000-8000-000000000035', 'SUBMITTED'),
+          order('00000000-0000-4000-8000-000000000036', 'SHIPPED'),
+        ]),
+        contentType: 'application/json',
+        status: 200,
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`${baseUrl}/creator/orders?status=SHIPPED`);
+  await expect(page.getByText('已发货用户')).toBeVisible();
+  await expect(page.getByText('待发货用户')).toHaveCount(0);
+  const exportButton = page.getByRole('button', { name: '导出待发货清单' });
+  await expect(exportButton).toBeEnabled();
+  await exportButton.click();
+  const dialog = page.getByRole('dialog', { name: '导出待发货清单' });
+  await expect(dialog.getByText('领取仍在进行')).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: '导出 1 条' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('fulfillment.xlsx');
+  expect(exportInput).toEqual({ releaseId });
+  await expect(page.getByText('已导出 1 条待发货收货信息。')).toBeVisible();
 });
 
 test('keeps admin creation editors visible and focused at 800px', async ({ page }) => {

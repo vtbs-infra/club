@@ -575,6 +575,10 @@
     padding-inline: 1rem;
   }
 
+  .fan-portal > .portal-header nav > .button {
+    display: inline-flex;
+  }
+
   .home-block-hero,
   .preview-mobile .site-preview-canvas .home-block-hero {
     background-image:

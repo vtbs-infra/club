@@ -3,8 +3,7 @@ export const chineseToEnglish: Readonly<Record<string, string>> = {
   舰长礼物计划: 'Guard Gift Program',
   舰长礼物档案馆: 'Guard Gift Archive',
   欢迎来到舰长礼物站: 'Welcome to the Guard Gift Club',
-  '':
-    'Confirm eligibility, submit delivery details, and follow fulfillment progress.',
+  '': 'Confirm eligibility, submit delivery details, and follow fulfillment progress.',
   '主播品牌展示、粉丝礼物领取和进度查询的统一入口':
     'One portal for creator branding, fan gift claims, and delivery progress',
   '由 Club 提供技术支持': 'Powered by Club',

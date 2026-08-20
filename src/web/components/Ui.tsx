@@ -9,7 +9,9 @@ const errorMessages: Readonly<Record<string, string>> = {
   GIFT_ORDER_NOT_CLAIMABLE: '这份礼物当前不能领取，请刷新页面查看最新状态。',
   GIFT_ORDER_VERSION_CONFLICT: '礼物单状态已经变化，请刷新后再试。',
   GIFT_RELEASE_MONTH_CONFLICT: '这个资格月份已经存在一份礼物发布。',
+  GIFT_RELEASE_NOT_FOUND: '这份礼物发布不存在，或不属于当前主播。',
   GIFT_RELEASE_VERSION_CONFLICT: '礼物草稿已在其他页面被修改，请刷新后再试。',
+  FULFILLMENT_EXPORT_EMPTY: '这份礼物目前没有待发货的礼物单。',
   REQUEST_FAILED: '操作未能完成，请稍后重试。',
   TRACKING_REFRESH_FAILED: '物流服务暂时不可用，请稍后重试。',
 };

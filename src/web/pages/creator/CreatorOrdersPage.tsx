@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import {
-  downloadCurrentMonthGuardWorkbook,
+  downloadFulfillmentWorkbook,
   getCreatorOrders,
   type GiftOrderStatus,
 } from '../../api/client';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorNotice,
   ErrorState,
@@ -21,11 +22,10 @@ import { formatDate, formatMonth, orderStatusLabel, tierLabel } from '../../lib/
 const filters: readonly { readonly label: string; readonly value?: GiftOrderStatus }[] = [
   { label: '全部' },
   { label: '待领取', value: 'CLAIMABLE' },
-  { label: '新提交', value: 'SUBMITTED' },
-  { label: '处理中', value: 'PROCESSING' },
+  { label: '待发货', value: 'SUBMITTED' },
   { label: '已发货', value: 'SHIPPED' },
   { label: '已完成', value: 'COMPLETED' },
-  { label: '已结束', value: 'EXPIRED' },
+  { label: '已过期', value: 'EXPIRED' },
 ];
 
 export function CreatorOrdersPage() {
@@ -35,58 +35,81 @@ export function CreatorOrdersPage() {
     ? (requestedStatus ?? undefined)
     : undefined;
   const [search, setSearch] = useState('');
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportReleaseId, setExportReleaseId] = useState('');
+  const [exportedCount, setExportedCount] = useState<number | null>(null);
   const orders = useQuery({
-    queryFn: () => getCreatorOrders(status),
-    queryKey: ['creator', 'orders', status ?? 'all'],
+    queryFn: () => getCreatorOrders(),
+    queryKey: ['creator', 'orders', 'all'],
   });
   const exportWorkbook = useMutation({
-    mutationFn: downloadCurrentMonthGuardWorkbook,
-    onSuccess: ({ blob, filename }) => {
+    mutationFn: (releaseId: string) => downloadFulfillmentWorkbook(releaseId),
+    onSuccess: ({ blob, filename, rowCount }) => {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = filename ?? 'current-month-guard-addresses.xlsx';
+      anchor.download = filename ?? '待发货清单.xlsx';
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      setExportOpen(false);
+      setExportedCount(rowCount);
     },
   });
   if (orders.isPending) return <LoadingState label="正在读取礼物单…" />;
   if (orders.isError) return <ErrorState error={orders.error} />;
+  const waitingCounts = new Map<string, number>();
+  const waitingReleases = new Map<string, (typeof orders.data)[number]['release']>();
+  for (const order of orders.data) {
+    if (order.status !== 'SUBMITTED') continue;
+    waitingCounts.set(order.release.id, (waitingCounts.get(order.release.id) ?? 0) + 1);
+    waitingReleases.set(order.release.id, order.release);
+  }
+  const exportableReleases = Array.from(waitingReleases.values()).sort((left, right) =>
+    right.eligibilityMonth.localeCompare(left.eligibilityMonth),
+  );
+  const selectedRelease =
+    exportableReleases.find((release) => release.id === exportReleaseId) ??
+    exportableReleases[0] ??
+    null;
+  const selectedCount = selectedRelease ? (waitingCounts.get(selectedRelease.id) ?? 0) : 0;
   const term = search.trim().toLowerCase();
-  const visible = term
-    ? orders.data.filter(
-        (order) =>
-          order.orderNumber.toLowerCase().includes(term) ||
-          (order.biliDisplayName ?? '').toLowerCase().includes(term) ||
-          order.biliUid.includes(term) ||
-          order.release.title.toLowerCase().includes(term),
-      )
-    : orders.data;
+  const visible = orders.data.filter(
+    (order) =>
+      (!status || order.status === status) &&
+      (!term ||
+        order.orderNumber.toLowerCase().includes(term) ||
+        (order.biliDisplayName ?? '').toLowerCase().includes(term) ||
+        order.biliUid.includes(term) ||
+        order.release.title.toLowerCase().includes(term)),
+  );
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="GIFT ORDERS"
-        intro="按礼物单状态处理领取信息和发货，不需要接触资格或内部发货标识。"
-        title="礼物单"
         actions={
           <button
             className="button secondary"
-            disabled={exportWorkbook.isPending}
-            onClick={() => exportWorkbook.mutate()}
+            disabled={exportableReleases.length === 0}
+            onClick={() => {
+              exportWorkbook.reset();
+              setExportReleaseId(selectedRelease?.id ?? '');
+              setExportedCount(null);
+              setExportOpen(true);
+            }}
             type="button"
           >
-            {exportWorkbook.isPending ? '正在生成 Excel…' : '下载当月舰长地址 Excel'}
+            导出待发货清单
           </button>
         }
+        eyebrow="GIFT ORDERS"
+        intro="按礼物单状态处理领取信息和发货，不需要接触资格或内部发货标识。"
+        title="礼物单"
       />
-      {exportWorkbook.error ? <ErrorNotice error={exportWorkbook.error} /> : null}
-      {exportWorkbook.data ? (
-        <InlineNotice tone="success">
-          Excel 已下载，共 {exportWorkbook.data.rowCount} 条属于当前主播的已领取记录。
-        </InlineNotice>
+      {exportedCount !== null ? (
+        <InlineNotice tone="success">已导出 {exportedCount} 条待发货收货信息。</InlineNotice>
       ) : null}
+      {exportWorkbook.isError ? <ErrorNotice error={exportWorkbook.error} /> : null}
       <div className="order-toolbar">
         <div aria-label="按礼物单状态筛选" className="filter-tabs" role="group">
           {filters.map((filter) => (
@@ -113,7 +136,7 @@ export function CreatorOrdersPage() {
         </label>
       </div>
       {visible.length === 0 ? (
-        <EmptyState description="当前筛选条件下没有礼物单。" title="暂无待处理内容" />
+        <EmptyState description="当前筛选条件下没有礼物单。" title="没有符合条件的礼物单" />
       ) : (
         <div className="orders-table-wrap">
           <table className="data-table orders-table">
@@ -159,6 +182,47 @@ export function CreatorOrdersPage() {
           </table>
         </div>
       )}
+      <ConfirmDialog
+        busy={exportWorkbook.isPending}
+        confirmDisabled={!selectedRelease || selectedCount === 0}
+        confirmLabel={`导出 ${selectedCount} 条`}
+        description={
+          <div className="stack-md">
+            <label>
+              礼物发布
+              <select
+                onChange={(event) => setExportReleaseId(event.target.value)}
+                value={selectedRelease?.id ?? ''}
+              >
+                {exportableReleases.map((release) => (
+                  <option key={release.id} value={release.id}>
+                    {formatMonth(release.eligibilityMonth)} · {release.title} ·{' '}
+                    {waitingCounts.get(release.id)} 条
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>文件只包含该礼物发布当前处于“待发货”的礼物单，导出不会改变订单状态。</p>
+            {selectedRelease && new Date(selectedRelease.claimDeadlineAt) > new Date() ? (
+              <InlineNotice tone="warning">
+                领取仍在进行，之后提交的用户不会包含在本次文件中。
+              </InlineNotice>
+            ) : null}
+            <p>文件包含完整收件人、电话和地址，请仅用于本次礼物发货。</p>
+          </div>
+        }
+        onCancel={() => {
+          if (!exportWorkbook.isPending) {
+            exportWorkbook.reset();
+            setExportOpen(false);
+          }
+        }}
+        onConfirm={() => {
+          if (selectedRelease) exportWorkbook.mutate(selectedRelease.id);
+        }}
+        open={exportOpen}
+        title="导出待发货清单"
+      />
     </div>
   );
 }

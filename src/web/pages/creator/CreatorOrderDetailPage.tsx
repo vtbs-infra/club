@@ -6,7 +6,6 @@ import {
   cancelCreatorOrder,
   completeCreatorOrder,
   getCreatorOrder,
-  processCreatorOrder,
   shipCreatorOrder,
 } from '../../api/client';
 import {
@@ -53,10 +52,6 @@ export function CreatorOrderDetailPage() {
     queryClient.setQueryData(['creator', 'orders', giftOrderId], updated);
     await queryClient.invalidateQueries({ queryKey: ['creator', 'orders'] });
   };
-  const process = useMutation({
-    mutationFn: () => processCreatorOrder(giftOrderId),
-    onSuccess: update,
-  });
   const ship = useMutation({
     mutationFn: () =>
       shipCreatorOrder(giftOrderId, {
@@ -83,7 +78,7 @@ export function CreatorOrderDetailPage() {
   if (order.isPending) return <LoadingState label="正在读取礼物单…" />;
   if (order.isError || !order.data) return <ErrorState error={order.error} />;
   const data = order.data;
-  const mutationError = process.error ?? ship.error ?? complete.error ?? cancel.error;
+  const mutationError = ship.error ?? complete.error ?? cancel.error;
   return (
     <div className="stack-lg">
       <Link className="back-link" to="/creator/orders">
@@ -101,16 +96,6 @@ export function CreatorOrderDetailPage() {
           </p>
         </div>
         <div className="page-actions">
-          {data.status === 'SUBMITTED' ? (
-            <button
-              className="button secondary"
-              disabled={process.isPending}
-              onClick={() => process.mutate()}
-              type="button"
-            >
-              开始处理
-            </button>
-          ) : null}
           {data.status === 'SHIPPED' ? (
             <button
               className="button secondary"
@@ -121,7 +106,7 @@ export function CreatorOrderDetailPage() {
               标记已完成
             </button>
           ) : null}
-          {data.status === 'SUBMITTED' || data.status === 'PROCESSING' ? (
+          {data.status === 'SUBMITTED' ? (
             <button
               className="button ghost danger"
               disabled={cancel.isPending}
@@ -239,7 +224,7 @@ export function CreatorOrderDetailPage() {
               </div>
             </dl>
           </section>
-          {data.status === 'SUBMITTED' || data.status === 'PROCESSING' ? (
+          {data.status === 'SUBMITTED' ? (
             <form
               className="panel shipment-form"
               onSubmit={(event: FormEvent) => {

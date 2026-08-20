@@ -184,25 +184,7 @@ integration('exclusive platform roles and creator ownership', () => {
         await app.inject({
           headers: { cookie: recipientCookie },
           method: 'GET',
-          url: '/api/v1/creator/orders/current-month.xlsx',
-        })
-      ).statusCode,
-    ).toBe(403);
-    expect(
-      (
-        await app.inject({
-          headers: { cookie: recipientCookie },
-          method: 'GET',
           url: '/api/v1/creator/releases',
-        })
-      ).statusCode,
-    ).toBe(403);
-    expect(
-      (
-        await app.inject({
-          headers: { cookie: adminCookie },
-          method: 'GET',
-          url: '/api/v1/creator/orders/current-month.xlsx',
         })
       ).statusCode,
     ).toBe(403);
@@ -308,28 +290,6 @@ integration('exclusive platform roles and creator ownership', () => {
     });
     expect(ownReleases.json<unknown[]>()).toHaveLength(1);
     expect(otherReleases.json<unknown[]>()).toHaveLength(0);
-
-    const ownExport = await app.inject({
-      headers: { cookie: creatorOneCookie },
-      method: 'GET',
-      url: '/api/v1/creator/orders/current-month.xlsx',
-    });
-    const otherExport = await app.inject({
-      headers: { cookie: creatorTwoCookie },
-      method: 'GET',
-      url: '/api/v1/creator/orders/current-month.xlsx',
-    });
-    expect(ownExport.statusCode, ownExport.body).toBe(200);
-    expect(ownExport.headers['x-export-row-count']).toBe('0');
-    expect(otherExport.statusCode, otherExport.body).toBe(200);
-    expect(otherExport.headers['x-export-row-count']).toBe('0');
-    const injectedCreatorId = await app.inject({
-      headers: { cookie: creatorOneCookie },
-      method: 'GET',
-      query: { creatorId: creatorOne.id },
-      url: '/api/v1/creator/orders/current-month.xlsx',
-    });
-    expect(injectedCreatorId.statusCode).toBe(400);
   });
 
   it('publishes administrator-owned appearance and homepage configuration', async () => {

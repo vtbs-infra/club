@@ -19,7 +19,7 @@ interface ApiErrorBody {
   readonly message?: string;
 }
 
-async function request(path: string, init?: RequestInit): Promise<Response> {
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const isFormData = init?.body instanceof FormData;
   const response = await fetch(path, {
     ...init,
@@ -29,34 +29,44 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
       ...init?.headers,
     },
   });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
-    throw new ApiError(
-      body.error?.message ?? body.message ?? '请求未能完成，请稍后重试。',
-      response.status,
-      body.error?.code,
-      body.error?.requestId ?? response.headers.get('x-request-id'),
-    );
-  }
-  return response;
+  if (response.ok) return response;
+  const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
+  throw new ApiError(
+    body.error?.message ?? body.message ?? '请求未能完成，请稍后重试。',
+    response.status,
+    body.error?.code,
+    body.error?.requestId ?? response.headers.get('x-request-id'),
+  );
 }
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await request(path, init);
+  const response = await apiFetch(path, init);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
+function downloadFilename(value: string | null): string | null {
+  if (!value) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(value)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return null;
+    }
+  }
+  return /filename="([^"]+)"/i.exec(value)?.[1] ?? null;
+}
+
 export async function apiDownload(
   path: string,
+  init?: RequestInit,
 ): Promise<{ readonly blob: Blob; readonly filename: string | null; readonly rowCount: number }> {
-  const response = await request(path);
-  const disposition = response.headers.get('content-disposition');
-  const utf8Name = disposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-  const fallbackName = disposition?.match(/filename="([^"]+)"/i)?.[1];
+  const response = await apiFetch(path, init);
+  const parsedRowCount = Number(response.headers.get('x-export-row-count'));
   return {
     blob: await response.blob(),
-    filename: utf8Name ? decodeURIComponent(utf8Name) : fallbackName ? fallbackName : null,
-    rowCount: Number(response.headers.get('x-export-row-count') ?? '0'),
+    filename: downloadFilename(response.headers.get('content-disposition')),
+    rowCount: Number.isSafeInteger(parsedRowCount) && parsedRowCount >= 0 ? parsedRowCount : 0,
   };
 }

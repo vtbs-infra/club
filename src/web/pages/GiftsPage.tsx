@@ -9,7 +9,7 @@ const filters: readonly { readonly label: string; readonly values: readonly Gift
   [
     { label: '全部', values: [] },
     { label: '待领取', values: ['CLAIMABLE'] },
-    { label: '处理中', values: ['SUBMITTED', 'PROCESSING'] },
+    { label: '等待发货', values: ['SUBMITTED'] },
     { label: '已发货', values: ['SHIPPED'] },
     { label: '已完成', values: ['COMPLETED'] },
     { label: '已结束', values: ['EXPIRED', 'CANCELLED'] },

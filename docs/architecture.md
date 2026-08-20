@@ -65,7 +65,7 @@ HTTP 路由只负责会话守卫、Schema、参数转换和状态码。跨表写
 | 身份             | 入口         | 主要能力                               |
 | ---------------- | ------------ | -------------------------------------- |
 | `USER`           | `/dashboard` | 绑定 UID、查看公告、领取礼物、管理地址 |
-| `CREATOR`        | `/creator`   | 发布礼物、查看名单、处理和发货         |
+| `CREATOR`        | `/creator`   | 发布礼物、查看名单、导出履约信息和发货 |
 | `PLATFORM_ADMIN` | `/admin`     | 注册主播、配置验证房间、审查名单和系统 |
 
 Better Auth 管理邮箱密码凭据和会话。`createRequireSession`、
@@ -183,14 +183,20 @@ Better Auth 管理邮箱密码凭据和会话。`createRequireSession`、
 每张礼物单最多有一张 `shipments` 记录。
 
 ```text
-CLAIMABLE -> SUBMITTED -> PROCESSING -> SHIPPED -> COMPLETED
+CLAIMABLE -> SUBMITTED -> SHIPPED -> COMPLETED
      |            |
      -> EXPIRED    -> CANCELLED
 ```
 
-从 `SUBMITTED` 直接发货时，事务先补记 `PROCESSING` 历史，再创建运单并进入
-`SHIPPED`。物流 Runtime 只刷新到期运单，幂等写入 Provider 事件；确认送达后推进对应
-订单到 `COMPLETED`。连续失败次数、最近错误和下次刷新时间保存在运单上。
+`SUBMITTED` 同时是用户侧的“等待发货”和主播侧的“待发货”。主播创建运单时，礼物单
+在同一事务内直接进入 `SHIPPED`，状态历史只记录真实发生的转换。物流 Runtime 只刷新
+到期运单，幂等写入 Provider 事件；确认送达后推进对应订单到 `COMPLETED`。连续失败
+次数、最近错误和下次刷新时间保存在运单上。
+
+履约导出以礼物发布为边界，在只读、可重复读事务中读取该主播当前所有 `SUBMITTED`
+礼物单及其冻结地址、礼包快照和领取字段，事务结束后生成 XLSX。导出不创建批次、不占用
+对象存储，也不推进订单；审计日志只记录礼物发布、行数、生成时间和文件哈希，不记录
+明文个人信息。
 
 ## Runtime 与健康状态
 
@@ -261,9 +267,9 @@ Drizzle 定义位于 `src/server/infrastructure/db/schema/`，统一从 `index.t
 React Router 根据身份提供三个清晰区域。受保护页面按路由懒加载；TanStack Query 管理
 服务端状态，页面本地状态只保存尚未提交的编辑内容。
 
-全局 Shell 负责导航、账号菜单和错误边界。关键交互使用站内对话框，支持 Escape、焦点
-返回和 Tab 循环。样式保持语义化 CSS，并按 token、基础、Shell、公开页面、普通用户、
-管理工作区和响应式规则拆分。
+全局 Shell 负责导航、账号菜单和错误边界。对话框和菜单使用 Radix 无头原语，支持
+Escape、焦点返回和 Tab 循环；视觉样式仍由语义化 CSS 提供，并按 token、基础、Shell、
+公开页面、普通用户、管理工作区和响应式规则拆分。
 
 ## 部署边界
 

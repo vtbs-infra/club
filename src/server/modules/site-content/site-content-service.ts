@@ -164,12 +164,7 @@ export class SiteContentService {
         })
         .from(giftOrders)
         .innerJoin(giftReleases, eq(giftReleases.id, giftOrders.giftReleaseId))
-        .where(
-          and(
-            orderAccess,
-            inArray(giftOrders.status, ['SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED']),
-          ),
-        )
+        .where(and(orderAccess, inArray(giftOrders.status, ['SUBMITTED', 'SHIPPED', 'COMPLETED'])))
         .orderBy(desc(giftOrders.updatedAt))
         .limit(1);
       user = {

@@ -109,17 +109,13 @@ export function getCreatorOrders(status?: GiftOrderStatus): Promise<readonly Gif
   return apiRequest(`/api/v1/creator/orders${status ? `?status=${status}` : ''}`);
 }
 
-export function downloadCurrentMonthGuardWorkbook() {
-  return apiDownload('/api/v1/creator/orders/current-month.xlsx');
-}
-
 export function getCreatorOrder(giftOrderId: string): Promise<CreatorOrder> {
   return apiRequest(`/api/v1/creator/orders/${giftOrderId}`);
 }
 
-export function processCreatorOrder(giftOrderId: string): Promise<CreatorOrder> {
-  return apiRequest(`/api/v1/creator/orders/${giftOrderId}/process`, {
-    body: JSON.stringify({}),
+export function downloadFulfillmentWorkbook(releaseId: string) {
+  return apiDownload('/api/v1/creator/orders/fulfillment-export', {
+    body: JSON.stringify({ releaseId }),
     method: 'POST',
   });
 }

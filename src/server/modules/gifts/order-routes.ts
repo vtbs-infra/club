@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
 import {
   CreatorOrderSchema,
+  FulfillmentExportInputSchema,
   GiftOrderSchema,
   GiftOrderStatusSchema,
   ShipGiftSchema,
@@ -40,21 +41,35 @@ function context(request: {
   };
 }
 
-function workbookContentDisposition(creatorDisplayName: string, periodStart: string): string {
-  const safeCreatorName =
-    Array.from(creatorDisplayName, (character) => {
+function safeFilePart(value: string): string {
+  return (
+    Array.from(value, (character) => {
       const code = character.codePointAt(0) ?? 0;
       return code <= 31 || code === 127 || '"*/:<>?\\|'.includes(character) ? '_' : character;
     })
       .join('')
-      .trim() || 'creator';
-  const period = periodStart.slice(0, 7);
-  const utf8Name = `${safeCreatorName}-${period}-当月舰长收货名单.xlsx`;
+      .trim()
+      .slice(0, 80) || 'gift'
+  );
+}
+
+function workbookContentDisposition(input: {
+  readonly creatorDisplayName: string;
+  readonly eligibilityMonth: string;
+  readonly generatedAt: Date;
+  readonly releaseTitle: string;
+}): string {
+  const month = input.eligibilityMonth.slice(0, 7);
+  const timestamp = input.generatedAt
+    .toISOString()
+    .replaceAll(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
+  const utf8Name = `${safeFilePart(input.creatorDisplayName)}-${month}-${safeFilePart(input.releaseTitle)}-待发货清单-${timestamp}.xlsx`;
   const encodedName = encodeURIComponent(utf8Name)
     .replaceAll("'", '%27')
     .replaceAll('(', '%28')
     .replaceAll(')', '%29');
-  return `attachment; filename="guard-addresses-${period}.xlsx"; filename*=UTF-8''${encodedName}`;
+  return `attachment; filename="fulfillment-${month}-${timestamp}.xlsx"; filename*=UTF-8''${encodedName}`;
 }
 
 const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, options) => {
@@ -125,25 +140,30 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
     (request) => options.service.listForCreator(request.creatorProfile!.id, request.query.status),
   );
 
-  app.get<{ Querystring: Record<string, never> }>(
-    '/api/v1/creator/orders/current-month.xlsx',
+  app.post<{ Body: typeof FulfillmentExportInputSchema.static }>(
+    '/api/v1/creator/orders/fulfillment-export',
     {
       preHandler: requireCreator,
       schema: {
-        querystring: Type.Object({}, { additionalProperties: false }),
-        response: { 200: Type.Any() },
+        body: FulfillmentExportInputSchema,
         tags: ['creator-orders'],
       },
     },
     async (request, reply) => {
-      const exported = await options.service.exports.exportCurrentMonth(
+      const exported = await options.service.exportFulfillment(
         request.creatorProfile!,
+        request.body.releaseId,
         context(request),
       );
       return reply
         .header(
           'content-disposition',
-          workbookContentDisposition(exported.creatorDisplayName, exported.periodStart),
+          workbookContentDisposition({
+            creatorDisplayName: exported.creatorDisplayName,
+            eligibilityMonth: exported.eligibilityMonth,
+            generatedAt: exported.generatedAt,
+            releaseTitle: exported.releaseTitle,
+          }),
         )
         .header('x-export-row-count', String(exported.rowCount))
         .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -167,31 +187,6 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
         request.params.giftOrderId,
         context(request),
       ),
-  );
-
-  app.post<{ Body: Record<string, never>; Params: { giftOrderId: string } }>(
-    '/api/v1/creator/orders/:giftOrderId/process',
-    {
-      preHandler: requireCreator,
-      schema: {
-        body: EmptyBodySchema,
-        params: Parameters,
-        response: { 200: CreatorOrderSchema },
-        tags: ['creator-orders'],
-      },
-    },
-    async (request) => {
-      await options.service.markProcessing(
-        request.creatorProfile!.id,
-        request.params.giftOrderId,
-        context(request),
-      );
-      return options.service.getForCreator(
-        request.creatorProfile!.id,
-        request.params.giftOrderId,
-        context(request),
-      );
-    },
   );
 
   app.post<{

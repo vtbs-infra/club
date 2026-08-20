@@ -7,7 +7,7 @@ import { StatusBadge } from './Ui';
 function action(order: GiftOrder): string {
   if (order.status === 'CLAIMABLE') return '现在领取';
   if (order.status === 'SHIPPED') return '查看物流';
-  if (order.status === 'SUBMITTED' || order.status === 'PROCESSING') return '查看进度';
+  if (order.status === 'SUBMITTED') return '查看进度';
   return '查看详情';
 }
 
@@ -40,9 +40,11 @@ export function GiftCard({ order }: { readonly order: GiftOrder }) {
             ? relativeDeadline(order.release.claimDeadlineAt)
             : shipment
               ? `${shipment.carrierName} · ${shipment.status === 'DELIVERED' ? '已签收' : '运输中'}`
-              : order.status === 'EXPIRED'
-                ? '未在领取期内提交'
-                : '状态更新后会在这里显示'}
+              : order.status === 'SUBMITTED'
+                ? '领取信息已提交，等待主播发货'
+                : order.status === 'EXPIRED'
+                  ? '未在领取期内提交'
+                  : '状态更新后会在这里显示'}
         </p>
         <Link className="text-action" to={`/gifts/${order.id}`}>
           {action(order)} <span aria-hidden="true">→</span>
