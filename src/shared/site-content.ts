@@ -422,7 +422,7 @@ export const defaultSitePageContent: SitePageContent = {
     {
       audience: 'all',
       content: {
-        description: '确认舰长礼物资格、提交收货信息，并随时查看礼物发放进度。',
+        description: '',
         eyebrow: '舰长礼物计划',
         primaryAction: { href: '/app', label: '查看我的礼物' },
         secondaryAction: { href: '#claim-process', label: '了解领取流程' },
