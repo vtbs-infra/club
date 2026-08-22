@@ -35,6 +35,7 @@ COMPOSE_DATABASE_URL=postgres://club:<URL 编码后的密码>@postgres:5432/club
 BETTER_AUTH_SECRET=<不少于 32 个字符的随机密钥>
 ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION=1
 ADDRESS_ENCRYPTION_KEY_RING=1:<32 字节 base64 密钥>
+UI_THEME=archive
 ```
 
 可以在 PowerShell 7 中生成随机 base64 值：
@@ -131,7 +132,20 @@ America/Los_Angeles
 多个直播间按优先级参与挑战分配。普通用户只会看到平台返回的直播间链接，不能自行
 指定房间。
 
-## 8. 验证完整流程
+## 8. 配置首页与主题
+
+平台管理员打开“首页内容”后，可以：
+
+1. 调整、排序、隐藏或新增受控内容区块；
+2. 上传首页图片并分别预览桌面和移动端效果；
+3. 保存草稿，再发布为公开首页；
+4. 从历史版本恢复内容。
+
+“主题与外观”页面提供四套方案。管理员发布的选择会覆盖 `UI_THEME`；点击“恢复部署
+默认”后重新使用环境变量指定的方案。界面语言由每位访问者在中/英文之间切换，
+首次访问默认中文。
+
+## 9. 验证完整流程
 
 用一个新的普通用户账号执行：
 
@@ -145,7 +159,10 @@ America/Los_Angeles
 主播可以在 `/creator/releases` 创建一个测试礼物。礼物单需要同月已定稿名单才能
 生成；名单任务与状态可在 `/admin/rosters` 查看。
 
-## 9. 检查运行状态
+用户提交领取后，主播可以在“礼物单”页查看本人的订单，并按礼物发布导出待发货清单。
+用第二个主播账号检查时，不应看到、管理或导出第一个主播的数据。
+
+## 10. 检查运行状态
 
 ```powershell
 docker compose logs --tail 200 app

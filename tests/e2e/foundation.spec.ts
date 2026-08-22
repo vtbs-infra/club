@@ -40,12 +40,15 @@ test.afterAll(async () => {
 
 test('serves the production React shell and liveness API', async ({ page, request }) => {
   await page.goto(baseUrl);
-  await expect(
-    page.getByRole('heading', { name: '舰长礼物，从资格确认到收货，一处完成。' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: '欢迎来到舰长礼物站' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-ui-theme', 'archive');
+  await page.getByRole('button', { name: 'EN' }).click();
+  await expect(page.getByRole('heading', { name: 'Welcome to the Guard Gift Club' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.getByRole('button', { name: '中文' }).click();
   await page.setViewportSize({ height: 844, width: 390 });
   await expect(page.getByRole('link', { exact: true, name: '登录' })).toBeVisible();
-  await page.getByRole('link', { name: '创建账号' }).first().click();
+  await page.getByRole('link', { exact: true, name: '注册' }).click();
   await expect(page.getByRole('heading', { name: '开始使用 Club', level: 1 })).toBeVisible();
   await expect(page.getByLabel('昵称')).toBeVisible();
   await expect(page.getByLabel('邮箱')).toBeVisible();

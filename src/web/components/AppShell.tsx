@@ -6,6 +6,7 @@ import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { getIdentity, signOut, type AccountRole, type Identity } from '../api/client';
 import { ApiError } from '../api/http';
 import { ErrorState, LoadingState } from './Ui';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
 
 interface NavigationItem {
   readonly end?: boolean;
@@ -33,6 +34,8 @@ const adminNavigation: readonly NavigationItem[] = [
   { label: '名单同步', to: '/admin/rosters' },
   { label: '验证直播间', to: '/admin/verification' },
   { label: '平台公告', to: '/admin/announcements' },
+  { label: '首页内容', to: '/admin/site' },
+  { label: '主题', to: '/admin/appearance' },
   { label: '系统', to: '/admin/system' },
 ];
 
@@ -145,6 +148,7 @@ function Shell({
               </NavLink>
             ))}
           </nav>
+          <LanguageSwitch compact />
           <div className="account-menu">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
