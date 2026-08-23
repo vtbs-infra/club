@@ -4,12 +4,14 @@ import { useState, type FormEvent } from 'react';
 import { getIdentity, updateCreatorProfile, type Identity } from '../../api/client';
 import { AnnouncementManager } from '../../components/AnnouncementManager';
 import {
+  ConfirmDialog,
   ErrorNotice,
   ErrorState,
   InlineNotice,
   LoadingState,
   PageHeader,
 } from '../../components/Ui';
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 
 export function CreatorAnnouncementsPage() {
   return (
@@ -34,9 +36,17 @@ export function CreatorSettingsPage() {
 function CreatorSettingsForm({ creator }: { readonly creator: NonNullable<Identity['creator']> }) {
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState(creator.displayName);
+  const [savedDisplayName, setSavedDisplayName] = useState(creator.displayName);
+  const unsavedChanges = useUnsavedChangesGuard(displayName !== savedDisplayName);
   const save = useMutation({
     mutationFn: () => updateCreatorProfile({ displayName }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['identity'] }),
+    onSuccess: async (updated) => {
+      if (updated) {
+        setDisplayName(updated.displayName);
+        setSavedDisplayName(updated.displayName);
+      }
+      await queryClient.invalidateQueries({ queryKey: ['identity'] });
+    },
   });
   return (
     <div className="stack-lg">
@@ -63,7 +73,10 @@ function CreatorSettingsForm({ creator }: { readonly creator: NonNullable<Identi
             主播显示名称
             <input
               maxLength={120}
-              onChange={(event) => setDisplayName(event.target.value)}
+              onChange={(event) => {
+                save.reset();
+                setDisplayName(event.target.value);
+              }}
               required
               value={displayName}
             />
@@ -109,6 +122,15 @@ function CreatorSettingsForm({ creator }: { readonly creator: NonNullable<Identi
           </dl>
         </section>
       </div>
+      <ConfirmDialog
+        confirmLabel="放弃修改"
+        description="主播显示名称尚未保存，离开后当前修改会丢失。"
+        onCancel={unsavedChanges.cancelDiscard}
+        onConfirm={unsavedChanges.confirmDiscard}
+        open={unsavedChanges.blocked}
+        title="放弃主播设置修改？"
+        tone="danger"
+      />
     </div>
   );
 }

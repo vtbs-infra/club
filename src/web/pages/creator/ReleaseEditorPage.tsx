@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save, Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
   closeCreatorRelease,
@@ -29,6 +29,7 @@ import {
   LoadingState,
   StatusBadge,
 } from '../../components/Ui';
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 import {
   dateTimeLocalToIso,
   epochMillisecondsToDateTimeLocal,
@@ -91,7 +92,7 @@ export function ReleaseEditorPage() {
   const status = release.data?.status ?? 'DRAFT';
   const editable = status === 'DRAFT';
   const hasUnsavedChanges = dirty || coverFile !== null;
-  const blocker = useBlocker(hasUnsavedChanges && editable);
+  const unsavedChanges = useUnsavedChangesGuard(hasUnsavedChanges && editable);
   const timeZone = identity.data?.creator?.timezone ?? PLATFORM_TIME_ZONE;
 
   useEffect(() => {
@@ -135,15 +136,6 @@ export function ReleaseEditorPage() {
     setClaimStartAt(epochMillisecondsToDateTimeLocal(now, timeZone));
     setClaimDeadlineAt(epochMillisecondsToDateTimeLocal(now + 30 * 86_400_000, timeZone));
   }, [dirty, identity.data?.creator, isNew, timeZone]);
-
-  useEffect(() => {
-    if (!hasUnsavedChanges || !editable) return;
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [editable, hasUnsavedChanges]);
 
   const coverPreviewUrl = useMemo(
     () => (coverFile ? URL.createObjectURL(coverFile) : null),
@@ -418,9 +410,9 @@ export function ReleaseEditorPage() {
       <ConfirmDialog
         confirmLabel="放弃修改"
         description="当前页面还有未保存的内容，离开后这些修改会丢失。"
-        onCancel={() => blocker.reset?.()}
-        onConfirm={() => blocker.proceed?.()}
-        open={blocker.state === 'blocked'}
+        onCancel={unsavedChanges.cancelDiscard}
+        onConfirm={unsavedChanges.confirmDiscard}
+        open={unsavedChanges.blocked}
         title="离开当前编辑页？"
         tone="danger"
       />

@@ -10,6 +10,7 @@ import {
   type Announcement,
   type ManagedAnnouncementInput,
 } from '../api/client';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { dateTimeLocalToIso, isoToDateTimeLocal, PLATFORM_TIME_ZONE } from '../lib/date-time';
 import { formatDate } from '../lib/format';
 import {
@@ -31,6 +32,30 @@ const emptyDraft: ManagedAnnouncementInput = {
   title: '',
 };
 
+function announcementDraft(announcement: Announcement): ManagedAnnouncementInput {
+  return {
+    body: announcement.body,
+    expiresAt: announcement.expiresAt,
+    pinned: announcement.pinned,
+    publicVisible: announcement.publicVisible,
+    publishNow: announcement.publishedAt !== null,
+    severity: announcement.severity,
+    title: announcement.title,
+  };
+}
+
+function sameDraft(left: ManagedAnnouncementInput, right: ManagedAnnouncementInput): boolean {
+  return (
+    left.body === right.body &&
+    left.expiresAt === right.expiresAt &&
+    left.pinned === right.pinned &&
+    left.publicVisible === right.publicVisible &&
+    left.publishNow === right.publishNow &&
+    left.severity === right.severity &&
+    left.title === right.title
+  );
+}
+
 export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creator' }) {
   const queryClient = useQueryClient();
   const editorRef = useRef<HTMLFormElement>(null);
@@ -47,7 +72,11 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   });
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [draft, setDraft] = useState<ManagedAnnouncementInput>(emptyDraft);
+  const [baselineDraft, setBaselineDraft] = useState<ManagedAnnouncementInput>(emptyDraft);
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
+  const [unpublishConfirmation, setUnpublishConfirmation] = useState(false);
+  const dirty = !sameDraft(draft, baselineDraft);
+  const unsavedChanges = useUnsavedChangesGuard(dirty);
   const timeZone =
     area === 'creator'
       ? (identity.data?.creator?.timezone ?? PLATFORM_TIME_ZONE)
@@ -61,6 +90,14 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   const reset = () => {
     setEditing(null);
     setDraft(emptyDraft);
+    setBaselineDraft(emptyDraft);
+  };
+  const selectAnnouncement = (announcement: Announcement) => {
+    const nextDraft = announcementDraft(announcement);
+    setEditing(announcement);
+    setDraft(nextDraft);
+    setBaselineDraft(nextDraft);
+    focusEditor();
   };
   const save = useMutation({
     mutationFn: () =>
@@ -83,6 +120,21 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
       return queryClient.invalidateQueries({ queryKey });
     },
   });
+  const unpublish = useMutation({
+    mutationFn: () => {
+      if (!editing) throw new Error('No announcement is selected.');
+      return updateManagedAnnouncement(area, editing.id, {
+        ...baselineDraft,
+        expectedVersion: editing.version,
+        publishNow: false,
+      });
+    },
+    onSuccess: async () => {
+      setUnpublishConfirmation(false);
+      reset();
+      await queryClient.invalidateQueries({ queryKey });
+    },
+  });
 
   if (announcements.isPending) return <LoadingState />;
   if (announcements.isError) return <ErrorState error={announcements.error} />;
@@ -102,8 +154,10 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           <button
             className="button secondary"
             onClick={() => {
-              reset();
-              focusEditor();
+              unsavedChanges.requestDiscard(() => {
+                reset();
+                focusEditor();
+              });
             }}
             type="button"
           >
@@ -118,19 +172,9 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
               <button
                 className={editing?.id === announcement.id ? 'managed-row selected' : 'managed-row'}
                 key={announcement.id}
-                onClick={() => {
-                  setEditing(announcement);
-                  setDraft({
-                    body: announcement.body,
-                    expiresAt: announcement.expiresAt,
-                    pinned: announcement.pinned,
-                    publicVisible: announcement.publicVisible,
-                    publishNow: announcement.publishedAt !== null,
-                    severity: announcement.severity,
-                    title: announcement.title,
-                  });
-                  focusEditor();
-                }}
+                onClick={() =>
+                  unsavedChanges.requestDiscard(() => selectAnnouncement(announcement))
+                }
                 type="button"
               >
                 <span>
@@ -241,19 +285,22 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
               同时展示在公开首页
             </label>
           ) : null}
-          <label className="check-field">
-            <input
-              checked={draft.publishNow}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, publishNow: event.target.checked }))
-              }
-              type="checkbox"
-            />
-            保存后立即发布
-          </label>
+          {!editing?.publishedAt ? (
+            <label className="check-field">
+              <input
+                checked={draft.publishNow}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, publishNow: event.target.checked }))
+                }
+                type="checkbox"
+              />
+              保存后立即发布
+            </label>
+          ) : null}
         </div>
         {save.isError ? <ErrorNotice error={save.error} /> : null}
         {remove.isError ? <ErrorNotice error={remove.error} /> : null}
+        {unpublish.isError ? <ErrorNotice error={unpublish.error} /> : null}
         <div className="form-actions">
           <button className="button primary" disabled={save.isPending} type="submit">
             {save.isPending ? '正在保存…' : '保存公告'}
@@ -268,6 +315,17 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
               删除草稿
             </button>
           ) : null}
+          {editing?.publishedAt ? (
+            <button
+              className="button ghost danger"
+              disabled={unpublish.isPending || dirty}
+              onClick={() => setUnpublishConfirmation(true)}
+              title={dirty ? '请先保存或放弃当前修改' : undefined}
+              type="button"
+            >
+              取消发布
+            </button>
+          ) : null}
         </div>
       </form>
       <ConfirmDialog
@@ -280,6 +338,25 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
         }}
         open={deleteConfirmation !== null}
         title="确认删除公告草稿？"
+        tone="danger"
+      />
+      <ConfirmDialog
+        busy={unpublish.isPending}
+        confirmLabel="取消发布"
+        description="公告会从所有用户的资讯和公开首页中撤下，但内容会保留为草稿。"
+        onCancel={() => setUnpublishConfirmation(false)}
+        onConfirm={() => unpublish.mutate()}
+        open={unpublishConfirmation}
+        title="确认取消发布这条公告？"
+        tone="danger"
+      />
+      <ConfirmDialog
+        confirmLabel="放弃修改"
+        description="当前公告还有未保存的内容，继续后这些修改会丢失。"
+        onCancel={unsavedChanges.cancelDiscard}
+        onConfirm={unsavedChanges.confirmDiscard}
+        open={unsavedChanges.blocked}
+        title="放弃当前公告修改？"
         tone="danger"
       />
     </div>

@@ -10,12 +10,14 @@ import {
 } from '../../api/client';
 import {
   EmptyState,
+  ConfirmDialog,
   ErrorNotice,
   ErrorState,
   LoadingState,
   PageHeader,
   StatusBadge,
 } from '../../components/Ui';
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 
 interface RoomForm {
   biliRoomId: string;
@@ -31,6 +33,24 @@ const emptyRoom: RoomForm = {
   priority: 100,
 };
 
+function roomForm(room: VerificationRoom): RoomForm {
+  return {
+    biliRoomId: room.biliRoomId,
+    displayName: room.displayName,
+    enabled: room.enabled,
+    priority: room.priority,
+  };
+}
+
+function sameForm(left: RoomForm, right: RoomForm): boolean {
+  return (
+    left.biliRoomId === right.biliRoomId &&
+    left.displayName === right.displayName &&
+    left.enabled === right.enabled &&
+    left.priority === right.priority
+  );
+}
+
 export function AdminVerificationPage() {
   const queryClient = useQueryClient();
   const editorRef = useRef<HTMLFormElement>(null);
@@ -41,6 +61,8 @@ export function AdminVerificationPage() {
   });
   const [editing, setEditing] = useState<VerificationRoom | null>(null);
   const [form, setForm] = useState<RoomForm>(emptyRoom);
+  const [baselineForm, setBaselineForm] = useState<RoomForm>(emptyRoom);
+  const unsavedChanges = useUnsavedChangesGuard(!sameForm(form, baselineForm));
   const focusEditor = () => {
     requestAnimationFrame(() => {
       editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -48,22 +70,24 @@ export function AdminVerificationPage() {
     });
   };
   const startEditing = (room: VerificationRoom) => {
-    setEditing(room);
-    setForm({
-      biliRoomId: room.biliRoomId,
-      displayName: room.displayName,
-      enabled: room.enabled,
-      priority: room.priority,
+    unsavedChanges.requestDiscard(() => {
+      const nextForm = roomForm(room);
+      setEditing(room);
+      setForm(nextForm);
+      setBaselineForm(nextForm);
+      focusEditor();
     });
-    focusEditor();
   };
   const reset = () => {
     setEditing(null);
     setForm(emptyRoom);
+    setBaselineForm(emptyRoom);
   };
   const startNew = () => {
-    reset();
-    focusEditor();
+    unsavedChanges.requestDiscard(() => {
+      reset();
+      focusEditor();
+    });
   };
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['admin', 'verification'] });
   const save = useMutation({
@@ -229,6 +253,15 @@ export function AdminVerificationPage() {
           </div>
         </form>
       </div>
+      <ConfirmDialog
+        confirmLabel="放弃修改"
+        description="当前直播间配置还有未保存的内容，继续后这些修改会丢失。"
+        onCancel={unsavedChanges.cancelDiscard}
+        onConfirm={unsavedChanges.confirmDiscard}
+        open={unsavedChanges.blocked}
+        title="放弃当前直播间修改？"
+        tone="danger"
+      />
     </div>
   );
 }

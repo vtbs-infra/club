@@ -9,6 +9,7 @@ import {
   type CreatorRecord,
 } from '../../api/client';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorNotice,
   ErrorState,
@@ -16,6 +17,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '../../components/Ui';
+import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 
 interface CreatorFormState {
   active: boolean;
@@ -35,6 +37,28 @@ const emptyForm: CreatorFormState = {
   userId: '',
 };
 
+function creatorForm(creator: CreatorRecord): CreatorFormState {
+  return {
+    active: creator.active,
+    bilibiliUid: creator.bilibiliUid,
+    displayName: creator.displayName,
+    roomId: creator.roomId,
+    timezone: creator.timezone,
+    userId: creator.userId,
+  };
+}
+
+function sameForm(left: CreatorFormState, right: CreatorFormState): boolean {
+  return (
+    left.active === right.active &&
+    left.bilibiliUid === right.bilibiliUid &&
+    left.displayName === right.displayName &&
+    left.roomId === right.roomId &&
+    left.timezone === right.timezone &&
+    left.userId === right.userId
+  );
+}
+
 export function AdminCreatorsPage() {
   const queryClient = useQueryClient();
   const displayNameInputRef = useRef<HTMLInputElement>(null);
@@ -43,6 +67,8 @@ export function AdminCreatorsPage() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CreatorRecord | null>(null);
   const [form, setForm] = useState<CreatorFormState>(emptyForm);
+  const [baselineForm, setBaselineForm] = useState<CreatorFormState>(emptyForm);
+  const unsavedChanges = useUnsavedChangesGuard(!sameForm(form, baselineForm));
   const creators = useQuery({ queryFn: getAdminCreators, queryKey: ['admin', 'creators'] });
   const users = useQuery({
     queryFn: () => getAdminUsers(search),
@@ -55,24 +81,24 @@ export function AdminCreatorsPage() {
     });
   };
   const startEditing = (creator: CreatorRecord) => {
-    setEditing(creator);
-    setForm({
-      active: creator.active,
-      bilibiliUid: creator.bilibiliUid,
-      displayName: creator.displayName,
-      roomId: creator.roomId,
-      timezone: creator.timezone,
-      userId: creator.userId,
+    unsavedChanges.requestDiscard(() => {
+      const nextForm = creatorForm(creator);
+      setEditing(creator);
+      setForm(nextForm);
+      setBaselineForm(nextForm);
+      focusEditor();
     });
-    focusEditor();
   };
   const reset = () => {
     setEditing(null);
     setForm(emptyForm);
+    setBaselineForm(emptyForm);
   };
   const startNew = () => {
-    reset();
-    focusEditor();
+    unsavedChanges.requestDiscard(() => {
+      reset();
+      focusEditor();
+    });
   };
   const save = useMutation({
     mutationFn: () =>
@@ -276,6 +302,15 @@ export function AdminCreatorsPage() {
           </button>
         </form>
       </div>
+      <ConfirmDialog
+        confirmLabel="放弃修改"
+        description="当前主播配置还有未保存的内容，继续后这些修改会丢失。"
+        onCancel={unsavedChanges.cancelDiscard}
+        onConfirm={unsavedChanges.confirmDiscard}
+        open={unsavedChanges.blocked}
+        title="放弃当前主播修改？"
+        tone="danger"
+      />
     </div>
   );
 }
