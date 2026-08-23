@@ -18,6 +18,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '../../components/Ui';
+import { useNow } from '../../hooks/useNow';
 import { formatDate, formatMonth, tierLabel } from '../../lib/format';
 import { giftOrderPresentation } from '../../lib/status-presentation';
 
@@ -31,6 +32,7 @@ const filters: readonly { readonly label: string; readonly value?: GiftOrderStat
 ];
 
 export function CreatorOrdersPage() {
+  const now = useNow();
   const [parameters, setParameters] = useSearchParams();
   const requestedStatus = parameters.get('status') as GiftOrderStatus | null;
   const status = filters.some((filter) => filter.value === requestedStatus)
@@ -209,7 +211,7 @@ export function CreatorOrdersPage() {
               </select>
             </label>
             <p>文件只包含该礼物发布当前处于“待发货”的礼物单，导出不会改变订单状态。</p>
-            {selectedRelease && new Date(selectedRelease.claimDeadlineAt) > new Date() ? (
+            {selectedRelease && new Date(selectedRelease.claimDeadlineAt).getTime() > now ? (
               <InlineNotice tone="warning">
                 领取仍在进行，之后提交的用户不会包含在本次文件中。
               </InlineNotice>

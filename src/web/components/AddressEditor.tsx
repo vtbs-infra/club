@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 
 import {
   createAddress,
@@ -56,19 +56,23 @@ const fields: readonly {
 ];
 
 export function AddressForm({
+  autoFocus = false,
   compact = false,
+  defaultSelected = false,
   initial,
   onCancel,
   onSaved,
 }: {
+  readonly autoFocus?: boolean;
   readonly compact?: boolean;
+  readonly defaultSelected?: boolean;
   readonly initial?: AddressRecord | undefined;
   readonly onCancel?: (() => void) | undefined;
   readonly onSaved?: ((address: AddressRecord) => void) | undefined;
 }) {
   const queryClient = useQueryClient();
   const [label, setLabel] = useState(initial?.label ?? '常用地址');
-  const [isDefault, setIsDefault] = useState(initial?.isDefault ?? true);
+  const [isDefault, setIsDefault] = useState(initial?.isDefault ?? defaultSelected);
   const [payload, setPayload] = useState<AddressPayload>(initial?.payload ?? emptyAddress);
   const [validationError, setValidationError] = useState<string | null>(null);
   const save = useMutation({
@@ -108,6 +112,7 @@ export function AddressForm({
         <label>
           地址名称
           <input
+            autoFocus={autoFocus}
             maxLength={80}
             onChange={(event) => {
               setValidationError(null);
@@ -175,6 +180,20 @@ export function AddressBook() {
   const [editing, setEditing] = useState<AddressRecord | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AddressRecord | null>(null);
+  const editorRef = useRef<HTMLElement>(null);
+  const revealEditor = () => {
+    window.requestAnimationFrame(() => editorRef.current?.scrollIntoView({ block: 'nearest' }));
+  };
+  const startAdding = () => {
+    setEditing(null);
+    setAdding(true);
+    revealEditor();
+  };
+  const startEditing = (address: AddressRecord) => {
+    setAdding(false);
+    setEditing(address);
+    revealEditor();
+  };
   const remove = useMutation({
     mutationFn: deleteAddress,
     onSuccess: () => {
@@ -192,7 +211,7 @@ export function AddressBook() {
           <p>地址会加密保存；礼物提交后会冻结当时的地址副本。</p>
         </div>
         {!adding && !editing ? (
-          <button className="button primary" onClick={() => setAdding(true)} type="button">
+          <button className="button primary" onClick={startAdding} type="button">
             添加地址
           </button>
         ) : null}
@@ -200,7 +219,7 @@ export function AddressBook() {
       {addresses.data.length === 0 && !adding ? (
         <div className="empty-inline">
           <p>还没有收货地址。</p>
-          <button className="button secondary" onClick={() => setAdding(true)} type="button">
+          <button className="button secondary" onClick={startAdding} type="button">
             添加第一个地址
           </button>
         </div>
@@ -222,33 +241,45 @@ export function AddressBook() {
                 {address.payload.district}
                 {address.payload.detailedAddress}
               </small>
-              <div className="card-actions">
-                <button className="text-button" onClick={() => setEditing(address)} type="button">
-                  编辑
-                </button>
-                <button
-                  className="text-button danger"
-                  disabled={remove.isPending}
-                  onClick={() => setDeleteTarget(address)}
-                  type="button"
-                >
-                  删除
-                </button>
-              </div>
+              {!adding && !editing ? (
+                <div className="card-actions">
+                  <button
+                    className="text-button"
+                    onClick={() => startEditing(address)}
+                    type="button"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    className="text-button danger"
+                    disabled={remove.isPending}
+                    onClick={() => setDeleteTarget(address)}
+                    type="button"
+                  >
+                    删除
+                  </button>
+                </div>
+              ) : null}
             </article>
           ))}
         </div>
       )}
       {adding ? (
-        <section className="panel">
+        <section className="panel" ref={editorRef}>
           <h3>添加收货地址</h3>
-          <AddressForm onCancel={() => setAdding(false)} onSaved={() => setAdding(false)} />
+          <AddressForm
+            autoFocus
+            defaultSelected={addresses.data.length === 0}
+            onCancel={() => setAdding(false)}
+            onSaved={() => setAdding(false)}
+          />
         </section>
       ) : null}
       {editing ? (
-        <section className="panel">
+        <section className="panel" ref={editorRef}>
           <h3>编辑“{editing.label}”</h3>
           <AddressForm
+            autoFocus
             initial={editing}
             key={editing.id}
             onCancel={() => setEditing(null)}

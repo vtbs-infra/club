@@ -21,10 +21,14 @@ export function formatMonth(value: string): string {
   return `${year} 年 ${Number(month)} 月`;
 }
 
-export function relativeDeadline(value: string): string {
-  const milliseconds = new Date(value).getTime() - Date.now();
-  const days = Math.ceil(milliseconds / 86_400_000);
-  if (days < 0) return '领取期已结束';
+export function relativeDeadline(value: string, now = Date.now()): string {
+  const deadline = new Date(value);
+  const milliseconds = deadline.getTime() - now;
+  if (milliseconds < 0) return '领取期已结束';
+  const current = new Date(now);
+  const deadlineDay = Date.UTC(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+  const currentDay = Date.UTC(current.getFullYear(), current.getMonth(), current.getDate());
+  const days = Math.round((deadlineDay - currentDay) / 86_400_000);
   if (days === 0) return '今天截止';
   if (days === 1) return '明天截止';
   if (days <= 7) return `${days} 天后截止`;

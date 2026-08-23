@@ -5,12 +5,12 @@ import { Link } from 'react-router-dom';
 import { getAddresses, getAnnouncements, getBinding, getIdentity, getMyGifts } from '../api/client';
 import { GiftCard } from '../components/GiftCard';
 import { EmptyState, ErrorNotice, ErrorState, LoadingState, StatusBadge } from '../components/Ui';
+import { useNow } from '../hooks/useNow';
 import { formatDate } from '../lib/format';
 import { announcementSeverityPresentation } from '../lib/status-presentation';
 
-const dashboardLoadedAt = Date.now();
-
 export function DashboardPage() {
+  const now = useNow();
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
   const announcements = useQuery({
     queryFn: () => getAnnouncements(5),
@@ -25,9 +25,10 @@ export function DashboardPage() {
   const visibleGifts = gifts.data ?? [];
   const claimable = visibleGifts.filter((gift) => gift.status === 'CLAIMABLE');
   const shipped = visibleGifts.find((gift) => gift.status === 'SHIPPED');
-  const urgent = claimable.find(
-    (gift) => new Date(gift.release.claimDeadlineAt).getTime() - dashboardLoadedAt < 3 * 86_400_000,
-  );
+  const urgent = claimable.find((gift) => {
+    const remaining = new Date(gift.release.claimDeadlineAt).getTime() - now;
+    return remaining >= 0 && remaining < 3 * 86_400_000;
+  });
 
   return (
     <div className="dashboard stack-xl">
@@ -80,7 +81,10 @@ export function DashboardPage() {
         ) : (
           <div className="news-list">
             {announcements.data.map((announcement) => (
-              <Link key={announcement.id} to="/announcements">
+              <Link
+                key={announcement.id}
+                to={`/announcements?open=${encodeURIComponent(announcement.id)}`}
+              >
                 <StatusBadge {...announcementSeverityPresentation[announcement.severity]} />
                 {announcement.pinned ? <span className="pin-label">置顶</span> : null}
                 <strong>{announcement.title}</strong>
@@ -220,7 +224,7 @@ export function DashboardPage() {
         ) : (
           <div className="gift-grid">
             {gifts.data.slice(0, 6).map((gift) => (
-              <GiftCard key={gift.id} order={gift} />
+              <GiftCard key={gift.id} now={now} order={gift} />
             ))}
           </div>
         )}

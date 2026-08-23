@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { getMyGifts, type GiftOrderStatus } from '../api/client';
 import { GiftCard } from '../components/GiftCard';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../components/Ui';
+import { useNow } from '../hooks/useNow';
 
 const filters: readonly { readonly label: string; readonly values: readonly GiftOrderStatus[] }[] =
   [
@@ -16,6 +17,7 @@ const filters: readonly { readonly label: string; readonly values: readonly Gift
   ];
 
 export function GiftsPage() {
+  const now = useNow();
   const gifts = useQuery({ queryFn: () => getMyGifts(), queryKey: ['gifts', 'mine'] });
   const [active, setActive] = useState(0);
   if (gifts.isPending) return <LoadingState label="正在读取礼物单…" />;
@@ -48,7 +50,7 @@ export function GiftsPage() {
       ) : (
         <div className="gift-grid">
           {visible.map((gift) => (
-            <GiftCard key={gift.id} order={gift} />
+            <GiftCard key={gift.id} now={now} order={gift} />
           ))}
         </div>
       )}

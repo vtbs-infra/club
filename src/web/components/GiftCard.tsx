@@ -13,11 +13,11 @@ function action(order: GiftOrder): string {
   return '查看详情';
 }
 
-function progress(order: GiftOrder): string {
+function progress(order: GiftOrder, now: number): string {
   const shipment = order.shipments[0];
   switch (order.status) {
     case 'CLAIMABLE':
-      return relativeDeadline(order.release.claimDeadlineAt);
+      return relativeDeadline(order.release.claimDeadlineAt, now);
     case 'SUBMITTED':
       return '领取信息已提交，等待主播发货';
     case 'SHIPPED':
@@ -33,7 +33,7 @@ function progress(order: GiftOrder): string {
   }
 }
 
-export function GiftCard({ order }: { readonly order: GiftOrder }) {
+export function GiftCard({ now, order }: { readonly now: number; readonly order: GiftOrder }) {
   return (
     <article className={`gift-card gift-${order.status.toLowerCase()}`}>
       <div className="gift-art">
@@ -58,7 +58,7 @@ export function GiftCard({ order }: { readonly order: GiftOrder }) {
         <p className="gift-meta">
           {formatMonth(order.release.eligibilityMonth)} · {tierLabel[order.tier]}
         </p>
-        <p className="gift-progress">{progress(order)}</p>
+        <p className="gift-progress">{progress(order, now)}</p>
         <Link className="text-action" to={`/gifts/${order.id}`}>
           {action(order)}
           <ArrowRight aria-hidden="true" size={15} />

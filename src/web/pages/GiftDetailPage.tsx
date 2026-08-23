@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, ExternalLink, Gift, PackageCheck, Plus } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { getAddresses, getMyGift, submitGift, type AddressRecord } from '../api/client';
 import { AddressForm } from '../components/AddressEditor';
 import { ErrorNotice, ErrorState, InlineNotice, LoadingState, StatusBadge } from '../components/Ui';
+import { useNow } from '../hooks/useNow';
 import { formatDate, formatMonth, tierLabel } from '../lib/format';
 import { giftOrderPresentation } from '../lib/status-presentation';
 
 export function GiftDetailPage() {
+  const now = useNow();
   const { giftOrderId = '' } = useParams();
   const queryClient = useQueryClient();
   const gift = useQuery({
@@ -26,6 +28,13 @@ export function GiftDetailPage() {
   const [addingAddress, setAddingAddress] = useState(false);
   const [options, setOptions] = useState<Record<string, boolean | string>>({});
   const [confirmed, setConfirmed] = useState(false);
+  const addressFormRef = useRef<HTMLDivElement>(null);
+  const startAddingAddress = () => {
+    setAddingAddress(true);
+    window.requestAnimationFrame(() =>
+      addressFormRef.current?.scrollIntoView({ block: 'nearest' }),
+    );
+  };
   const selectedAddressId =
     addresses.data?.find((address) => address.id === addressChoiceId)?.id ??
     addresses.data?.find((address) => address.isDefault)?.id ??
@@ -51,7 +60,8 @@ export function GiftDetailPage() {
   if (gift.isError || !gift.data) return <ErrorState error={gift.error} />;
   const order = gift.data;
   const selectedAddress = addresses.data?.find((address) => address.id === selectedAddressId);
-  const claimNotStarted = new Date(order.release.claimStartAt) > new Date();
+  const claimNotStarted = new Date(order.release.claimStartAt).getTime() > now;
+  const claimEnded = new Date(order.release.claimDeadlineAt).getTime() < now;
 
   return (
     <div className="gift-detail stack-lg">
@@ -132,7 +142,11 @@ export function GiftDetailPage() {
             submit.mutate();
           }}
         >
-          {claimNotStarted ? (
+          {claimEnded ? (
+            <InlineNotice tone="danger">
+              领取已于 {formatDate(order.release.claimDeadlineAt, true)} 结束，不能再提交。
+            </InlineNotice>
+          ) : claimNotStarted ? (
             <InlineNotice tone="warning">
               领取将在 {formatDate(order.release.claimStartAt, true)} 开始。
             </InlineNotice>
@@ -146,11 +160,7 @@ export function GiftDetailPage() {
                   <p>提交后会冻结这份地址副本，之后修改地址簿不会影响本单。</p>
                 </div>
                 {!addingAddress ? (
-                  <button
-                    className="text-button"
-                    onClick={() => setAddingAddress(true)}
-                    type="button"
-                  >
+                  <button className="text-button" onClick={startAddingAddress} type="button">
                     <Plus aria-hidden="true" size={15} />
                     添加新地址
                   </button>
@@ -195,10 +205,12 @@ export function GiftDetailPage() {
                 ))}
               </div>
               {addingAddress ? (
-                <div className="inline-address-form">
+                <div className="inline-address-form" ref={addressFormRef}>
                   <h3>添加新地址</h3>
                   <AddressForm
+                    autoFocus
                     compact
+                    defaultSelected={addresses.data?.length === 0}
                     onCancel={() => setAddingAddress(false)}
                     onSaved={(address: AddressRecord) => {
                       setAddressChoiceId(address.id);
@@ -350,7 +362,13 @@ export function GiftDetailPage() {
               {submit.isError ? <ErrorNotice error={submit.error} /> : null}
               <button
                 className="button primary large"
-                disabled={!selectedAddressId || !confirmed || submit.isPending || claimNotStarted}
+                disabled={
+                  !selectedAddressId ||
+                  !confirmed ||
+                  submit.isPending ||
+                  claimNotStarted ||
+                  claimEnded
+                }
                 type="submit"
               >
                 {submit.isPending ? '正在提交…' : '确认领取礼物'}

@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom';
 import { getIdentity } from '../api/client';
 import { getPortalHome, type PortalRelease } from '../api/portal';
 import { ProductBrand } from '../components/ProductBrand';
+import { useNow } from '../hooks/useNow';
 import { formatDate, formatMonth, relativeDeadline } from '../lib/format';
 
 const processSteps = [
@@ -47,9 +48,11 @@ const processSteps = [
 ] as const;
 
 function ReleaseCard({
+  now,
   release,
   signedIn,
 }: {
+  readonly now: number;
   readonly release: PortalRelease;
   readonly signedIn: boolean;
 }) {
@@ -84,7 +87,7 @@ function ReleaseCard({
           </div>
           <div>
             <dt>领取截止</dt>
-            <dd>{relativeDeadline(release.claimDeadlineAt)}</dd>
+            <dd>{relativeDeadline(release.claimDeadlineAt, now)}</dd>
           </div>
         </dl>
         <Link className="portal-card-action" to={signedIn ? '/app' : '/login'}>
@@ -97,6 +100,7 @@ function ReleaseCard({
 }
 
 export function HomePage() {
+  const now = useNow();
   const identity = useQuery({
     queryFn: getIdentity,
     queryKey: ['identity'],
@@ -262,7 +266,7 @@ export function HomePage() {
         ) : portal.data.releases.length > 0 ? (
           <div className="portal-release-grid">
             {portal.data.releases.map((release) => (
-              <ReleaseCard key={release.id} release={release} signedIn={signedIn} />
+              <ReleaseCard key={release.id} now={now} release={release} signedIn={signedIn} />
             ))}
           </div>
         ) : (
