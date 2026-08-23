@@ -20,10 +20,13 @@ export const AnnouncementInputSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const AnnouncementUpdateSchema = Type.Intersect([
-  AnnouncementInputSchema,
-  Type.Object({ expectedVersion: Type.Integer({ minimum: 1 }) }),
-]);
+export const AnnouncementUpdateSchema = Type.Object(
+  {
+    ...AnnouncementInputSchema.properties,
+    expectedVersion: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
 
 export const AnnouncementSchema = Type.Object({
   body: Type.String(),

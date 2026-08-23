@@ -40,6 +40,8 @@ import giftMediaRoutes from './modules/gifts/gift-media-routes.js';
 import giftOrderRoutes from './modules/gifts/order-routes.js';
 import giftReleaseRoutes from './modules/gifts/release-routes.js';
 import { GiftReleaseService } from './modules/gifts/release-service.js';
+import { PortalService } from './modules/portal/portal-service.js';
+import portalRoutes from './modules/portal/routes.js';
 import systemStatusRoutes from './modules/system-status/routes.js';
 import snapshotRoutes from './modules/snapshots/routes.js';
 import {
@@ -98,6 +100,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const creatorService = new CreatorService(database);
   const releaseService = new GiftReleaseService(database);
   const announcementService = new AnnouncementService(database);
+  const portalService = new PortalService(database, clock);
   const giftMediaService = new GiftMediaService(database, storage);
   const auditQueryService = new AuditQueryService(database);
   const fulfillmentRuntime =
@@ -239,6 +242,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     database,
     service: announcementService,
   });
+  await app.register(portalRoutes, { service: portalService });
   await app.register(auditRoutes, {
     auth,
     service: auditQueryService,

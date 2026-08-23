@@ -1,8 +1,10 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { ArrowRight, Gift, ShieldCheck, Sparkles } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { getIdentity, registerAccount, signIn } from '../api/client';
+import { ProductBrand } from '../components/ProductBrand';
 import { ErrorNotice, InlineNotice } from '../components/Ui';
 
 export function AuthPage({ mode }: { readonly mode: 'login' | 'register' }) {
@@ -41,16 +43,15 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' }) {
 
   return (
     <main className="auth-page">
-      <Link className="brand auth-brand" to="/">
-        <span className="brand-mark">✦</span>
-        <span>Club</span>
-      </Link>
+      <ProductBrand className="auth-brand" />
       <section className="auth-card">
         <div className="auth-welcome">
           <div className="auth-stars" aria-hidden="true">
-            ✦ ★ ✧
+            <Sparkles size={22} />
+            <Sparkles size={15} />
+            <Sparkles size={19} />
           </div>
-          <p className="eyebrow">WELCOME TO CLUB</p>
+          <p className="eyebrow">舰长礼物，一处完成</p>
           <h2>{isRegister ? '创建你的 Club 账号' : '欢迎回来'}</h2>
           <p>
             {isRegister
@@ -58,14 +59,24 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' }) {
               : '登录后继续查看礼物、处理发货或管理平台。'}
           </p>
           <div className="auth-illustration" aria-hidden="true">
-            <span>✦</span>
-            <div>GIFT</div>
-            <span>★</span>
+            <span className="auth-illustration-spark">
+              <Sparkles size={24} />
+            </span>
+            <div>
+              <Gift size={56} strokeWidth={1.55} />
+            </div>
+            <span className="auth-illustration-spark">
+              <Sparkles size={18} />
+            </span>
+          </div>
+          <div className="auth-trust-line">
+            <ShieldCheck size={18} />
+            <span>无需提供 B站密码</span>
           </div>
         </div>
         <form className="auth-form" onSubmit={submit}>
           <div>
-            <p className="eyebrow">{isRegister ? '注册' : '登录'}</p>
+            <p className="eyebrow">{isRegister ? '创建账号' : '账号登录'}</p>
             <h1>{isRegister ? '开始使用 Club' : '进入你的工作台'}</h1>
           </div>
           {!isRegister &&
@@ -108,6 +119,7 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' }) {
           {error ? <ErrorNotice error={error} /> : null}
           <button className="button primary wide" disabled={pending} type="submit">
             {pending ? '请稍候…' : isRegister ? '创建账号' : '登录'}
+            {!pending ? <ArrowRight aria-hidden="true" size={17} /> : null}
           </button>
           <p className="auth-switch">
             {isRegister ? '已经有账号？' : '还没有账号？'}

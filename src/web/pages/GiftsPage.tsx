@@ -26,7 +26,7 @@ export function GiftsPage() {
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="MY GIFT ORDERS"
+        eyebrow="礼物中心"
         intro="每一张礼物单都来自已经冻结的月度大航海名单。"
         title="礼物单"
       />

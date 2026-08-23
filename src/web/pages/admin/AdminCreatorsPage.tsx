@@ -112,7 +112,7 @@ export function AdminCreatorsPage() {
             注册主播
           </button>
         }
-        eyebrow="CREATORS"
+        eyebrow="主播账号"
         intro="选择一个已有普通用户账号，将其提升为主播并绑定唯一主播档案。"
         title="主播"
       />

@@ -1,3 +1,4 @@
+import { ArrowRight, Gift } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { GiftOrder } from '../api/client';
@@ -20,8 +21,10 @@ export function GiftCard({ order }: { readonly order: GiftOrder }) {
           <img alt="" src={order.release.coverImageUrl} />
         ) : (
           <div className="gift-placeholder" aria-hidden="true">
-            <span>✦</span>
-            <small>GUARD GIFT</small>
+            <span>
+              <Gift size={42} strokeWidth={1.55} />
+            </span>
+            <small>舰长礼物</small>
           </div>
         )}
         <StatusBadge status={order.status}>{orderStatusLabel[order.status]}</StatusBadge>
@@ -47,7 +50,8 @@ export function GiftCard({ order }: { readonly order: GiftOrder }) {
                   : '状态更新后会在这里显示'}
         </p>
         <Link className="text-action" to={`/gifts/${order.id}`}>
-          {action(order)} <span aria-hidden="true">→</span>
+          {action(order)}
+          <ArrowRight aria-hidden="true" size={15} />
         </Link>
       </div>
     </article>

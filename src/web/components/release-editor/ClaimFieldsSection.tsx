@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { GiftFormField } from '../../api/client';
@@ -48,7 +49,8 @@ export function ClaimFieldsSection({
         </div>
         {editable ? (
           <button className="button ghost" onClick={addField} type="button">
-            + 添加填写项
+            <Plus aria-hidden="true" size={16} />
+            添加填写项
           </button>
         ) : null}
       </div>

@@ -1,4 +1,13 @@
 import * as Dialog from '@radix-ui/react-dialog';
+import {
+  CircleAlert,
+  CircleCheck,
+  Inbox,
+  Info,
+  LoaderCircle,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react';
 import { useRef, type ReactNode } from 'react';
 
 import { ApiError } from '../api/http';
@@ -82,10 +91,37 @@ export function PageHeader({
   );
 }
 
+export function MetricCard({
+  description,
+  icon: Icon,
+  label,
+  tone = 'blue',
+  value,
+}: {
+  readonly description: string;
+  readonly icon: LucideIcon;
+  readonly label: string;
+  readonly tone?: 'amber' | 'blue' | 'green' | 'red' | 'violet';
+  readonly value: ReactNode;
+}) {
+  return (
+    <article className={`metric-card tone-${tone}`}>
+      <span className="metric-icon">
+        <Icon aria-hidden="true" size={21} />
+      </span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <p>{description}</p>
+      </div>
+    </article>
+  );
+}
+
 export function LoadingState({ label = '正在加载…' }: { readonly label?: string }) {
   return (
     <div className="state-card" role="status">
-      <span className="spinner" />
+      <LoaderCircle aria-hidden="true" className="spinner" />
       <p>{label}</p>
     </div>
   );
@@ -100,6 +136,7 @@ export function ErrorState({
 }) {
   return (
     <div className="state-card state-error" role="alert">
+      <CircleAlert aria-hidden="true" className="state-icon" />
       <strong>{title}</strong>
       <p>{errorMessage(error)}</p>
       <ErrorDetails error={error} />
@@ -110,15 +147,19 @@ export function ErrorState({
 export function EmptyState({
   action,
   description,
+  icon: Icon = Inbox,
   title,
 }: {
   readonly action?: ReactNode;
   readonly description: string;
+  readonly icon?: LucideIcon;
   readonly title: string;
 }) {
   return (
     <div className="empty-state">
-      <span aria-hidden="true">✦</span>
+      <span className="empty-state-icon" aria-hidden="true">
+        <Icon size={25} />
+      </span>
       <h3>{title}</h3>
       <p>{description}</p>
       {action}
@@ -147,7 +188,18 @@ export function InlineNotice({
   readonly children: ReactNode;
   readonly tone?: 'info' | 'success' | 'warning' | 'danger';
 }) {
-  return <div className={`inline-notice notice-${tone}`}>{children}</div>;
+  const Icon = {
+    danger: CircleAlert,
+    info: Info,
+    success: CircleCheck,
+    warning: TriangleAlert,
+  }[tone];
+  return (
+    <div className={`inline-notice notice-${tone}`}>
+      <Icon aria-hidden="true" size={18} />
+      <div>{children}</div>
+    </div>
+  );
 }
 
 export function ErrorNotice({ error }: { readonly error: unknown }) {

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, CircleCheck, ExternalLink, PackageCheck, XCircle } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
@@ -82,7 +83,8 @@ export function CreatorOrderDetailPage() {
   return (
     <div className="stack-lg">
       <Link className="back-link" to="/creator/orders">
-        ← 返回礼物单
+        <ArrowLeft aria-hidden="true" size={16} />
+        返回礼物单
       </Link>
       <header className="order-detail-header">
         <div>
@@ -104,6 +106,7 @@ export function CreatorOrderDetailPage() {
               type="button"
             >
               标记已完成
+              <CircleCheck aria-hidden="true" size={16} />
             </button>
           ) : null}
           {data.status === 'SUBMITTED' ? (
@@ -114,6 +117,7 @@ export function CreatorOrderDetailPage() {
               type="button"
             >
               取消礼物单
+              <XCircle aria-hidden="true" size={16} />
             </button>
           ) : null}
         </div>
@@ -124,7 +128,7 @@ export function CreatorOrderDetailPage() {
           <section className="panel">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">RECIPIENT</p>
+                <p className="eyebrow">收件人</p>
                 <h2>收货信息</h2>
               </div>
             </div>
@@ -155,7 +159,7 @@ export function CreatorOrderDetailPage() {
             <section className="panel">
               <div className="section-heading compact">
                 <div>
-                  <p className="eyebrow">OPTIONS</p>
+                  <p className="eyebrow">礼物选项</p>
                   <h2>用户填写内容</h2>
                 </div>
               </div>
@@ -178,7 +182,7 @@ export function CreatorOrderDetailPage() {
           <section className="panel">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">PACKAGE</p>
+                <p className="eyebrow">礼包内容</p>
                 <h2>礼物内容</h2>
               </div>
             </div>
@@ -233,7 +237,7 @@ export function CreatorOrderDetailPage() {
               }}
             >
               <div>
-                <p className="eyebrow">SHIP ORDER</p>
+                <p className="eyebrow">发货操作</p>
                 <h2>录入发货信息</h2>
                 <p>填写用户能识别的快递名称和运单号即可。</p>
               </div>
@@ -271,11 +275,12 @@ export function CreatorOrderDetailPage() {
               </label>
               <button className="button primary wide" disabled={ship.isPending} type="submit">
                 {ship.isPending ? '正在保存…' : '确认发货'}
+                {!ship.isPending ? <PackageCheck aria-hidden="true" size={16} /> : null}
               </button>
             </form>
           ) : data.shipments.length > 0 ? (
             <section className="panel shipment-summary">
-              <p className="eyebrow">SHIPMENT</p>
+              <p className="eyebrow">物流信息</p>
               <h2>物流信息</h2>
               {data.shipments.map((shipment) => (
                 <div key={shipment.id}>
@@ -286,7 +291,8 @@ export function CreatorOrderDetailPage() {
                   </StatusBadge>
                   {shipment.trackingUrl ? (
                     <a href={shipment.trackingUrl} rel="noreferrer" target="_blank">
-                      查询物流 →
+                      查询物流
+                      <ExternalLink aria-hidden="true" size={14} />
                     </a>
                   ) : null}
                 </div>

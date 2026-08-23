@@ -1,6 +1,7 @@
 :root {
-  color: #182235;
-  background: #f5f7fb;
+  color: #172033;
+  background: #f4f7fb;
+  color-scheme: light;
   font-family:
     Inter,
     'PingFang SC',
@@ -12,22 +13,57 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --ink: #182235;
+
+  /* Product color roles */
+  --ink: #172033;
+  --ink-strong: #101828;
   --muted: #667085;
-  --line: #e5e9f1;
+  --muted-strong: #475467;
+  --line: #e2e8f0;
+  --line-strong: #cfd9e6;
+  --canvas: #f4f7fb;
   --surface: #ffffff;
-  --surface-soft: #f8faff;
-  --blue: #2389d7;
-  --blue-dark: #116bab;
-  --blue-soft: #e9f6ff;
+  --surface-soft: #f7faff;
+  --surface-muted: #eef4f9;
+
+  --blue: #248fd5;
+  --blue-dark: #176da8;
+  --blue-deep: #12567f;
+  --blue-soft: #eaf6fd;
+  --blue-border: #bfe4f7;
   --cyan: #78ddf5;
+  --cyan-soft: #e9fbff;
   --pink: #ff9fbd;
   --pink-soft: #fff0f5;
   --green: #208a65;
   --green-soft: #eaf8f2;
+  --green-border: #bde4d4;
   --amber: #a9670b;
   --amber-soft: #fff7e6;
+  --amber-border: #f1d79d;
   --red: #c64455;
   --red-soft: #fff0f2;
-  --shadow: 0 16px 42px rgb(30 56 92 / 8%);
+  --red-border: #f0c4cb;
+  --violet: #6469bd;
+  --violet-soft: #f0f1ff;
+  --violet-border: #d5d9fb;
+
+  /* Shape, depth and motion */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --shadow-xs: 0 1px 2px rgb(23 32 51 / 4%);
+  --shadow-sm: 0 8px 24px rgb(30 56 92 / 6%);
+  --shadow-md: 0 18px 48px rgb(30 56 92 / 10%);
+  --shadow-lg: 0 28px 80px rgb(30 56 92 / 16%);
+  --shadow: var(--shadow-md);
+  --focus-ring: 0 0 0 3px rgb(36 143 213 / 18%);
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+
+  /* Layout */
+  --content-wide: 1280px;
+  --content-reading: 760px;
+  --control-height: 44px;
 }

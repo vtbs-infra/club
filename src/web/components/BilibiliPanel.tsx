@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CircleCheck, ExternalLink, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
@@ -64,7 +65,7 @@ export function BilibiliPanel() {
       <>
         <section className="identity-card verified">
           <div className="identity-icon" aria-hidden="true">
-            ✓
+            <CircleCheck size={25} />
           </div>
           <div>
             <p className="eyebrow">已完成 B站身份验证</p>
@@ -127,6 +128,7 @@ export function BilibiliPanel() {
           </ol>
           <a className="button primary" href={issued.room.link} rel="noreferrer" target="_blank">
             前往 {issued.room.displayName}
+            <ExternalLink aria-hidden="true" size={16} />
           </a>
         </div>
       ) : (
@@ -148,6 +150,7 @@ export function BilibiliPanel() {
             type="button"
           >
             {create.isPending ? '正在准备验证…' : active ? '生成新验证码' : '开始验证'}
+            {!create.isPending ? <ShieldCheck aria-hidden="true" size={16} /> : null}
           </button>
           {create.isError ? <ErrorNotice error={create.error} /> : null}
         </div>

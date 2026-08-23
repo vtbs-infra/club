@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { ArrowRight, ClipboardList, Download, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
@@ -99,10 +100,11 @@ export function CreatorOrdersPage() {
             }}
             type="button"
           >
+            <Download aria-hidden="true" size={16} />
             导出待发货清单
           </button>
         }
-        eyebrow="GIFT ORDERS"
+        eyebrow="发货履约"
         intro="按礼物单状态处理领取信息和发货，不需要接触资格或内部发货标识。"
         title="礼物单"
       />
@@ -127,7 +129,7 @@ export function CreatorOrdersPage() {
           ))}
         </div>
         <label className="search-field">
-          <span aria-hidden="true">⌕</span>
+          <Search aria-hidden="true" size={17} />
           <input
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索昵称、UID 或礼物"
@@ -136,7 +138,11 @@ export function CreatorOrdersPage() {
         </label>
       </div>
       {visible.length === 0 ? (
-        <EmptyState description="当前筛选条件下没有礼物单。" title="没有符合条件的礼物单" />
+        <EmptyState
+          description="当前筛选条件下没有礼物单。"
+          icon={ClipboardList}
+          title="没有符合条件的礼物单"
+        />
       ) : (
         <div className="orders-table-wrap">
           <table className="data-table orders-table">
@@ -173,7 +179,8 @@ export function CreatorOrdersPage() {
                   <td>{formatDate(order.updatedAt, true)}</td>
                   <td>
                     <Link className="row-action" to={`/creator/orders/${order.id}`}>
-                      查看 →
+                      查看
+                      <ArrowRight aria-hidden="true" size={14} />
                     </Link>
                   </td>
                 </tr>

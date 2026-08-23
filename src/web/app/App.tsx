@@ -162,7 +162,13 @@ const router = createBrowserRouter([
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense fallback={<LoadingState label="正在打开页面…" />}>
+      <Suspense
+        fallback={
+          <main className="centered-state">
+            <LoadingState label="正在打开页面…" />
+          </main>
+        }
+      >
         <RouterProvider router={router} />
       </Suspense>
     </QueryClientProvider>

@@ -6,6 +6,7 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
+import type { PortalHome } from '../../src/shared/contracts/portal.js';
 import {
   createDatabase,
   type DatabaseService,
@@ -243,26 +244,27 @@ integration('exclusive platform roles and creator ownership', () => {
     ).toBe(403);
 
     const now = Date.now();
+    const releaseInput = {
+      claimDeadlineAt: new Date(now + 30 * 86_400_000).toISOString(),
+      claimStartAt: new Date(now - 86_400_000).toISOString(),
+      description: '本月舰长纪念礼物。',
+      eligibilityMonth: '2026-08-01',
+      formFields: [],
+      fulfillmentMode: 'HIGHEST_ONLY',
+      packages: [
+        {
+          description: '',
+          items: [{ description: '', name: '纪念徽章', quantity: 1 }],
+          name: '八月礼物',
+        },
+      ],
+      tierPackageIndexes: { ADMIRAL: 0, CAPTAIN: 0, GOVERNOR: 0 },
+      title: '八月舰长礼物',
+    } as const;
     const created = await app.inject({
       headers: { cookie: creatorOneCookie, origin },
       method: 'POST',
-      payload: {
-        claimDeadlineAt: new Date(now + 30 * 86_400_000).toISOString(),
-        claimStartAt: new Date(now - 86_400_000).toISOString(),
-        description: '',
-        eligibilityMonth: '2026-08-01',
-        formFields: [],
-        fulfillmentMode: 'HIGHEST_ONLY',
-        packages: [
-          {
-            description: '',
-            items: [{ description: '', name: '纪念徽章', quantity: 1 }],
-            name: '八月礼物',
-          },
-        ],
-        tierPackageIndexes: { ADMIRAL: 0, CAPTAIN: 0, GOVERNOR: 0 },
-        title: '八月舰长礼物',
-      },
+      payload: releaseInput,
       url: '/api/v1/creator/releases',
     });
     expect(created.statusCode, created.body).toBe(201);
@@ -278,5 +280,82 @@ integration('exclusive platform roles and creator ownership', () => {
     });
     expect(ownReleases.json<unknown[]>()).toHaveLength(1);
     expect(otherReleases.json<unknown[]>()).toHaveLength(0);
+
+    const draftPortal = await app.inject({ method: 'GET', url: '/api/v1/portal/home' });
+    expect(draftPortal.statusCode, draftPortal.body).toBe(200);
+    expect(draftPortal.json<PortalHome>().releases).toHaveLength(0);
+
+    const draft = created.json<{ id: string; version: number }>();
+    const published = await app.inject({
+      headers: { cookie: creatorOneCookie, origin },
+      method: 'POST',
+      payload: { ...releaseInput, expectedVersion: draft.version },
+      url: `/api/v1/creator/releases/${draft.id}/publish`,
+    });
+    expect(published.statusCode, published.body).toBe(200);
+
+    const creatorAnnouncement = await app.inject({
+      headers: { cookie: creatorOneCookie, origin },
+      method: 'POST',
+      payload: {
+        body: '只应显示给相关礼物领取用户。',
+        pinned: false,
+        publishNow: true,
+        severity: 'INFO',
+        title: '主播定向公告',
+      },
+      url: '/api/v1/creator/announcements',
+    });
+    expect(creatorAnnouncement.statusCode, creatorAnnouncement.body).toBe(201);
+    const platformAnnouncement = await app.inject({
+      headers: { cookie: adminCookie, origin },
+      method: 'POST',
+      payload: {
+        body: '本月礼物已经开放领取。',
+        pinned: true,
+        publishNow: true,
+        severity: 'INFO',
+        title: '八月礼物领取通知',
+      },
+      url: '/api/v1/admin/announcements',
+    });
+    expect(platformAnnouncement.statusCode, platformAnnouncement.body).toBe(201);
+    const managedAnnouncement = platformAnnouncement.json<{ id: string; version: number }>();
+    const updatedAnnouncement = await app.inject({
+      headers: { cookie: adminCookie, origin },
+      method: 'PUT',
+      payload: {
+        body: '本月礼物已经开放领取，记得及时确认。',
+        expectedVersion: managedAnnouncement.version,
+        expiresAt: null,
+        pinned: true,
+        publishNow: true,
+        severity: 'INFO',
+        title: '八月礼物领取通知',
+      },
+      url: `/api/v1/admin/announcements/${managedAnnouncement.id}`,
+    });
+    expect(updatedAnnouncement.statusCode, updatedAnnouncement.body).toBe(200);
+
+    const publicPortal = await app.inject({ method: 'GET', url: '/api/v1/portal/home' });
+    expect(publicPortal.statusCode, publicPortal.body).toBe(200);
+    expect(publicPortal.json<PortalHome>()).toMatchObject({
+      announcements: [
+        {
+          pinned: true,
+          summary: '本月礼物已经开放领取，记得及时确认。',
+          title: '八月礼物领取通知',
+        },
+      ],
+      releases: [
+        {
+          coverImageUrl: null,
+          creatorName: 'Creator 001',
+          description: '本月舰长纪念礼物。',
+          id: draft.id,
+          title: '八月舰长礼物',
+        },
+      ],
+    });
   });
 });

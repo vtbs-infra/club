@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Save, Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom';
 
@@ -237,7 +238,8 @@ export function ReleaseEditorPage() {
   return (
     <div className="stack-lg release-editor-page">
       <Link className="back-link" to="/creator/releases">
-        ← 返回礼物发布
+        <ArrowLeft aria-hidden="true" size={16} />
+        返回礼物发布
       </Link>
       <header className="editor-header">
         <div>
@@ -260,6 +262,7 @@ export function ReleaseEditorPage() {
                 type="submit"
               >
                 {save.isPending ? '正在保存…' : '保存草稿'}
+                {!save.isPending ? <Save aria-hidden="true" size={16} /> : null}
               </button>
               {!isNew ? (
                 <button
@@ -273,6 +276,7 @@ export function ReleaseEditorPage() {
                   type="button"
                 >
                   发布并生成礼物单
+                  <Send aria-hidden="true" size={16} />
                 </button>
               ) : null}
             </>

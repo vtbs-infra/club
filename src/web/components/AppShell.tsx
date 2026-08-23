@@ -1,39 +1,61 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import {
+  Activity,
+  Bell,
+  CalendarSync,
+  ChevronDown,
+  ClipboardList,
+  Gift,
+  LayoutDashboard,
+  Link2,
+  LogOut,
+  MapPin,
+  Megaphone,
+  Menu,
+  RadioTower,
+  Settings,
+  UserRound,
+  UsersRound,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import { Suspense, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { getIdentity, signOut, type AccountRole, type Identity } from '../api/client';
 import { ApiError } from '../api/http';
+import { ProductBrand } from './ProductBrand';
 import { ErrorState, LoadingState } from './Ui';
 
 interface NavigationItem {
   readonly end?: boolean;
+  readonly icon: LucideIcon;
   readonly label: string;
   readonly to: string;
 }
 
 const userNavigation: readonly NavigationItem[] = [
-  { end: true, label: '仪表盘', to: '/dashboard' },
-  { label: '礼物单', to: '/gifts' },
-  { label: '公告', to: '/announcements' },
+  { end: true, icon: LayoutDashboard, label: '仪表盘', to: '/dashboard' },
+  { icon: Gift, label: '礼物单', to: '/gifts' },
+  { icon: Bell, label: '公告', to: '/announcements' },
 ];
 
 const creatorNavigation: readonly NavigationItem[] = [
-  { end: true, label: '概览', to: '/creator' },
-  { label: '礼物发布', to: '/creator/releases' },
-  { label: '礼物单', to: '/creator/orders' },
-  { label: '公告', to: '/creator/announcements' },
-  { label: '设置', to: '/creator/settings' },
+  { end: true, icon: LayoutDashboard, label: '概览', to: '/creator' },
+  { icon: Gift, label: '礼物发布', to: '/creator/releases' },
+  { icon: ClipboardList, label: '礼物单', to: '/creator/orders' },
+  { icon: Megaphone, label: '公告', to: '/creator/announcements' },
+  { icon: Settings, label: '设置', to: '/creator/settings' },
 ];
 
 const adminNavigation: readonly NavigationItem[] = [
-  { end: true, label: '概览', to: '/admin' },
-  { label: '主播', to: '/admin/creators' },
-  { label: '名单同步', to: '/admin/rosters' },
-  { label: '验证直播间', to: '/admin/verification' },
-  { label: '平台公告', to: '/admin/announcements' },
-  { label: '系统', to: '/admin/system' },
+  { end: true, icon: LayoutDashboard, label: '概览', to: '/admin' },
+  { icon: UsersRound, label: '主播', to: '/admin/creators' },
+  { icon: CalendarSync, label: '名单同步', to: '/admin/rosters' },
+  { icon: RadioTower, label: '验证直播间', to: '/admin/verification' },
+  { icon: Megaphone, label: '平台公告', to: '/admin/announcements' },
+  { icon: Activity, label: '系统', to: '/admin/system' },
 ];
 
 function roleHome(role: AccountRole): string {
@@ -107,15 +129,9 @@ function Shell({
     <div className={`app-frame frame-${area}`}>
       <header className="topbar">
         <div className="topbar-inner">
-          <Link className="brand" to={roleHome(identity.user.role)}>
-            <span className="brand-mark" aria-hidden="true">
-              ✦
-            </span>
-            <span>Club</span>
-            {area !== 'user' ? (
-              <small>{area === 'creator' ? '主播工作台' : '平台管理'}</small>
-            ) : null}
-          </Link>
+          <ProductBrand
+            context={area === 'user' ? '礼物中心' : area === 'creator' ? '主播工作台' : '平台管理'}
+          />
           <button
             aria-controls="main-navigation"
             aria-expanded={menuOpen}
@@ -124,26 +140,28 @@ function Shell({
             onClick={() => setMenuOpen((open) => !open)}
             type="button"
           >
-            <span />
-            <span />
-            <span />
+            {menuOpen ? <X aria-hidden="true" size={22} /> : <Menu aria-hidden="true" size={22} />}
           </button>
           <nav
             className={menuOpen ? 'main-nav nav-open' : 'main-nav'}
             aria-label="主导航"
             id="main-navigation"
           >
-            {navigation.map((item) => (
-              <NavLink
-                className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-                key={item.to}
-                onClick={() => setMenuOpen(false)}
-                to={item.to}
-                {...(item.end === undefined ? {} : { end: item.end })}
-              >
-                {item.label}
-              </NavLink>
-            ))}
+            {navigation.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+                  key={item.to}
+                  onClick={() => setMenuOpen(false)}
+                  to={item.to}
+                  {...(item.end === undefined ? {} : { end: item.end })}
+                >
+                  <Icon aria-hidden="true" size={17} />
+                  <span>{item.label}</span>
+                </NavLink>
+              );
+            })}
           </nav>
           <div className="account-menu">
             <DropdownMenu.Root>
@@ -155,7 +173,7 @@ function Shell({
                 >
                   <span className="avatar">{accountDisplayName.slice(0, 1).toUpperCase()}</span>
                   <span className="account-name">{accountDisplayName}</span>
-                  <span aria-hidden="true">⌄</span>
+                  <ChevronDown aria-hidden="true" className="account-chevron" size={15} />
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
@@ -172,13 +190,22 @@ function Shell({
                   {area === 'user' ? (
                     <>
                       <DropdownMenu.Item asChild>
-                        <Link to="/account">账号</Link>
+                        <Link to="/account">
+                          <UserRound aria-hidden="true" size={16} />
+                          <span>账号</span>
+                        </Link>
                       </DropdownMenu.Item>
                       <DropdownMenu.Item asChild>
-                        <Link to="/account/bilibili">B站绑定</Link>
+                        <Link to="/account/bilibili">
+                          <Link2 aria-hidden="true" size={16} />
+                          <span>B站绑定</span>
+                        </Link>
                       </DropdownMenu.Item>
                       <DropdownMenu.Item asChild>
-                        <Link to="/account/addresses">收货地址</Link>
+                        <Link to="/account/addresses">
+                          <MapPin aria-hidden="true" size={16} />
+                          <span>收货地址</span>
+                        </Link>
                       </DropdownMenu.Item>
                     </>
                   ) : null}
@@ -191,7 +218,8 @@ function Shell({
                         window.location.replace('/login');
                       }}
                     >
-                      退出登录
+                      <LogOut aria-hidden="true" size={16} />
+                      <span>退出登录</span>
                     </button>
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
@@ -201,7 +229,9 @@ function Shell({
         </div>
       </header>
       <main className="page-shell" key={location.pathname}>
-        <Outlet context={{ identity }} />
+        <Suspense fallback={<LoadingState label="正在打开页面…" />}>
+          <Outlet context={{ identity }} />
+        </Suspense>
       </main>
       <footer className="app-footer">
         <span>Club · 开源舰长礼物领取与发货平台</span>

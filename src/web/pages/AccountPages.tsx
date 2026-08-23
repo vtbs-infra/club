@@ -25,7 +25,7 @@ export function AccountPage() {
   if (identity.isError || !identity.data) return <ErrorState error={identity.error} />;
   return (
     <div className="stack-lg">
-      <PageHeader eyebrow="ACCOUNT" intro="管理你的登录账号和领取所需资料。" title="账号" />
+      <PageHeader eyebrow="账号资料" intro="管理你的登录账号和领取所需资料。" title="账号" />
       <AccountTabs />
       <section className="panel account-summary">
         <div className="large-avatar">{identity.data.user.name.slice(0, 1).toUpperCase()}</div>
@@ -49,7 +49,7 @@ export function BilibiliAccountPage() {
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="BILIBILI IDENTITY"
+        eyebrow="B站账号"
         intro="通过指定直播间确认礼物名单中的 UID 属于你。"
         title="B站绑定"
       />
@@ -62,7 +62,7 @@ export function BilibiliAccountPage() {
 export function AddressesAccountPage() {
   return (
     <div className="stack-lg">
-      <PageHeader eyebrow="DELIVERY" intro="统一维护领取礼物时可选的收货地址。" title="收货地址" />
+      <PageHeader eyebrow="收货资料" intro="统一维护领取礼物时可选的收货地址。" title="收货地址" />
       <AccountTabs />
       <AddressBook />
     </div>

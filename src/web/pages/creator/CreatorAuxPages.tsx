@@ -15,7 +15,7 @@ export function CreatorAnnouncementsPage() {
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="CREATOR ANNOUNCEMENTS"
+        eyebrow="主播公告"
         intro="这些公告会展示给拥有你礼物单的用户。"
         title="主播公告"
       />
@@ -41,7 +41,7 @@ function CreatorSettingsForm({ creator }: { readonly creator: NonNullable<Identi
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="CREATOR SETTINGS"
+        eyebrow="主播设置"
         intro="这里仅维护主播身份信息；名单来源配置由平台管理员管理。"
         title="主播设置"
       />

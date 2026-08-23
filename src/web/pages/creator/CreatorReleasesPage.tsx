@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, Gift, Info, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { getCreatorReleases } from '../../api/client';
@@ -18,14 +19,17 @@ export function CreatorReleasesPage() {
         actions={
           <Link className="button primary" to="/creator/releases/new">
             创建礼物发布
+            <Plus aria-hidden="true" size={16} />
           </Link>
         }
-        eyebrow="GIFT RELEASES"
+        eyebrow="礼物管理"
         intro="只有你主动发布礼物时，系统才会根据对应月份名单生成礼物单。"
         title="礼物发布"
       />
       <div className="principle-note">
-        <span>i</span>
+        <span>
+          <Info aria-hidden="true" size={18} />
+        </span>
         <p>
           <strong>不发礼物的月份无需任何操作。</strong>
           名单仍会按月冻结，但不会产生草稿、提醒或空礼物单。
@@ -36,9 +40,11 @@ export function CreatorReleasesPage() {
           action={
             <Link className="button primary" to="/creator/releases/new">
               创建第一份礼物发布
+              <Plus aria-hidden="true" size={16} />
             </Link>
           }
           description="选择资格月份、配置三个等级的礼物内容，然后在准备好时发布。"
+          icon={Gift}
           title="还没有礼物发布"
         />
       ) : (
@@ -49,7 +55,7 @@ export function CreatorReleasesPage() {
                 {release.coverObjectKey ? (
                   <img alt="" src={`/api/v1/gift-releases/${release.id}/cover`} />
                 ) : (
-                  <span>✦</span>
+                  <Gift aria-hidden="true" size={28} strokeWidth={1.55} />
                 )}
               </div>
               <div className="release-main">
@@ -71,7 +77,9 @@ export function CreatorReleasesPage() {
                   {formatDate(release.claimStartAt)} — {formatDate(release.claimDeadlineAt)}
                 </strong>
               </div>
-              <span className="row-arrow">→</span>
+              <span className="row-arrow">
+                <ArrowRight aria-hidden="true" size={18} />
+              </span>
             </Link>
           ))}
         </div>

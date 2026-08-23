@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Check, ExternalLink, Gift, PackageCheck, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
@@ -54,7 +55,8 @@ export function GiftDetailPage() {
   return (
     <div className="gift-detail stack-lg">
       <Link className="back-link" to="/gifts">
-        ← 返回礼物单
+        <ArrowLeft aria-hidden="true" size={16} />
+        返回礼物单
       </Link>
       <section className="gift-detail-hero">
         <div className="detail-art">
@@ -62,8 +64,10 @@ export function GiftDetailPage() {
             <img alt="" src={order.release.coverImageUrl} />
           ) : (
             <div className="gift-placeholder">
-              <span>✦</span>
-              <small>GUARD GIFT</small>
+              <span>
+                <Gift size={58} strokeWidth={1.5} />
+              </span>
+              <small>舰长礼物</small>
             </div>
           )}
         </div>
@@ -95,7 +99,7 @@ export function GiftDetailPage() {
       <section className="panel gift-content-panel">
         <div className="section-heading compact">
           <div>
-            <p className="eyebrow">INCLUDED</p>
+            <p className="eyebrow">礼物清单</p>
             <h2>礼物内容</h2>
           </div>
         </div>
@@ -146,7 +150,8 @@ export function GiftDetailPage() {
                     onClick={() => setAddingAddress(true)}
                     type="button"
                   >
-                    + 添加新地址
+                    <Plus aria-hidden="true" size={15} />
+                    添加新地址
                   </button>
                 ) : null}
               </div>
@@ -348,6 +353,7 @@ export function GiftDetailPage() {
                 type="submit"
               >
                 {submit.isPending ? '正在提交…' : '确认领取礼物'}
+                {!submit.isPending ? <PackageCheck aria-hidden="true" size={17} /> : null}
               </button>
             </div>
           </section>
@@ -365,7 +371,7 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
     <section className="panel order-progress">
       <div className="section-heading compact">
         <div>
-          <p className="eyebrow">ORDER PROGRESS</p>
+          <p className="eyebrow">履约进度</p>
           <h2>礼物进度</h2>
         </div>
         <StatusBadge status={order.status}>{orderStatusLabel[order.status]}</StatusBadge>
@@ -377,7 +383,7 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
           { done: order.completedAt !== null, label: '已完成', time: order.completedAt },
         ].map((step) => (
           <div className={step.done ? 'progress-step done' : 'progress-step'} key={step.label}>
-            <i>{step.done ? '✓' : ''}</i>
+            <i>{step.done ? <Check aria-hidden="true" size={14} /> : null}</i>
             <strong>{step.label}</strong>
             <small>{step.time ? formatDate(step.time, true) : '等待更新'}</small>
           </div>
@@ -398,6 +404,7 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
               target="_blank"
             >
               查询物流
+              <ExternalLink aria-hidden="true" size={15} />
             </a>
           ) : null}
           {shipment.events.length > 0 ? (

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bell, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { getAnnouncements, markAnnouncementRead, type Announcement } from '../api/client';
@@ -25,12 +26,12 @@ export function AnnouncementsPage() {
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="ANNOUNCEMENTS"
+        eyebrow="平台动态"
         intro="平台公告和与你的礼物相关的主播通知都会显示在这里。"
         title="公告"
       />
       {announcements.data.length === 0 ? (
-        <EmptyState description="有新消息时会显示在这里。" title="暂无公告" />
+        <EmptyState description="有新消息时会显示在这里。" icon={Bell} title="暂无公告" />
       ) : (
         <div className="announcement-list">
           {announcements.data.map((announcement) => {
@@ -62,7 +63,7 @@ export function AnnouncementsPage() {
                   <time>
                     {announcement.publishedAt ? formatDate(announcement.publishedAt, true) : ''}
                   </time>
-                  <span aria-hidden="true">{expanded ? '−' : '+'}</span>
+                  <ChevronDown aria-hidden="true" className="announcement-chevron" size={18} />
                 </button>
                 {expanded ? (
                   <div className="announcement-body" id={bodyId}>

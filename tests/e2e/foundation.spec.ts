@@ -39,13 +39,52 @@ test.afterAll(async () => {
 });
 
 test('serves the production React shell and liveness API', async ({ page, request }) => {
+  const now = Date.now();
+  await page.route('**/api/v1/portal/home', (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        announcements: [
+          {
+            id: '00000000-0000-4000-8000-000000000021',
+            pinned: true,
+            publishedAt: new Date(now - 86_400_000).toISOString(),
+            severity: 'INFO',
+            summary: '新的舰长礼物已经开放领取。',
+            title: '八月礼物领取通知',
+          },
+          {
+            id: '00000000-0000-4000-8000-000000000022',
+            pinned: false,
+            publishedAt: new Date(now - 2 * 86_400_000).toISOString(),
+            severity: 'INFO',
+            summary: '绑定 UID 后即可自动检查礼物资格。',
+            title: '领取流程说明',
+          },
+        ],
+        releases: [
+          {
+            claimDeadlineAt: new Date(now + 30 * 86_400_000).toISOString(),
+            claimStartAt: new Date(now - 86_400_000).toISOString(),
+            coverImageUrl: null,
+            creatorName: '测试主播',
+            description: '本月舰长纪念礼物。',
+            eligibilityMonth: '2026-08-01',
+            id: '00000000-0000-4000-8000-000000000023',
+            title: '八月舰长礼物',
+          },
+        ],
+      }),
+      contentType: 'application/json',
+      status: 200,
+    }),
+  );
   await page.goto(baseUrl);
-  await expect(
-    page.getByRole('heading', { name: '舰长礼物，从资格确认到收货，一处完成。' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: '属于你的舰长礼物，都在这里。' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '八月舰长礼物' })).toBeVisible();
+  await expect(page.getByText('八月礼物领取通知').first()).toBeVisible();
   await page.setViewportSize({ height: 844, width: 390 });
   await expect(page.getByRole('link', { exact: true, name: '登录' })).toBeVisible();
-  await page.getByRole('link', { name: '创建账号' }).first().click();
+  await page.getByRole('link', { exact: true, name: '注册' }).click();
   await expect(page.getByRole('heading', { name: '开始使用 Club', level: 1 })).toBeVisible();
   await expect(page.getByLabel('昵称')).toBeVisible();
   await expect(page.getByLabel('邮箱')).toBeVisible();
@@ -54,6 +93,43 @@ test('serves the production React shell and liveness API', async ({ page, reques
   const live = await request.get(`${baseUrl}/health/live`);
   expect(live.ok()).toBe(true);
   await expect(live.json()).resolves.toMatchObject({ status: 'ok', version: '0.1.0' });
+});
+
+test('keeps signed-in visitors on the public home until they choose the workspace', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/portal/home', (route) =>
+    route.fulfill({
+      body: JSON.stringify({ announcements: [], releases: [] }),
+      contentType: 'application/json',
+      status: 200,
+    }),
+  );
+  await page.route('**/api/v1/me', (route) =>
+    route.fulfill({
+      body: JSON.stringify({
+        creator: null,
+        user: {
+          email: 'viewer@example.com',
+          id: '00000000-0000-4000-8000-000000000011',
+          image: null,
+          name: '测试用户',
+          role: 'USER',
+        },
+      }),
+      contentType: 'application/json',
+      status: 200,
+    }),
+  );
+
+  await page.goto(baseUrl);
+
+  await expect(page).toHaveURL(`${baseUrl}/`);
+  await expect(page.getByRole('heading', { name: '属于你的舰长礼物，都在这里。' })).toBeVisible();
+  const workspaceLink = page.getByRole('link', { exact: true, name: '进入工作台' }).first();
+  await expect(workspaceLink).toBeVisible();
+  await expect(workspaceLink).toHaveAttribute('href', '/app');
+  await expect(page.getByRole('link', { exact: true, name: '登录' })).toHaveCount(0);
 });
 
 test('confirms registration before asking the user to sign in', async ({ page }) => {
@@ -610,10 +686,19 @@ test('exports submitted orders by release without changing the active list filte
   await expect(page.getByText('已导出 1 条待发货收货信息。')).toBeVisible();
 });
 
-test('keeps admin creation editors visible and focused at 800px', async ({ page }) => {
+test('keeps admin editors and status badges usable at 800px', async ({ page }) => {
   await page.setViewportSize({ height: 900, width: 800 });
   await page.route('**/api/v1/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
+    const runtime = {
+      lastErrorAt: null,
+      lastErrorCode: null,
+      lastSuccessAt: null,
+      lastTickAt: null,
+      nextRetryAt: null,
+      startedAt: null,
+      state: 'RUNNING',
+    };
     let body: unknown;
     if (pathname === '/api/v1/me') {
       body = {
@@ -638,9 +723,45 @@ test('keeps admin creation editors visible and focused at 800px', async ({ page 
         },
       ];
     } else if (pathname === '/api/v1/admin/verification-rooms') {
-      body = [];
+      body = [
+        {
+          biliRoomId: '123456',
+          displayName: '主验证直播间',
+          enabled: true,
+          healthStatus: 'HEALTHY',
+          id: '00000000-0000-4000-8000-000000000042',
+          lastConnectedAt: new Date().toISOString(),
+          priority: 1,
+        },
+      ];
     } else if (pathname === '/api/v1/admin/announcements') {
       body = [];
+    } else if (pathname === '/api/v1/admin/system') {
+      body = {
+        checks: { database: 'ok', schema: 'ok', storage: 'ok' },
+        integrityWarnings: [],
+        recentSnapshotFailures: [],
+        rooms: [
+          {
+            displayName: '主验证直播间',
+            enabled: true,
+            healthStatus: 'HEALTHY',
+            lastConnectedAt: new Date().toISOString(),
+          },
+        ],
+        runtimes: {
+          binding: runtime,
+          roster: runtime,
+          tracking: { ...runtime, configured: false },
+        },
+        shipmentCounts: {},
+        snapshotRunCounts: {},
+        status: 'ok',
+        trackingDueCount: 0,
+        version: '0.1.0',
+      };
+    } else if (pathname === '/api/v1/admin/audit-logs') {
+      body = { items: [], nextBefore: null };
     } else {
       await route.continue();
       return;
@@ -658,6 +779,9 @@ test('keeps admin creation editors visible and focused at 800px', async ({ page 
   await expect(page.getByLabel('搜索用户')).toBeInViewport();
 
   await page.goto(`${baseUrl}/admin/verification`);
+  const verificationHealth = page.locator('.room-row .status-badge').filter({ hasText: '健康' });
+  await expect(verificationHealth).toBeVisible();
+  expect((await verificationHealth.boundingBox())?.width).toBeLessThan(90);
   await page.getByRole('button', { name: '添加直播间' }).click();
   await expect(page.getByLabel('显示名称')).toBeFocused();
   await expect(page.getByLabel('显示名称')).toBeInViewport();
@@ -666,4 +790,11 @@ test('keeps admin creation editors visible and focused at 800px', async ({ page 
   await page.getByRole('button', { name: '新建公告' }).click();
   await expect(page.getByLabel('标题')).toBeFocused();
   await expect(page.getByLabel('标题')).toBeInViewport();
+
+  await page.goto(`${baseUrl}/admin/system`);
+  const systemHealth = page
+    .locator('.simple-list.roster .status-badge')
+    .filter({ hasText: '健康' });
+  await expect(systemHealth).toBeVisible();
+  expect((await systemHealth.boundingBox())?.width).toBeLessThan(90);
 });

@@ -1,4 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
+import {
+  ArrowRight,
+  CalendarClock,
+  CircleAlert,
+  CircleCheck,
+  CircleDotDashed,
+  RadioTower,
+  UsersRound,
+  XCircle,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import {
@@ -7,7 +17,7 @@ import {
   getAdminRosters,
   getVerificationRooms,
 } from '../../api/client';
-import { ErrorState, LoadingState, PageHeader, StatusBadge } from '../../components/Ui';
+import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
 
 export function AdminOverviewPage() {
@@ -30,43 +40,38 @@ export function AdminOverviewPage() {
   return (
     <div className="stack-xl">
       <PageHeader
-        eyebrow="PLATFORM OVERVIEW"
+        eyebrow="平台管理"
         intro="只关注平台级配置、名单异常和验证直播间健康状态。"
         title="平台概览"
       />
       <section className="metric-grid">
-        <article>
-          <span className="metric-icon">人</span>
-          <div>
-            <small>注册主播</small>
-            <strong>{overview.data.creators}</strong>
-            <p>{overview.data.activeCreators} 位启用中</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">月</span>
-          <div>
-            <small>待确认名单</small>
-            <strong>{pendingApproval.length}</strong>
-            <p>迟到抓取需要人工决定</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">!</span>
-          <div>
-            <small>同步失败</small>
-            <strong>{failures.length}</strong>
-            <p>等待检查或重试</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">验</span>
-          <div>
-            <small>验证直播间异常</small>
-            <strong>{unhealthyRooms.length}</strong>
-            <p>{rooms.data.length} 个房间已配置</p>
-          </div>
-        </article>
+        <MetricCard
+          description={`${overview.data.activeCreators} 位启用中`}
+          icon={UsersRound}
+          label="注册主播"
+          value={overview.data.creators}
+        />
+        <MetricCard
+          description="迟到抓取需要人工决定"
+          icon={CalendarClock}
+          label="待确认名单"
+          tone={pendingApproval.length > 0 ? 'amber' : 'green'}
+          value={pendingApproval.length}
+        />
+        <MetricCard
+          description="等待检查或重试"
+          icon={CircleAlert}
+          label="同步失败"
+          tone={failures.length > 0 ? 'red' : 'green'}
+          value={failures.length}
+        />
+        <MetricCard
+          description={`${rooms.data.length} 个房间已配置`}
+          icon={RadioTower}
+          label="验证直播间异常"
+          tone={unhealthyRooms.length > 0 ? 'red' : 'green'}
+          value={unhealthyRooms.length}
+        />
       </section>
       {pendingApproval.length > 0 ||
       failures.length > 0 ||
@@ -75,58 +80,80 @@ export function AdminOverviewPage() {
         <section className="panel attention-panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">NEEDS ATTENTION</p>
+              <p className="eyebrow">待处理事项</p>
               <h2>需要处理</h2>
             </div>
           </div>
           <div className="attention-list">
             {verificationNeedsSetup ? (
               <Link to="/admin/verification">
-                <span className="attention-icon warning">验</span>
+                <span className="attention-icon warning">
+                  <RadioTower aria-hidden="true" size={19} />
+                </span>
                 <div>
                   <strong>需要配置验证直播间</strong>
                   <p>至少启用一个房间后，普通用户才能绑定 B站 UID。</p>
                 </div>
-                <b>去配置 →</b>
+                <b>
+                  去配置
+                  <ArrowRight aria-hidden="true" size={15} />
+                </b>
               </Link>
             ) : null}
             {pendingApproval.map(({ creator, run }) => (
               <Link key={run.id} to={`/admin/rosters?run=${run.id}`}>
-                <span className="attention-icon warning">!</span>
+                <span className="attention-icon warning">
+                  <CircleAlert aria-hidden="true" size={19} />
+                </span>
                 <div>
                   <strong>
                     {creator.displayName} 的 {formatMonth(run.periodStart)}名单等待确认
                   </strong>
                   <p>抓取开始时间已超过月末准点窗口。</p>
                 </div>
-                <b>处理 →</b>
+                <b>
+                  处理
+                  <ArrowRight aria-hidden="true" size={15} />
+                </b>
               </Link>
             ))}
             {failures.map(({ creator, run }) => (
               <Link key={run.id} to={`/admin/rosters?run=${run.id}`}>
-                <span className="attention-icon danger">×</span>
+                <span className="attention-icon danger">
+                  <XCircle aria-hidden="true" size={19} />
+                </span>
                 <div>
                   <strong>{creator.displayName} 的名单同步失败</strong>
                   <p>{formatDate(run.scheduledCutoffAt, true)} 计划执行</p>
                 </div>
-                <b>查看 →</b>
+                <b>
+                  查看
+                  <ArrowRight aria-hidden="true" size={15} />
+                </b>
               </Link>
             ))}
             {unhealthyRooms.map((room) => (
               <Link key={room.id} to="/admin/verification">
-                <span className="attention-icon warning">◌</span>
+                <span className="attention-icon warning">
+                  <CircleDotDashed aria-hidden="true" size={19} />
+                </span>
                 <div>
                   <strong>验证直播间“{room.displayName}”未处于健康状态</strong>
                   <p>当前状态：{room.healthStatus}</p>
                 </div>
-                <b>检查 →</b>
+                <b>
+                  检查
+                  <ArrowRight aria-hidden="true" size={15} />
+                </b>
               </Link>
             ))}
           </div>
         </section>
       ) : (
         <section className="all-clear">
-          <span>✓</span>
+          <span>
+            <CircleCheck aria-hidden="true" size={22} />
+          </span>
           <div>
             <strong>平台运行正常</strong>
             <p>当前没有需要人工处理的名单或验证直播间异常。</p>
@@ -137,11 +164,12 @@ export function AdminOverviewPage() {
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">CREATORS</p>
+              <p className="eyebrow">主播账号</p>
               <h2>最近更新的主播</h2>
             </div>
             <Link className="text-action" to="/admin/creators">
-              管理主播 →
+              管理主播
+              <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
           <div className="simple-list">
@@ -159,11 +187,12 @@ export function AdminOverviewPage() {
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">ROSTER RUNS</p>
+              <p className="eyebrow">名单任务</p>
               <h2>最近名单任务</h2>
             </div>
             <Link className="text-action" to="/admin/rosters">
-              全部任务 →
+              全部任务
+              <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
           <div className="simple-list roster">

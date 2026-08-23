@@ -1,3 +1,4 @@
+import { Plus, Trash2, X } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { GuardTier } from '../../api/client';
@@ -62,7 +63,8 @@ export function PackageEditorSection({
         </div>
         {editable ? (
           <button className="button ghost" onClick={addPackage} type="button">
-            + 添加礼包
+            <Plus aria-hidden="true" size={16} />
+            添加礼包
           </button>
         ) : null}
       </div>
@@ -77,6 +79,7 @@ export function PackageEditorSection({
                   onClick={() => removePackage(packageIndex)}
                   type="button"
                 >
+                  <Trash2 aria-hidden="true" size={14} />
                   删除
                 </button>
               ) : null}
@@ -164,7 +167,7 @@ export function PackageEditorSection({
                       }}
                       type="button"
                     >
-                      ×
+                      <X aria-hidden="true" size={16} />
                     </button>
                   ) : null}
                 </div>
@@ -180,7 +183,8 @@ export function PackageEditorSection({
                   }}
                   type="button"
                 >
-                  + 添加物品
+                  <Plus aria-hidden="true" size={15} />
+                  添加物品
                 </button>
               ) : null}
             </div>

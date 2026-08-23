@@ -110,7 +110,7 @@ export function AdminRostersPage() {
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="ROSTER SYNC"
+        eyebrow="月度名单"
         intro="每位启用主播都会按配置时区在月末 23:59 开始抓取；迟到名单必须由平台确认。"
         title="名单同步"
       />

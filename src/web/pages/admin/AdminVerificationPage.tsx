@@ -94,7 +94,7 @@ export function AdminVerificationPage() {
             添加直播间
           </button>
         }
-        eyebrow="BILIBILI VERIFICATION"
+        eyebrow="B站验证"
         intro="普通用户只能使用这里启用的固定直播间，不能自行输入房间号。"
         title="验证直播间"
       />

@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import { CalendarSync, CircleCheck, Database, HardDrive, RadioTower, Truck } from 'lucide-react';
 import { useState } from 'react';
 
 import { getAdminAuditLogs, getAdminSystem } from '../../api/client';
 import { AnnouncementManager } from '../../components/AnnouncementManager';
-import { ErrorState, LoadingState, PageHeader, StatusBadge } from '../../components/Ui';
+import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate } from '../../lib/format';
 
 const snapshotStatusLabel: Readonly<Record<string, string>> = {
@@ -44,11 +45,7 @@ const auditActionLabel: Readonly<Record<string, string>> = {
 export function AdminAnnouncementsPage() {
   return (
     <div className="stack-lg">
-      <PageHeader
-        eyebrow="PLATFORM ANNOUNCEMENTS"
-        intro="平台公告对所有已登录用户可见。"
-        title="平台公告"
-      />
+      <PageHeader eyebrow="平台公告" intro="平台公告对所有已登录用户可见。" title="平台公告" />
       <AnnouncementManager area="admin" />
     </div>
   );
@@ -68,7 +65,7 @@ export function AdminSystemPage() {
   return (
     <div className="stack-lg">
       <PageHeader
-        eyebrow="SYSTEM"
+        eyebrow="系统状态"
         intro={`Club ${data.version} · 数据库、私有存储和后台任务的运行状态。`}
         title="系统"
         actions={
@@ -82,68 +79,63 @@ export function AdminSystemPage() {
         }
       />
       <section className="metric-grid system-metrics">
-        <article>
-          <span className="metric-icon">DB</span>
-          <div>
-            <small>PostgreSQL</small>
-            <strong>{data.checks.database === 'ok' ? '正常' : '异常'}</strong>
-            <p>业务数据与审计记录</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">FS</span>
-          <div>
-            <small>私有文件存储</small>
-            <strong>{data.checks.storage === 'ok' ? '正常' : '异常'}</strong>
-            <p>名单原始分页证据</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">验</span>
-          <div>
-            <small>验证连接</small>
-            <strong>{data.runtimes.binding.state === 'RUNNING' ? '运行中' : '需要检查'}</strong>
-            <p>
-              {data.runtimes.binding.lastTickAt
-                ? `最近 ${formatDate(data.runtimes.binding.lastTickAt, true)}`
-                : '尚无执行记录'}
-            </p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">月</span>
-          <div>
-            <small>名单调度器</small>
-            <strong>{data.runtimes.roster.state === 'RUNNING' ? '运行中' : '需要检查'}</strong>
-            <p>
-              {data.runtimes.roster.lastTickAt
-                ? `最近 ${formatDate(data.runtimes.roster.lastTickAt, true)}`
-                : '尚无执行记录'}
-            </p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">运</span>
-          <div>
-            <small>物流刷新</small>
-            <strong>
-              {data.runtimes.tracking.configured
-                ? data.runtimes.tracking.state === 'RUNNING'
-                  ? '运行中'
-                  : '需要检查'
-                : data.runtimes.tracking.state === 'RUNNING'
-                  ? '定时清理运行中'
-                  : '需要检查'}
-            </strong>
-            <p>{data.trackingDueCount} 个物流等待刷新</p>
-          </div>
-        </article>
+        <MetricCard
+          description="业务数据与审计记录"
+          icon={Database}
+          label="PostgreSQL"
+          tone={data.checks.database === 'ok' ? 'green' : 'red'}
+          value={data.checks.database === 'ok' ? '正常' : '异常'}
+        />
+        <MetricCard
+          description="名单原始分页证据"
+          icon={HardDrive}
+          label="私有文件存储"
+          tone={data.checks.storage === 'ok' ? 'green' : 'red'}
+          value={data.checks.storage === 'ok' ? '正常' : '异常'}
+        />
+        <MetricCard
+          description={
+            data.runtimes.binding.lastTickAt
+              ? `最近 ${formatDate(data.runtimes.binding.lastTickAt, true)}`
+              : '尚无执行记录'
+          }
+          icon={RadioTower}
+          label="验证连接"
+          tone={data.runtimes.binding.state === 'RUNNING' ? 'green' : 'red'}
+          value={data.runtimes.binding.state === 'RUNNING' ? '运行中' : '需要检查'}
+        />
+        <MetricCard
+          description={
+            data.runtimes.roster.lastTickAt
+              ? `最近 ${formatDate(data.runtimes.roster.lastTickAt, true)}`
+              : '尚无执行记录'
+          }
+          icon={CalendarSync}
+          label="名单调度器"
+          tone={data.runtimes.roster.state === 'RUNNING' ? 'green' : 'red'}
+          value={data.runtimes.roster.state === 'RUNNING' ? '运行中' : '需要检查'}
+        />
+        <MetricCard
+          description={`${data.trackingDueCount} 个物流等待刷新`}
+          icon={Truck}
+          label="物流刷新"
+          tone={data.runtimes.tracking.state === 'RUNNING' ? 'green' : 'red'}
+          value={
+            data.runtimes.tracking.configured
+              ? data.runtimes.tracking.state === 'RUNNING'
+                ? '运行中'
+                : '需要检查'
+              : data.runtimes.tracking.state === 'RUNNING'
+                ? '定时清理运行中'
+                : '需要检查'
+          }
+        />
       </section>
       <div className="overview-grid">
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">ROSTER RUNS</p>
+              <p className="eyebrow">名单任务</p>
               <h2>名单任务状态</h2>
             </div>
           </div>
@@ -165,7 +157,7 @@ export function AdminSystemPage() {
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">SHIPMENTS</p>
+              <p className="eyebrow">发货概况</p>
               <h2>物流状态</h2>
             </div>
           </div>
@@ -189,7 +181,7 @@ export function AdminSystemPage() {
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">VERIFICATION ROOMS</p>
+              <p className="eyebrow">验证直播间</p>
               <h2>验证直播间</h2>
             </div>
           </div>
@@ -226,13 +218,15 @@ export function AdminSystemPage() {
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">INTEGRITY</p>
+              <p className="eyebrow">数据完整性</p>
               <h2>证据完整性</h2>
             </div>
           </div>
           {data.integrityWarnings.length === 0 ? (
             <div className="mini-success">
-              <span>✓</span>
+              <span>
+                <CircleCheck aria-hidden="true" size={18} />
+              </span>
               <p>最近检查的名单分页文件均可访问。</p>
             </div>
           ) : (
@@ -249,7 +243,7 @@ export function AdminSystemPage() {
       <section className="panel">
         <div className="section-heading compact">
           <div>
-            <p className="eyebrow">AUDIT LOG</p>
+            <p className="eyebrow">审计记录</p>
             <h2>最近平台操作</h2>
           </div>
         </div>

@@ -4,6 +4,7 @@ export * from './auth';
 export * from './binding';
 export * from './creators';
 export * from './gifts';
+export * from './portal';
 export * from './snapshots';
 export * from './system';
 export * from './verification-rooms';

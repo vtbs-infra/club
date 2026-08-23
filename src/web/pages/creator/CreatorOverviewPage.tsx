@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, Clock3, Cloud, Gift, Plus, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import {
@@ -7,7 +8,7 @@ import {
   getCreatorRosters,
   getIdentity,
 } from '../../api/client';
-import { ErrorState, LoadingState, PageHeader, StatusBadge } from '../../components/Ui';
+import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
 
 export function CreatorOverviewPage() {
@@ -43,51 +44,49 @@ export function CreatorOverviewPage() {
   return (
     <div className="stack-xl">
       <PageHeader
-        eyebrow="CREATOR OVERVIEW"
+        eyebrow="主播工作台"
         intro={`欢迎回来，${identity.data.creator?.displayName ?? identity.data.user.name}。`}
         title="主播概览"
         actions={
           <Link className="button primary" to="/creator/releases/new">
             创建礼物发布
+            <Plus aria-hidden="true" size={16} />
           </Link>
         }
       />
       <section className="metric-grid">
-        <article>
-          <span className="metric-icon">◷</span>
-          <div>
-            <small>待发货</small>
-            <strong>{waiting}</strong>
-            <p>等待录入运单</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">➜</span>
-          <div>
-            <small>运输中</small>
-            <strong>{shipped}</strong>
-            <p>已发货礼物单</p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon">✦</span>
-          <div>
-            <small>礼物发布</small>
-            <strong>{releases.data.length}</strong>
-            <p>历史发布总数</p>
-          </div>
-        </article>
+        <MetricCard
+          description="等待录入运单"
+          icon={Clock3}
+          label="待发货"
+          tone={waiting > 0 ? 'amber' : 'blue'}
+          value={waiting}
+        />
+        <MetricCard
+          description="已发货礼物单"
+          icon={Truck}
+          label="运输中"
+          tone="violet"
+          value={shipped}
+        />
+        <MetricCard
+          description="历史发布总数"
+          icon={Gift}
+          label="礼物发布"
+          value={releases.data.length}
+        />
       </section>
 
       <div className="overview-grid">
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">MONTH-END ROSTER</p>
+              <p className="eyebrow">月度资格</p>
               <h2>月末名单</h2>
             </div>
             <Link className="text-action" to="/creator/settings">
-              查看设置 →
+              查看设置
+              <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
           {nextRoster ? (
@@ -120,11 +119,12 @@ export function CreatorOverviewPage() {
         <section className="panel">
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">ACTIVE RELEASE</p>
+              <p className="eyebrow">当前发布</p>
               <h2>当前礼物发布</h2>
             </div>
             <Link className="text-action" to="/creator/releases">
-              全部发布 →
+              全部发布
+              <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
           {activeRelease ? (
@@ -164,7 +164,9 @@ export function CreatorOverviewPage() {
             </div>
           ) : (
             <div className="calm-empty">
-              <span>☁</span>
+              <span>
+                <Cloud aria-hidden="true" size={25} />
+              </span>
               <strong>当前没有正在领取的礼物</strong>
               <p>这完全正常。需要发放礼物时再创建发布即可。</p>
             </div>
@@ -175,11 +177,12 @@ export function CreatorOverviewPage() {
       <section className="panel">
         <div className="section-heading compact">
           <div>
-            <p className="eyebrow">FULFILLMENT</p>
+            <p className="eyebrow">发货履约</p>
             <h2>待办礼物单</h2>
           </div>
           <Link className="text-action" to="/creator/orders">
-            进入礼物单 →
+            进入礼物单
+            <ArrowRight aria-hidden="true" size={15} />
           </Link>
         </div>
         {waiting === 0 ? (
@@ -190,7 +193,10 @@ export function CreatorOverviewPage() {
               <Link to="/creator/orders?status=SUBMITTED">
                 <strong>{waiting}</strong>
                 <span>份礼物等待发货</span>
-                <b>去发货 →</b>
+                <b>
+                  去发货
+                  <ArrowRight aria-hidden="true" size={15} />
+                </b>
               </Link>
             ) : null}
           </div>

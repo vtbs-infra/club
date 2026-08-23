@@ -1,3 +1,5 @@
+import { Gift, Upload } from 'lucide-react';
+
 import { ErrorNotice } from '../Ui';
 
 interface CoverSectionProps {
@@ -47,7 +49,9 @@ export function CoverSection({
             />
           ) : (
             <div className="gift-placeholder">
-              <span>✦</span>
+              <span>
+                <Gift size={42} strokeWidth={1.55} />
+              </span>
               <small>礼物图片</small>
             </div>
           )}
@@ -74,6 +78,7 @@ export function CoverSection({
                     type="button"
                   >
                     {uploadPending ? '正在上传…' : '上传封面'}
+                    {!uploadPending ? <Upload aria-hidden="true" size={16} /> : null}
                   </button>
                   <small>上传完成后才能发布，避免忽略当前选择的图片。</small>
                 </>
