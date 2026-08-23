@@ -132,6 +132,7 @@ export function CreatorOrdersPage() {
           ))}
         </div>
         <label className="search-field">
+          <span className="sr-only">搜索礼物单</span>
           <Search aria-hidden="true" size={17} />
           <input
             onChange={(event) => setSearch(event.target.value)}
@@ -149,6 +150,7 @@ export function CreatorOrdersPage() {
       ) : (
         <div className="orders-table-wrap">
           <table className="data-table orders-table">
+            <caption className="sr-only">主播礼物单列表</caption>
             <thead>
               <tr>
                 <th>用户</th>

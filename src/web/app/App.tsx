@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { lazy, Suspense } from 'react';
-import { Link, RouterProvider, createBrowserRouter } from 'react-router-dom';
+import { Link, Outlet, RouterProvider, createBrowserRouter, useRouteError } from 'react-router-dom';
 
 import { ProtectedLayout, RoleLanding } from '../components/AppShell';
-import { LoadingState } from '../components/Ui';
+import { ErrorState, LoadingState } from '../components/Ui';
 import { AuthPage } from '../pages/AuthPage';
 import { HomePage } from '../pages/HomePage';
 
@@ -109,6 +109,20 @@ function NotFoundPage() {
   );
 }
 
+function RouteErrorPage() {
+  const error = useRouteError();
+  return (
+    <main className="centered-state">
+      <ErrorState
+        error={error}
+        onRetry={() => window.location.reload()}
+        retryLabel="重新加载页面"
+        title="页面未能正常打开"
+      />
+    </main>
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 15_000 },
@@ -116,47 +130,53 @@ const queryClient = new QueryClient({
 });
 
 const router = createBrowserRouter([
-  { element: <HomePage />, path: '/' },
-  { element: <AuthPage mode="login" />, path: '/login' },
-  { element: <AuthPage mode="register" />, path: '/register' },
-  { element: <RoleLanding />, path: '/app' },
   {
-    element: <ProtectedLayout area="user" />,
     children: [
-      { element: <DashboardPage />, path: '/dashboard' },
-      { element: <GiftsPage />, path: '/gifts' },
-      { element: <GiftDetailPage />, path: '/gifts/:giftOrderId' },
-      { element: <AnnouncementsPage />, path: '/announcements' },
-      { element: <AccountPage />, path: '/account' },
-      { element: <BilibiliAccountPage />, path: '/account/bilibili' },
-      { element: <AddressesAccountPage />, path: '/account/addresses' },
+      { element: <HomePage />, path: '/' },
+      { element: <AuthPage mode="login" />, path: '/login' },
+      { element: <AuthPage mode="register" />, path: '/register' },
+      { element: <RoleLanding />, path: '/app' },
+      {
+        element: <ProtectedLayout area="user" />,
+        children: [
+          { element: <DashboardPage />, path: '/dashboard' },
+          { element: <GiftsPage />, path: '/gifts' },
+          { element: <GiftDetailPage />, path: '/gifts/:giftOrderId' },
+          { element: <AnnouncementsPage />, path: '/announcements' },
+          { element: <AccountPage />, path: '/account' },
+          { element: <BilibiliAccountPage />, path: '/account/bilibili' },
+          { element: <AddressesAccountPage />, path: '/account/addresses' },
+        ],
+      },
+      {
+        element: <ProtectedLayout area="creator" />,
+        children: [
+          { element: <CreatorOverviewPage />, path: '/creator' },
+          { element: <CreatorReleasesPage />, path: '/creator/releases' },
+          { element: <ReleaseEditorPage />, path: '/creator/releases/new' },
+          { element: <ReleaseEditorPage />, path: '/creator/releases/:releaseId' },
+          { element: <CreatorOrdersPage />, path: '/creator/orders' },
+          { element: <CreatorOrderDetailPage />, path: '/creator/orders/:giftOrderId' },
+          { element: <CreatorAnnouncementsPage />, path: '/creator/announcements' },
+          { element: <CreatorSettingsPage />, path: '/creator/settings' },
+        ],
+      },
+      {
+        element: <ProtectedLayout area="admin" />,
+        children: [
+          { element: <AdminOverviewPage />, path: '/admin' },
+          { element: <AdminCreatorsPage />, path: '/admin/creators' },
+          { element: <AdminRostersPage />, path: '/admin/rosters' },
+          { element: <AdminVerificationPage />, path: '/admin/verification' },
+          { element: <AdminAnnouncementsPage />, path: '/admin/announcements' },
+          { element: <AdminSystemPage />, path: '/admin/system' },
+        ],
+      },
+      { element: <NotFoundPage />, path: '*' },
     ],
+    element: <Outlet />,
+    errorElement: <RouteErrorPage />,
   },
-  {
-    element: <ProtectedLayout area="creator" />,
-    children: [
-      { element: <CreatorOverviewPage />, path: '/creator' },
-      { element: <CreatorReleasesPage />, path: '/creator/releases' },
-      { element: <ReleaseEditorPage />, path: '/creator/releases/new' },
-      { element: <ReleaseEditorPage />, path: '/creator/releases/:releaseId' },
-      { element: <CreatorOrdersPage />, path: '/creator/orders' },
-      { element: <CreatorOrderDetailPage />, path: '/creator/orders/:giftOrderId' },
-      { element: <CreatorAnnouncementsPage />, path: '/creator/announcements' },
-      { element: <CreatorSettingsPage />, path: '/creator/settings' },
-    ],
-  },
-  {
-    element: <ProtectedLayout area="admin" />,
-    children: [
-      { element: <AdminOverviewPage />, path: '/admin' },
-      { element: <AdminCreatorsPage />, path: '/admin/creators' },
-      { element: <AdminRostersPage />, path: '/admin/rosters' },
-      { element: <AdminVerificationPage />, path: '/admin/verification' },
-      { element: <AdminAnnouncementsPage />, path: '/admin/announcements' },
-      { element: <AdminSystemPage />, path: '/admin/system' },
-    ],
-  },
-  { element: <NotFoundPage />, path: '*' },
 ]);
 
 export function App() {

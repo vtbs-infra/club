@@ -93,7 +93,11 @@ export function AnnouncementsPage() {
                   <div>
                     <StatusBadge {...announcementSeverityPresentation[announcement.severity]} />
                     {announcement.pinned ? <span className="soft-tag">置顶</span> : null}
-                    {!announcement.read ? <span className="unread-dot" aria-label="未读" /> : null}
+                    {!announcement.read ? (
+                      <span className="unread-dot">
+                        <span className="sr-only">未读</span>
+                      </span>
+                    ) : null}
                   </div>
                   <strong>{announcement.title}</strong>
                   <time dateTime={announcement.publishedAt ?? undefined}>

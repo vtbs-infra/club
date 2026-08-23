@@ -66,7 +66,7 @@ export function AdminVerificationPage() {
   const unsavedChanges = useUnsavedChangesGuard(!sameForm(form, baselineForm));
   const focusEditor = () => {
     requestAnimationFrame(() => {
-      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      editorRef.current?.scrollIntoView({ block: 'start' });
       nameInputRef.current?.focus();
     });
   };

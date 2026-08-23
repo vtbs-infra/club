@@ -8,7 +8,7 @@
   background: #f8fbfe;
   color: var(--portal-ink);
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: clip;
 }
 
 .portal-header {
@@ -1030,19 +1030,6 @@
   }
   50% {
     opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .portal-release-skeleton,
-  .portal-news-skeleton {
-    animation: none;
-  }
-
-  .portal-release-card,
-  .portal-section-action svg,
-  .portal-card-action svg {
-    transition: none;
   }
 }
 

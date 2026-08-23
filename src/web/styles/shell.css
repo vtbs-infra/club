@@ -203,6 +203,8 @@
   color: var(--muted-strong);
   display: none;
   justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .page-shell {
@@ -220,12 +222,6 @@
   from {
     opacity: 0;
     transform: translateY(4px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .page-shell > * {
-    animation: none;
   }
 }
 

@@ -52,7 +52,7 @@ export function GiftDetailPage() {
         queryClient.invalidateQueries({ queryKey: ['gifts'] }),
         queryClient.invalidateQueries({ queryKey: ['me', 'announcements'] }),
       ]);
-      window.scrollTo({ behavior: 'smooth', top: 0 });
+      window.scrollTo({ top: 0 });
     },
   });
 

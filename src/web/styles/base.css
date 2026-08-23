@@ -115,7 +115,12 @@ code {
 }
 
 .table-scroll {
+  max-width: 100%;
   overflow-x: auto;
+}
+
+.table-scroll .data-table {
+  min-width: 620px;
 }
 
 .evidence-actions {
@@ -305,9 +310,9 @@ button.text-button {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   display: inline-flex;
-  height: 34px;
+  height: 44px;
   justify-content: center;
-  width: 34px;
+  width: 44px;
 }
 
 .icon-button.danger {
@@ -732,6 +737,17 @@ textarea:disabled {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

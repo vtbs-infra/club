@@ -106,9 +106,7 @@ export function AdminRostersPage() {
 
   useEffect(() => {
     if (!runId || !window.matchMedia('(max-width: 920px)').matches) return;
-    requestAnimationFrame(() =>
-      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    );
+    requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'start' }));
   }, [runId]);
   if (rosters.isPending) return <LoadingState label="正在读取名单任务…" />;
   if (rosters.isError) return <ErrorState error={rosters.error} />;
@@ -323,6 +321,7 @@ export function AdminRostersPage() {
                   </div>
                   <div className="table-scroll">
                     <table className="data-table">
+                      <caption className="sr-only">月度名单定稿成员</caption>
                       <thead>
                         <tr>
                           <th>序号</th>
@@ -375,46 +374,49 @@ export function AdminRostersPage() {
                     ) : null}
                   </div>
                   {integrity.isError ? <ErrorNotice error={integrity.error} /> : null}
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>执行</th>
-                        <th>页码</th>
-                        <th>成员数</th>
-                        <th>内容哈希</th>
-                        <th>校验</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detail.data.pages.map((page) => (
-                        <tr key={`${page.snapshotAttemptId}-${page.pageNumber}`}>
-                          <td>
-                            第{' '}
-                            {detail.data.attempts.find(
-                              (attempt) => attempt.id === page.snapshotAttemptId,
-                            )?.attemptNumber ?? '—'}{' '}
-                            次
-                          </td>
-                          <td>{page.pageNumber}</td>
-                          <td>{page.itemCount}</td>
-                          <td>
-                            <code>{page.contentHashSha256.slice(0, 16)}…</code>
-                          </td>
-                          <td>
-                            {integrity.data
-                              ? integrity.data.find(
-                                  (result) =>
-                                    result.snapshotAttemptId === page.snapshotAttemptId &&
-                                    result.pageNumber === page.pageNumber,
-                                )?.ok
-                                ? '一致'
-                                : '不一致'
-                              : '未校验'}
-                          </td>
+                  <div className="table-scroll">
+                    <table className="data-table">
+                      <caption className="sr-only">名单原始分页证据</caption>
+                      <thead>
+                        <tr>
+                          <th>执行</th>
+                          <th>页码</th>
+                          <th>成员数</th>
+                          <th>内容哈希</th>
+                          <th>校验</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {detail.data.pages.map((page) => (
+                          <tr key={`${page.snapshotAttemptId}-${page.pageNumber}`}>
+                            <td>
+                              第{' '}
+                              {detail.data.attempts.find(
+                                (attempt) => attempt.id === page.snapshotAttemptId,
+                              )?.attemptNumber ?? '—'}{' '}
+                              次
+                            </td>
+                            <td>{page.pageNumber}</td>
+                            <td>{page.itemCount}</td>
+                            <td>
+                              <code>{page.contentHashSha256.slice(0, 16)}…</code>
+                            </td>
+                            <td>
+                              {integrity.data
+                                ? integrity.data.find(
+                                    (result) =>
+                                      result.snapshotAttemptId === page.snapshotAttemptId &&
+                                      result.pageNumber === page.pageNumber,
+                                  )?.ok
+                                  ? '一致'
+                                  : '不一致'
+                                : '未校验'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </details>
               ) : null}
             </div>

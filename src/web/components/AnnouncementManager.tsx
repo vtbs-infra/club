@@ -110,7 +110,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   };
   const focusEditor = () => {
     requestAnimationFrame(() => {
-      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      editorRef.current?.scrollIntoView({ block: 'start' });
       titleInputRef.current?.focus();
     });
   };

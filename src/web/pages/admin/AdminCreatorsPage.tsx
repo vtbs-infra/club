@@ -77,7 +77,7 @@ export function AdminCreatorsPage() {
   });
   const focusEditor = () => {
     requestAnimationFrame(() => {
-      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      editorRef.current?.scrollIntoView({ block: 'start' });
       (searchInputRef.current ?? displayNameInputRef.current)?.focus();
     });
   };

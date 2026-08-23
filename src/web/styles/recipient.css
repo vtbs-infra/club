@@ -718,6 +718,8 @@
 .unread-dot {
   background: var(--pink);
   border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
   height: 7px;
   width: 7px;
 }
