@@ -1,6 +1,6 @@
 import { Gift, Upload } from 'lucide-react';
 
-import { ErrorNotice } from '../Ui';
+import { ErrorNotice, InlineNotice } from '../Ui';
 
 interface CoverSectionProps {
   readonly coverObjectKey: string | null | undefined;
@@ -57,7 +57,11 @@ export function CoverSection({
           )}
         </div>
         <div>
-          {editable ? (
+          {editable && isNew ? (
+            <InlineNotice tone="info">
+              先创建草稿，再在草稿页面选择并上传封面。创建草稿不会替你保留本地文件。
+            </InlineNotice>
+          ) : editable ? (
             <>
               <label className="file-button">
                 选择图片
@@ -68,8 +72,7 @@ export function CoverSection({
                 />
               </label>
               <p>JPEG、PNG 或 WebP，最大 5 MB。系统会统一转为 WebP。</p>
-              {isNew ? <small>先保存草稿，即可上传封面。</small> : null}
-              {coverPreviewUrl && !isNew ? (
+              {coverPreviewUrl ? (
                 <>
                   <button
                     className="button secondary"
