@@ -106,6 +106,7 @@ export function BasicInfoSection({
           截止领取
           <input
             disabled={!editable}
+            min={claimStartAt}
             onChange={(event) => onClaimDeadlineAtChange(event.target.value)}
             required
             type="datetime-local"

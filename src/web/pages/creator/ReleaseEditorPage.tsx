@@ -21,6 +21,7 @@ import { CoverSection } from '../../components/release-editor/CoverSection';
 import { PackageEditorSection } from '../../components/release-editor/PackageEditorSection';
 import { TierRulesSection } from '../../components/release-editor/TierRulesSection';
 import type { EditableField, EditablePackage } from '../../components/release-editor/types';
+import { releaseValidationMessage } from '../../components/release-editor/validation';
 import {
   ConfirmDialog,
   ErrorNotice,
@@ -88,6 +89,7 @@ export function ReleaseEditorPage() {
   const [fields, setFields] = useState<EditableField[]>([]);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<'close' | 'delete' | 'publish' | null>(null);
   const status = release.data?.status ?? 'DRAFT';
   const editable = status === 'DRAFT';
@@ -125,6 +127,7 @@ export function ReleaseEditorPage() {
     );
     setCoverFile(null);
     setDirty(false);
+    setValidationError(null);
   }, [identity.data?.creator, release.data, timeZone]);
 
   useEffect(() => {
@@ -168,6 +171,22 @@ export function ReleaseEditorPage() {
     tierPackageIndexes,
     title,
   });
+  const markDirty = () => {
+    setDirty(true);
+    setValidationError(null);
+  };
+  const validateEditor = (): boolean => {
+    const message = releaseValidationMessage({
+      claimDeadlineAt,
+      claimStartAt,
+      fields,
+      packages,
+      timeZone,
+      title,
+    });
+    setValidationError(message);
+    return message === null;
+  };
 
   const save = useMutation({
     mutationFn: () =>
@@ -179,6 +198,7 @@ export function ReleaseEditorPage() {
           }),
     onSuccess: async (saved) => {
       setDirty(false);
+      setValidationError(null);
       await queryClient.invalidateQueries({ queryKey: ['creator', 'releases'] });
       if (isNew) await navigate(`/creator/releases/${saved.id}`, { replace: true });
       else queryClient.setQueryData(['creator', 'releases', releaseId], saved);
@@ -266,7 +286,9 @@ export function ReleaseEditorPage() {
                     publish.isPending || save.isPending || upload.isPending || coverFile !== null
                   }
                   onClick={() => {
-                    if (formRef.current?.reportValidity()) setConfirmation('publish');
+                    if (formRef.current?.reportValidity() && validateEditor()) {
+                      setConfirmation('publish');
+                    }
                   }}
                   type="button"
                 >
@@ -298,13 +320,19 @@ export function ReleaseEditorPage() {
       <form
         className="release-form stack-lg"
         id="release-form"
-        onChange={() => setDirty(true)}
+        onChange={markDirty}
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
+          if (!validateEditor()) return;
           save.mutate();
         }}
         ref={formRef}
       >
+        {validationError ? (
+          <InlineNotice tone="danger">
+            <p>{validationError}</p>
+          </InlineNotice>
+        ) : null}
         <BasicInfoSection
           claimDeadlineAt={claimDeadlineAt}
           claimStartAt={claimStartAt}
@@ -338,7 +366,7 @@ export function ReleaseEditorPage() {
         />
         <PackageEditorSection
           editable={editable}
-          onDirty={() => setDirty(true)}
+          onDirty={markDirty}
           packages={packages}
           setPackages={setPackages}
           setTierPackageIndexes={setTierPackageIndexes}
@@ -352,7 +380,7 @@ export function ReleaseEditorPage() {
         <ClaimFieldsSection
           editable={editable}
           fields={fields}
-          onDirty={() => setDirty(true)}
+          onDirty={markDirty}
           setFields={setFields}
         />
 

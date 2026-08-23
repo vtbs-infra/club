@@ -18,6 +18,7 @@ import {
   EmptyState,
   ErrorNotice,
   ErrorState,
+  InlineNotice,
   LoadingState,
   StatusBadge,
 } from './Ui';
@@ -56,6 +57,26 @@ function sameDraft(left: ManagedAnnouncementInput, right: ManagedAnnouncementInp
   );
 }
 
+function announcementValidationMessage(
+  draft: ManagedAnnouncementInput,
+  editing: Announcement | null,
+): string | null {
+  if (!draft.title.trim()) return '公告标题不能只包含空格。';
+  if (!draft.body.trim()) return '公告正文不能只包含空格。';
+  if (!draft.expiresAt) return null;
+  const expiresAt = Date.parse(draft.expiresAt);
+  if (Number.isNaN(expiresAt)) return '公告失效时间格式不正确。';
+  const publishedAt = editing?.publishedAt
+    ? Date.parse(editing.publishedAt)
+    : draft.publishNow
+      ? Date.now()
+      : null;
+  if (publishedAt !== null && expiresAt <= publishedAt) {
+    return '公告失效时间必须晚于发布时间。';
+  }
+  return null;
+}
+
 export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creator' }) {
   const queryClient = useQueryClient();
   const editorRef = useRef<HTMLFormElement>(null);
@@ -75,12 +96,17 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   const [baselineDraft, setBaselineDraft] = useState<ManagedAnnouncementInput>(emptyDraft);
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
   const [unpublishConfirmation, setUnpublishConfirmation] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const dirty = !sameDraft(draft, baselineDraft);
   const unsavedChanges = useUnsavedChangesGuard(dirty);
   const timeZone =
     area === 'creator'
       ? (identity.data?.creator?.timezone ?? PLATFORM_TIME_ZONE)
       : PLATFORM_TIME_ZONE;
+  const updateDraft = (patch: Partial<ManagedAnnouncementInput>) => {
+    setValidationError(null);
+    setDraft((current) => ({ ...current, ...patch }));
+  };
   const focusEditor = () => {
     requestAnimationFrame(() => {
       editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -91,12 +117,14 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
     setEditing(null);
     setDraft(emptyDraft);
     setBaselineDraft(emptyDraft);
+    setValidationError(null);
   };
   const selectAnnouncement = (announcement: Announcement) => {
     const nextDraft = announcementDraft(announcement);
     setEditing(announcement);
     setDraft(nextDraft);
     setBaselineDraft(nextDraft);
+    setValidationError(null);
     focusEditor();
   };
   const save = useMutation({
@@ -198,6 +226,9 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
         className="panel editor-panel"
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
+          const message = announcementValidationMessage(draft, editing);
+          setValidationError(message);
+          if (message) return;
           save.mutate();
         }}
         ref={editorRef}
@@ -212,7 +243,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           标题
           <input
             maxLength={200}
-            onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+            onChange={(event) => updateDraft({ title: event.target.value })}
             required
             ref={titleInputRef}
             value={draft.title}
@@ -222,7 +253,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           正文
           <textarea
             maxLength={20_000}
-            onChange={(event) => setDraft((current) => ({ ...current, body: event.target.value }))}
+            onChange={(event) => updateDraft({ body: event.target.value })}
             required
             rows={10}
             value={draft.body}
@@ -233,10 +264,9 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             提醒级别
             <select
               onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
+                updateDraft({
                   severity: event.target.value as ManagedAnnouncementInput['severity'],
-                }))
+                })
               }
               value={draft.severity}
             >
@@ -248,14 +278,18 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           <label>
             失效时间（可选）
             <input
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  expiresAt: event.target.value
-                    ? dateTimeLocalToIso(event.target.value, timeZone)
-                    : null,
-                }))
-              }
+              onChange={(event) => {
+                if (!event.target.value) {
+                  updateDraft({ expiresAt: null });
+                  return;
+                }
+                try {
+                  const expiresAt = dateTimeLocalToIso(event.target.value, timeZone);
+                  updateDraft({ expiresAt });
+                } catch {
+                  setValidationError(`这个时间在 ${timeZone} 时区中不存在，请重新选择。`);
+                }
+              }}
               type="datetime-local"
               value={draft.expiresAt ? isoToDateTimeLocal(draft.expiresAt, timeZone) : ''}
             />
@@ -266,9 +300,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           <label className="check-field">
             <input
               checked={draft.pinned}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, pinned: event.target.checked }))
-              }
+              onChange={(event) => updateDraft({ pinned: event.target.checked })}
               type="checkbox"
             />
             置顶显示
@@ -277,9 +309,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             <label className="check-field">
               <input
                 checked={draft.publicVisible}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, publicVisible: event.target.checked }))
-                }
+                onChange={(event) => updateDraft({ publicVisible: event.target.checked })}
                 type="checkbox"
               />
               同时展示在公开首页
@@ -289,15 +319,18 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             <label className="check-field">
               <input
                 checked={draft.publishNow}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, publishNow: event.target.checked }))
-                }
+                onChange={(event) => updateDraft({ publishNow: event.target.checked })}
                 type="checkbox"
               />
               保存后立即发布
             </label>
           ) : null}
         </div>
+        {validationError ? (
+          <InlineNotice tone="danger">
+            <p>{validationError}</p>
+          </InlineNotice>
+        ) : null}
         {save.isError ? <ErrorNotice error={save.error} /> : null}
         {remove.isError ? <ErrorNotice error={remove.error} /> : null}
         {unpublish.isError ? <ErrorNotice error={unpublish.error} /> : null}

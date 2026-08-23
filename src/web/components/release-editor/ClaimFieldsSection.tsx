@@ -48,7 +48,13 @@ export function ClaimFieldsSection({
           <p>收货地址无需重复配置；这里只添加尺码、款式等礼物专属选项。</p>
         </div>
         {editable ? (
-          <button className="button ghost" onClick={addField} type="button">
+          <button
+            className="button ghost"
+            disabled={fields.length >= 20}
+            onClick={addField}
+            title={fields.length >= 20 ? '每份礼物最多添加 20 个填写项' : undefined}
+            type="button"
+          >
             <Plus aria-hidden="true" size={16} />
             添加填写项
           </button>
@@ -64,6 +70,7 @@ export function ClaimFieldsSection({
                 显示名称
                 <input
                   disabled={!editable}
+                  maxLength={120}
                   onChange={(event) => updateField(index, { label: event.target.value })}
                   placeholder="例如：T恤尺码"
                   required

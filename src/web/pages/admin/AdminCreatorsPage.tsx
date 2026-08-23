@@ -249,6 +249,7 @@ export function AdminCreatorsPage() {
               B站 UID
               <input
                 inputMode="numeric"
+                maxLength={32}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, bilibiliUid: event.target.value }))
                 }
@@ -261,6 +262,7 @@ export function AdminCreatorsPage() {
               直播间 ID
               <input
                 inputMode="numeric"
+                maxLength={32}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, roomId: event.target.value }))
                 }
@@ -272,6 +274,7 @@ export function AdminCreatorsPage() {
             <label>
               名单结算时区
               <input
+                maxLength={100}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, timezone: event.target.value }))
                 }

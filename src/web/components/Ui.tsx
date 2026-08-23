@@ -11,19 +11,7 @@ import {
 import { useRef, type ReactNode } from 'react';
 
 import { ApiError } from '../api/http';
-
-const errorMessages: Readonly<Record<string, string>> = {
-  ADDRESS_NOT_FOUND: '这个收货地址已不存在，请刷新后重新选择。',
-  GIFT_ORDER_BINDING_REQUIRED: '当前 B站账号绑定与礼物资格不一致，请先重新完成绑定。',
-  GIFT_ORDER_NOT_CLAIMABLE: '这份礼物当前不能领取，请刷新页面查看最新状态。',
-  GIFT_ORDER_VERSION_CONFLICT: '礼物单状态已经变化，请刷新后再试。',
-  GIFT_RELEASE_MONTH_CONFLICT: '这个资格月份已经存在一份礼物发布。',
-  GIFT_RELEASE_NOT_FOUND: '这份礼物发布不存在，或不属于当前主播。',
-  GIFT_RELEASE_VERSION_CONFLICT: '礼物草稿已在其他页面被修改，请刷新后再试。',
-  FULFILLMENT_EXPORT_EMPTY: '这份礼物目前没有待发货的礼物单。',
-  REQUEST_FAILED: '操作未能完成，请稍后重试。',
-  TRACKING_REFRESH_FAILED: '物流服务暂时不可用，请稍后重试。',
-};
+import { errorMessage } from '../lib/error-message';
 
 function ErrorDetails({ error }: { readonly error: unknown }) {
   if (!(error instanceof ApiError)) return null;
@@ -54,18 +42,13 @@ function ErrorDetails({ error }: { readonly error: unknown }) {
         ) : null}
         {error.message ? (
           <div>
-            <dt>服务端信息</dt>
+            <dt>原始信息（排障用）</dt>
             <dd>{error.message}</dd>
           </div>
         ) : null}
       </dl>
     </details>
   );
-}
-
-function errorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return '操作未能完成，请稍后重试。';
-  return errorMessages[error.code] ?? '操作未能完成，请根据错误详情联系平台管理员。';
 }
 
 export function PageHeader({

@@ -1,0 +1,90 @@
+import { ApiError } from '../api/http';
+
+const errorMessages: Readonly<Record<string, string>> = {
+  ADDRESS_DECRYPTION_FAILED: '收货地址暂时无法读取，请联系平台管理员检查加密配置。',
+  ADDRESS_INVALID: '收货信息不完整或格式不正确，请检查后重试。',
+  ADDRESS_LABEL_INVALID: '地址名称不能为空，且不能超过 80 个字符。',
+  ADDRESS_NOT_FOUND: '这个收货地址已不存在，请刷新后重新选择。',
+  ADMIN_ACCOUNT_ALREADY_EXISTS: '平台管理员账号已经存在，不能重复初始化。',
+  ANNOUNCEMENT_CONTENT_INVALID: '公告标题或正文不符合要求，请检查内容后重试。',
+  ANNOUNCEMENT_EXPIRY_INVALID: '公告失效时间必须晚于发布时间。',
+  ANNOUNCEMENT_NOT_DELETABLE: '只有未发布的公告草稿可以删除。',
+  ANNOUNCEMENT_NOT_FOUND: '这条公告已不存在，或不在当前账号的管理范围内。',
+  ANNOUNCEMENT_VERSION_CONFLICT: '公告已在其他页面被修改，请刷新后重新编辑。',
+  AUTHENTICATION_REQUIRED: '登录状态已失效，请重新登录后继续。',
+  BILIBILI_BINDING_EXISTS: '当前账号已经绑定 B站 UID；如需更换，请先解除现有绑定。',
+  BILIBILI_BINDING_NOT_FOUND: '当前账号没有有效的 B站绑定。',
+  BILIBILI_BINDING_REQUIRED: '请先绑定这份礼物资格对应的 B站 UID。',
+  BINDING_CHALLENGE_RATE_LIMITED: '验证码创建过于频繁，请稍后再试。',
+  CREATOR_ACCESS_REQUIRED: '当前账号没有主播工作台权限。',
+  CREATOR_BILIBILI_IDENTITY_INVALID: 'B站 UID 和直播间 ID 只能填写数字。',
+  CREATOR_IDENTITY_CONFLICT: '该账号、B站 UID 或直播间已经关联其他主播。',
+  CREATOR_NAME_INVALID: '主播显示名称不能为空，且不能超过 120 个字符。',
+  CREATOR_NOT_FOUND: '主播档案已不存在，请刷新后重试。',
+  CREATOR_PROFILE_UNAVAILABLE: '当前主播档案不可用，请联系平台管理员。',
+  CREATOR_PROMOTION_NOT_ALLOWED: '只有普通用户账号可以注册为主播。',
+  CREATOR_TIMEZONE_INVALID: '名单结算时区无效，请填写有效的 IANA 时区。',
+  CSRF_VALIDATION_FAILED: '页面来源校验失败，请刷新页面后重试。',
+  FULFILLMENT_EXPORT_DATA_INVALID: '待发货数据不完整，暂时无法导出，请检查礼物单。',
+  FULFILLMENT_EXPORT_EMPTY: '这份礼物目前没有待发货的礼物单。',
+  GIFT_COVER_INVALID: '封面文件不是受支持的图片，或图片内容已损坏。',
+  GIFT_COVER_NOT_FOUND: '这张礼物封面已不存在。',
+  GIFT_COVER_REQUIRED: '请先选择一张图片作为礼物封面。',
+  GIFT_ORDER_CANCEL_REASON_INVALID: '取消原因需填写 3 至 500 个字符。',
+  GIFT_ORDER_CLAIM_WINDOW_CLOSED: '当前不在这份礼物的领取时间内。',
+  GIFT_ORDER_DECRYPTION_FAILED: '礼物单中的收货信息暂时无法读取，请联系平台管理员。',
+  GIFT_ORDER_NOT_CLAIMABLE: '这份礼物当前不能领取，请刷新页面查看最新状态。',
+  GIFT_ORDER_NOT_FOUND: '这张礼物单已不存在，或不在当前账号的查看范围内。',
+  GIFT_ORDER_NOT_SHIPPABLE: '只有用户已经提交领取信息的礼物单可以发货。',
+  GIFT_ORDER_OPTIONS_INVALID: '礼物选项填写不完整或格式不正确，请检查后重试。',
+  GIFT_ORDER_TRANSITION_INVALID: '礼物单当前状态不允许执行这项操作，请刷新后重试。',
+  GIFT_ORDER_VERSION_CONFLICT: '礼物单状态已经变化，请刷新后再试。',
+  GIFT_RELEASE_CONTENT_INVALID: '礼物名称或说明不符合要求，请检查后重试。',
+  GIFT_RELEASE_FORM_INVALID: '领取填写项不完整、重复或超过数量限制。',
+  GIFT_RELEASE_IMMUTABLE: '这份礼物已经发布，内容不能再修改。',
+  GIFT_RELEASE_ITEM_INVALID: '礼包中有物品名称或数量不符合要求。',
+  GIFT_RELEASE_MONTH_CONFLICT: '这个资格月份已经存在一份礼物发布。',
+  GIFT_RELEASE_MONTH_INVALID: '请选择一个有效的资格月份。',
+  GIFT_RELEASE_NOT_CLOSABLE: '只有仍在发布中的礼物可以关闭。',
+  GIFT_RELEASE_NOT_DELETABLE: '只有尚未发布的礼物草稿可以删除。',
+  GIFT_RELEASE_NOT_FOUND: '这份礼物发布不存在，或不属于当前主播。',
+  GIFT_RELEASE_NOT_PUBLISHABLE: '这份礼物当前不能发布，请刷新后查看最新状态。',
+  GIFT_RELEASE_PACKAGES_INVALID: '礼包不能为空；名称需唯一，且不能超过数量限制。',
+  GIFT_RELEASE_TIER_RULE_INVALID: '请为舰长、提督和总督分别选择对应礼包。',
+  GIFT_RELEASE_VERSION_CONFLICT: '礼物草稿已在其他页面被修改，请刷新后再试。',
+  GIFT_RELEASE_WINDOW_INVALID: '领取截止时间必须晚于开始时间。',
+  INTERNAL_SERVER_ERROR: '服务器处理请求时出现异常，请稍后重试。',
+  NOT_FOUND: '请求的内容不存在。',
+  RATE_LIMITED: '操作过于频繁，请稍后再试。',
+  REQUEST_FAILED: '操作未能完成，请稍后重试。',
+  ROLE_PERMISSION_DENIED: '当前账号没有执行这项操作的权限。',
+  SHIPMENT_INVALID: '快递公司、运单号或物流链接格式不正确。',
+  SNAPSHOT_ACCESS_DENIED: '当前账号没有查看这份名单快照的权限。',
+  SNAPSHOT_ATTEMPT_LIMIT_REACHED: '该名单任务已达到最大同步次数，无法继续重试。',
+  SNAPSHOT_CAPTURE_NOT_ALLOWED: '该名单任务当前不能重新同步。',
+  SNAPSHOT_CREATOR_INACTIVE: '主播已停用，不能执行新的名单同步。',
+  SNAPSHOT_NOT_APPROVABLE: '这份名单已不再等待确认，请刷新后查看最新状态。',
+  SNAPSHOT_NOT_DUE: '尚未到名单结算时间，不能提前同步。',
+  SNAPSHOT_NOT_FOUND: '这份名单任务已不存在。',
+  SNAPSHOT_NOT_REJECTABLE: '这份名单已不再等待拒绝，请刷新后查看最新状态。',
+  TRACKING_REFRESH_FAILED: '物流服务暂时不可用，请稍后重试。',
+  USER_NOT_FOUND: '用户账号已不存在，请刷新后重试。',
+  VALIDATION_ERROR: '填写内容的格式不正确，请检查必填项、长度和输入格式。',
+  VERIFICATION_ROOM_CONFLICT: '这个 B站直播间已经配置过。',
+  VERIFICATION_ROOM_CONNECTION_FAILED: '无法连接这个验证直播间，请检查房间状态后重试。',
+  VERIFICATION_ROOM_NOT_FOUND: '这个验证直播间已不存在。',
+  VERIFICATION_ROOM_UNAVAILABLE: '平台暂时没有可用的验证直播间，请稍后再试。',
+};
+
+export function errorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) return '操作未能完成，请稍后重试。';
+  const knownMessage = errorMessages[error.code];
+  if (knownMessage) return knownMessage;
+  if (error.status === 401) return '登录状态已失效，请重新登录后继续。';
+  if (error.status === 403) return '当前账号没有执行这项操作的权限。';
+  if (error.status === 404) return '请求的内容已不存在，请刷新后重试。';
+  if (error.status === 409) return '数据状态已经变化，请刷新后重试。';
+  if (error.status === 429) return '操作过于频繁，请稍后再试。';
+  if (error.status >= 500) return '服务器暂时无法完成请求，请稍后重试。';
+  return '操作未能完成，请检查填写内容后重试。';
+}

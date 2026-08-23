@@ -62,7 +62,13 @@ export function PackageEditorSection({
           <p>创建用户最终会收到的礼包和其中物品。</p>
         </div>
         {editable ? (
-          <button className="button ghost" onClick={addPackage} type="button">
+          <button
+            className="button ghost"
+            disabled={packages.length >= 12}
+            onClick={addPackage}
+            title={packages.length >= 12 ? '每份礼物最多配置 12 个礼包' : undefined}
+            type="button"
+          >
             <Plus aria-hidden="true" size={16} />
             添加礼包
           </button>
@@ -89,6 +95,7 @@ export function PackageEditorSection({
                 礼包名称
                 <input
                   disabled={!editable}
+                  maxLength={120}
                   onChange={(event) => updatePackage(packageIndex, { name: event.target.value })}
                   required
                   value={package_.name}
@@ -98,6 +105,7 @@ export function PackageEditorSection({
                 简短说明
                 <input
                   disabled={!editable}
+                  maxLength={2_000}
                   onChange={(event) =>
                     updatePackage(packageIndex, { description: event.target.value })
                   }
@@ -111,6 +119,7 @@ export function PackageEditorSection({
                   <input
                     aria-label="物品名称"
                     disabled={!editable}
+                    maxLength={120}
                     onChange={(event) =>
                       updatePackage(packageIndex, {
                         items: package_.items.map((candidate, index) =>
@@ -127,6 +136,7 @@ export function PackageEditorSection({
                   <input
                     aria-label="数量"
                     disabled={!editable}
+                    max={999}
                     min={1}
                     onChange={(event) =>
                       updatePackage(packageIndex, {
@@ -143,6 +153,7 @@ export function PackageEditorSection({
                   <input
                     aria-label="物品说明"
                     disabled={!editable}
+                    maxLength={1_000}
                     onChange={(event) =>
                       updatePackage(packageIndex, {
                         items: package_.items.map((candidate, index) =>
@@ -175,12 +186,14 @@ export function PackageEditorSection({
               {editable ? (
                 <button
                   className="text-button"
+                  disabled={package_.items.length >= 30}
                   onClick={() => {
                     onDirty();
                     updatePackage(packageIndex, {
                       items: [...package_.items, { description: '', name: '', quantity: 1 }],
                     });
                   }}
+                  title={package_.items.length >= 30 ? '每个礼包最多添加 30 个物品' : undefined}
                   type="button"
                 >
                   <Plus aria-hidden="true" size={15} />

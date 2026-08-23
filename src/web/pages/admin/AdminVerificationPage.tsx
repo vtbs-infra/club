@@ -202,6 +202,7 @@ export function AdminVerificationPage() {
               <input
                 disabled={editing !== null}
                 inputMode="numeric"
+                maxLength={32}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, biliRoomId: event.target.value }))
                 }
@@ -213,6 +214,7 @@ export function AdminVerificationPage() {
             <label>
               分配优先级
               <input
+                max={10_000}
                 min={0}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, priority: Number(event.target.value) }))

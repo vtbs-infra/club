@@ -9,7 +9,7 @@ import {
   type AddressPayload,
   type AddressRecord,
 } from '../api/client';
-import { ConfirmDialog, ErrorNotice, ErrorState, LoadingState } from './Ui';
+import { ConfirmDialog, ErrorNotice, ErrorState, InlineNotice, LoadingState } from './Ui';
 
 const emptyAddress: AddressPayload = {
   city: '',
@@ -26,27 +26,30 @@ const emptyAddress: AddressPayload = {
 const fields: readonly {
   readonly key: keyof AddressPayload;
   readonly label: string;
+  readonly maxLength: number;
   readonly placeholder?: string;
   readonly required?: boolean;
   readonly wide?: boolean;
 }[] = [
-  { key: 'recipientName', label: '收件人', required: true },
-  { key: 'phone', label: '手机号码', required: true },
-  { key: 'countryRegion', label: '国家或地区', required: true },
-  { key: 'province', label: '省 / 直辖市', required: true },
-  { key: 'city', label: '城市', required: true },
-  { key: 'district', label: '区 / 县' },
+  { key: 'recipientName', label: '收件人', maxLength: 100, required: true },
+  { key: 'phone', label: '手机号码', maxLength: 40, required: true },
+  { key: 'countryRegion', label: '国家或地区', maxLength: 100, required: true },
+  { key: 'province', label: '省 / 直辖市', maxLength: 100, required: true },
+  { key: 'city', label: '城市', maxLength: 100, required: true },
+  { key: 'district', label: '区 / 县', maxLength: 100 },
   {
     key: 'detailedAddress',
     label: '详细地址',
+    maxLength: 500,
     placeholder: '街道、门牌号、楼栋及房间号',
     required: true,
     wide: true,
   },
-  { key: 'postalCode', label: '邮政编码' },
+  { key: 'postalCode', label: '邮政编码', maxLength: 20 },
   {
     key: 'userNote',
     label: '配送备注',
+    maxLength: 500,
     placeholder: '选填，仅在发货需要时使用',
     wide: true,
   },
@@ -67,6 +70,7 @@ export function AddressForm({
   const [label, setLabel] = useState(initial?.label ?? '常用地址');
   const [isDefault, setIsDefault] = useState(initial?.isDefault ?? true);
   const [payload, setPayload] = useState<AddressPayload>(initial?.payload ?? emptyAddress);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const save = useMutation({
     mutationFn: () =>
       initial
@@ -83,6 +87,20 @@ export function AddressForm({
       className={compact ? 'address-editor compact' : 'address-editor'}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
+        if (!label.trim()) {
+          setValidationError('地址名称不能只包含空格。');
+          return;
+        }
+        const missingField = fields.find((field) => field.required && !payload[field.key].trim());
+        if (missingField) {
+          setValidationError(`请填写${missingField.label}。`);
+          return;
+        }
+        if (!/^[+0-9 ()-]{5,40}$/.test(payload.phone.trim())) {
+          setValidationError('手机号码只能包含数字、空格、括号、加号或连字符。');
+          return;
+        }
+        setValidationError(null);
         save.mutate();
       }}
     >
@@ -91,7 +109,10 @@ export function AddressForm({
           地址名称
           <input
             maxLength={80}
-            onChange={(event) => setLabel(event.target.value)}
+            onChange={(event) => {
+              setValidationError(null);
+              setLabel(event.target.value);
+            }}
             required
             value={label}
           />
@@ -99,7 +120,10 @@ export function AddressForm({
         <label className="check-field">
           <input
             checked={isDefault}
-            onChange={(event) => setIsDefault(event.target.checked)}
+            onChange={(event) => {
+              setValidationError(null);
+              setIsDefault(event.target.checked);
+            }}
             type="checkbox"
           />
           设为默认地址
@@ -108,13 +132,16 @@ export function AddressForm({
           <label className={field.wide ? 'span-full' : undefined} key={field.key}>
             {field.label}
             <input
-              maxLength={field.key === 'detailedAddress' || field.key === 'userNote' ? 500 : 100}
-              onChange={(event) =>
+              inputMode={field.key === 'phone' ? 'tel' : undefined}
+              maxLength={field.maxLength}
+              onChange={(event) => {
+                setValidationError(null);
                 setPayload((current) => ({
                   ...current,
                   [field.key]: event.target.value,
-                }))
-              }
+                }));
+              }}
+              pattern={field.key === 'phone' ? '[+0-9 ()-]{5,40}' : undefined}
               placeholder={field.placeholder}
               required={field.required}
               value={payload[field.key]}
@@ -122,6 +149,11 @@ export function AddressForm({
           </label>
         ))}
       </div>
+      {validationError ? (
+        <InlineNotice tone="danger">
+          <p>{validationError}</p>
+        </InlineNotice>
+      ) : null}
       {save.isError ? <ErrorNotice error={save.error} /> : null}
       <div className="form-actions">
         <button className="button primary" disabled={save.isPending} type="submit">

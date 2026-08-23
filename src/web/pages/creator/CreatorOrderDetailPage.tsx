@@ -13,6 +13,7 @@ import {
   ConfirmDialog,
   ErrorNotice,
   ErrorState,
+  InlineNotice,
   LoadingState,
   StatusBadge,
 } from '../../components/Ui';
@@ -47,6 +48,7 @@ export function CreatorOrderDetailPage() {
   const [carrierName, setCarrierName] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [trackingUrl, setTrackingUrl] = useState('');
+  const [shipmentValidationError, setShipmentValidationError] = useState<string | null>(null);
   const [shipOpen, setShipOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -252,6 +254,11 @@ export function CreatorOrderDetailPage() {
               className="panel shipment-form"
               onSubmit={(event: FormEvent) => {
                 event.preventDefault();
+                if (!carrierName.trim() || !trackingNumber.trim()) {
+                  setShipmentValidationError('快递公司和运单号不能只包含空格。');
+                  return;
+                }
+                setShipmentValidationError(null);
                 ship.reset();
                 complete.reset();
                 cancel.reset();
@@ -267,7 +274,11 @@ export function CreatorOrderDetailPage() {
                 快递公司
                 <input
                   list="carrier-options"
-                  onChange={(event) => setCarrierName(event.target.value)}
+                  maxLength={120}
+                  onChange={(event) => {
+                    setShipmentValidationError(null);
+                    setCarrierName(event.target.value);
+                  }}
                   placeholder="例如：中通快递"
                   required
                   value={carrierName}
@@ -281,7 +292,11 @@ export function CreatorOrderDetailPage() {
               <label>
                 运单号
                 <input
-                  onChange={(event) => setTrackingNumber(event.target.value)}
+                  maxLength={160}
+                  onChange={(event) => {
+                    setShipmentValidationError(null);
+                    setTrackingNumber(event.target.value);
+                  }}
                   required
                   value={trackingNumber}
                 />
@@ -289,12 +304,21 @@ export function CreatorOrderDetailPage() {
               <label>
                 查询链接（可选）
                 <input
-                  onChange={(event) => setTrackingUrl(event.target.value)}
+                  maxLength={1_000}
+                  onChange={(event) => {
+                    setShipmentValidationError(null);
+                    setTrackingUrl(event.target.value);
+                  }}
                   placeholder="https://…"
                   type="url"
                   value={trackingUrl}
                 />
               </label>
+              {shipmentValidationError ? (
+                <InlineNotice tone="danger">
+                  <p>{shipmentValidationError}</p>
+                </InlineNotice>
+              ) : null}
               <button className="button primary wide" disabled={operationPending} type="submit">
                 确认发货
                 <PackageCheck aria-hidden="true" size={16} />
