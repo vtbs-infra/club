@@ -17,7 +17,8 @@ import {
   LoadingState,
   StatusBadge,
 } from '../../components/Ui';
-import { formatDate, formatMonth, orderStatusLabel, tierLabel } from '../../lib/format';
+import { formatDate, formatMonth, tierLabel } from '../../lib/format';
+import { giftOrderPresentation, shipmentPresentation } from '../../lib/status-presentation';
 
 const carrierCodes: Readonly<Record<string, string>> = {
   EMS: 'EMS',
@@ -27,14 +28,6 @@ const carrierCodes: Readonly<Record<string, string>> = {
   顺丰速运: 'SF',
   韵达快递: 'YD',
   中通快递: 'ZTO',
-};
-
-const shipmentStatusLabel: Readonly<Record<string, string>> = {
-  DELIVERED: '已送达',
-  EXCEPTION: '物流异常',
-  IN_TRANSIT: '运输中',
-  LABEL_CREATED: '已录单',
-  OUT_FOR_DELIVERY: '派送中',
 };
 
 export function CreatorOrderDetailPage() {
@@ -100,7 +93,7 @@ export function CreatorOrderDetailPage() {
       <header className="order-detail-header">
         <div>
           <div className="detail-status-row">
-            <StatusBadge status={data.status}>{orderStatusLabel[data.status]}</StatusBadge>
+            <StatusBadge {...giftOrderPresentation[data.status]} />
             <span>{data.orderNumber}</span>
           </div>
           <h1>{data.release.title}</h1>
@@ -245,7 +238,7 @@ export function CreatorOrderDetailPage() {
               </div>
               <div>
                 <dt>当前状态</dt>
-                <dd>{orderStatusLabel[data.status]}</dd>
+                <dd>{giftOrderPresentation[data.status].label}</dd>
               </div>
             </dl>
           </section>
@@ -332,9 +325,7 @@ export function CreatorOrderDetailPage() {
                 <div key={shipment.id}>
                   <strong>{shipment.carrierName}</strong>
                   <p>{shipment.trackingNumber}</p>
-                  <StatusBadge status={shipment.status}>
-                    {shipmentStatusLabel[shipment.status] ?? '状态更新中'}
-                  </StatusBadge>
+                  <StatusBadge {...shipmentPresentation(shipment.status)} />
                   {shipment.trackingUrl ? (
                     <a href={shipment.trackingUrl} rel="noreferrer" target="_blank">
                       查询物流

@@ -5,6 +5,7 @@ import { getBinding, getIdentity } from '../api/client';
 import { AddressBook } from '../components/AddressEditor';
 import { BilibiliPanel } from '../components/BilibiliPanel';
 import { ErrorNotice, ErrorState, LoadingState, PageHeader, StatusBadge } from '../components/Ui';
+import { bindingStatusPresentation } from '../lib/status-presentation';
 
 function AccountTabs() {
   return (
@@ -39,9 +40,10 @@ export function AccountPage() {
         </div>
         <div className="account-status">
           <span>B站身份</span>
-          <StatusBadge status={binding.data ? 'verified' : 'pending'}>
-            {binding.data ? `已绑定 UID ${binding.data.biliUid}` : '尚未绑定'}
-          </StatusBadge>
+          <StatusBadge
+            {...bindingStatusPresentation[binding.data ? 'verified' : 'pending']}
+            label={binding.data ? `已绑定 UID ${binding.data.biliUid}` : '尚未绑定'}
+          />
         </div>
       </section>
       {binding.isError ? <ErrorNotice error={binding.error} /> : null}

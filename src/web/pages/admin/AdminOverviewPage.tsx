@@ -19,6 +19,11 @@ import {
 } from '../../api/client';
 import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
+import {
+  activeStatusPresentation,
+  roomHealthPresentation,
+  snapshotRunPresentation,
+} from '../../lib/status-presentation';
 
 export function AdminOverviewPage() {
   const overview = useQuery({ queryFn: getAdminOverview, queryKey: ['admin', 'overview'] });
@@ -139,7 +144,7 @@ export function AdminOverviewPage() {
                 </span>
                 <div>
                   <strong>验证直播间“{room.displayName}”未处于健康状态</strong>
-                  <p>当前状态：{room.healthStatus}</p>
+                  <p>当前状态：{roomHealthPresentation(room.healthStatus).label}</p>
                 </div>
                 <b>
                   检查
@@ -177,9 +182,9 @@ export function AdminOverviewPage() {
               <div key={creator.id}>
                 <span className="mini-avatar">{creator.displayName.slice(0, 1)}</span>
                 <strong>{creator.displayName}</strong>
-                <StatusBadge status={creator.active ? 'active' : 'inactive'}>
-                  {creator.active ? '已启用' : '已停用'}
-                </StatusBadge>
+                <StatusBadge
+                  {...activeStatusPresentation[creator.active ? 'active' : 'inactive']}
+                />
               </div>
             ))}
           </div>
@@ -202,13 +207,7 @@ export function AdminOverviewPage() {
                   <strong>{creator.displayName}</strong>
                   <small>{formatMonth(run.periodStart)}</small>
                 </span>
-                <StatusBadge status={run.status}>
-                  {run.status === 'FINALIZED'
-                    ? '已冻结'
-                    : run.status === 'SCHEDULED'
-                      ? '已计划'
-                      : run.status}
-                </StatusBadge>
+                <StatusBadge {...snapshotRunPresentation(run.status)} />
               </div>
             ))}
           </div>

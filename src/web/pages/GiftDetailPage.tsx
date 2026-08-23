@@ -6,7 +6,8 @@ import { Link, useParams } from 'react-router-dom';
 import { getAddresses, getMyGift, submitGift, type AddressRecord } from '../api/client';
 import { AddressForm } from '../components/AddressEditor';
 import { ErrorNotice, ErrorState, InlineNotice, LoadingState, StatusBadge } from '../components/Ui';
-import { formatDate, formatMonth, orderStatusLabel, tierLabel } from '../lib/format';
+import { formatDate, formatMonth, tierLabel } from '../lib/format';
+import { giftOrderPresentation } from '../lib/status-presentation';
 
 export function GiftDetailPage() {
   const { giftOrderId = '' } = useParams();
@@ -73,7 +74,7 @@ export function GiftDetailPage() {
         </div>
         <div className="detail-copy">
           <div className="detail-status-row">
-            <StatusBadge status={order.status}>{orderStatusLabel[order.status]}</StatusBadge>
+            <StatusBadge {...giftOrderPresentation[order.status]} />
             <span>{formatMonth(order.release.eligibilityMonth)}</span>
           </div>
           <p className="eyebrow">{order.creator.displayName}</p>
@@ -374,7 +375,7 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
           <p className="eyebrow">履约进度</p>
           <h2>礼物进度</h2>
         </div>
-        <StatusBadge status={order.status}>{orderStatusLabel[order.status]}</StatusBadge>
+        <StatusBadge {...giftOrderPresentation[order.status]} />
       </div>
       <div className="progress-track">
         {[

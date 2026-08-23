@@ -18,6 +18,7 @@ import {
   StatusBadge,
 } from '../../components/Ui';
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
+import { activeStatusPresentation } from '../../lib/status-presentation';
 
 interface CreatorFormState {
   active: boolean;
@@ -168,9 +169,9 @@ export function AdminCreatorsPage() {
                     <strong>{creator.displayName}</strong>
                     <small>{creator.email}</small>
                   </span>
-                  <StatusBadge status={creator.active ? 'active' : 'inactive'}>
-                    {creator.active ? '启用' : '停用'}
-                  </StatusBadge>
+                  <StatusBadge
+                    {...activeStatusPresentation[creator.active ? 'active' : 'inactive']}
+                  />
                 </button>
               ))}
             </div>

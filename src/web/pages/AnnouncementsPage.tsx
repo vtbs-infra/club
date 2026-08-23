@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { getAnnouncements, markAnnouncementRead, type Announcement } from '../api/client';
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../components/Ui';
 import { formatDate } from '../lib/format';
+import { announcementSeverityPresentation } from '../lib/status-presentation';
 
 export function AnnouncementsPage() {
   const queryClient = useQueryClient();
@@ -49,13 +50,7 @@ export function AnnouncementsPage() {
                   type="button"
                 >
                   <div>
-                    <StatusBadge status={announcement.severity}>
-                      {announcement.severity === 'INFO'
-                        ? '公告'
-                        : announcement.severity === 'WARNING'
-                          ? '重要'
-                          : '紧急'}
-                    </StatusBadge>
+                    <StatusBadge {...announcementSeverityPresentation[announcement.severity]} />
                     {announcement.pinned ? <span className="soft-tag">置顶</span> : null}
                     {!announcement.read ? <span className="unread-dot" aria-label="未读" /> : null}
                   </div>

@@ -38,6 +38,7 @@ import {
   PLATFORM_TIME_ZONE,
 } from '../../lib/date-time';
 import { formatMonth } from '../../lib/format';
+import { giftReleasePresentation } from '../../lib/status-presentation';
 
 function monthStart(timeZone: string): string {
   return `${epochMillisecondsToDateTimeLocal(Date.now(), timeZone).slice(0, 7)}-01`;
@@ -259,9 +260,7 @@ export function ReleaseEditorPage() {
       <header className="editor-header">
         <div>
           <div className="detail-status-row">
-            <StatusBadge status={status}>
-              {status === 'DRAFT' ? '草稿' : status === 'PUBLISHED' ? '已发布' : '已关闭'}
-            </StatusBadge>
+            <StatusBadge {...giftReleasePresentation[status]} />
             <span>{formatMonth(eligibilityMonth)}资格</span>
           </div>
           <h1>{isNew ? '创建礼物发布' : title}</h1>

@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 
 import { DateTimeSchema, IdSchema, Nullable } from './common.js';
+import { VerificationRoomHealthSchema } from './verification-rooms.js';
 
 export const RuntimeStateSchema = Type.Union([
   Type.Literal('STARTING'),
@@ -44,7 +45,7 @@ export const SystemStatusSchema = Type.Object({
     Type.Object({
       displayName: Type.String(),
       enabled: Type.Boolean(),
-      healthStatus: Type.String(),
+      healthStatus: VerificationRoomHealthSchema,
       lastConnectedAt: Nullable(DateTimeSchema),
     }),
   ),

@@ -795,67 +795,31 @@ textarea:disabled {
   color: var(--muted);
 }
 
-.status-claimable,
-.status-info,
-.status-scheduled,
-.status-unknown,
-.status-draft {
+.status-tone-info {
   background: var(--blue-soft);
   border-color: var(--blue-border);
   color: var(--blue-dark);
 }
 
-.status-submitted,
-.status-processing,
-.status-warning,
-.status-pending,
-.status-pending-approval,
-.status-connecting,
-.status-label-created,
-.status-out-for-delivery {
+.status-tone-warning {
   background: var(--amber-soft);
   border-color: var(--amber-border);
   color: var(--amber);
 }
 
-.status-shipped,
-.status-in-transit,
-.status-published {
-  background: var(--violet-soft);
-  border-color: var(--violet-border);
-  color: var(--violet);
-}
-
-.status-completed,
-.status-delivered,
-.status-finalized,
-.status-consistent,
-.status-active,
-.status-healthy,
-.status-verified,
-.status-ok {
+.status-tone-success {
   background: var(--green-soft);
   border-color: var(--green-border);
   color: var(--green);
 }
 
-.status-expired,
-.status-cancelled,
-.status-closed,
-.status-inactive,
-.status-disabled,
-.status-rejected {
+.status-tone-neutral {
   background: var(--surface-muted);
   border-color: var(--line);
   color: var(--muted);
 }
 
-.status-critical,
-.status-failed,
-.status-inconsistent,
-.status-unhealthy,
-.status-exception,
-.status-degraded {
+.status-tone-danger {
   background: var(--red-soft);
   border-color: var(--red-border);
   color: var(--red);

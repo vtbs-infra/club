@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { getCreatorReleases } from '../../api/client';
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
+import { giftReleasePresentation } from '../../lib/status-presentation';
 
 export function CreatorReleasesPage() {
   const releases = useQuery({
@@ -60,13 +61,7 @@ export function CreatorReleasesPage() {
               </div>
               <div className="release-main">
                 <span>
-                  <StatusBadge status={release.status}>
-                    {release.status === 'DRAFT'
-                      ? '草稿'
-                      : release.status === 'PUBLISHED'
-                        ? '已发布'
-                        : '已关闭'}
-                  </StatusBadge>
+                  <StatusBadge {...giftReleasePresentation[release.status]} />
                   {release.publicVisible ? <span className="soft-tag">首页公开</span> : null}
                 </span>
                 <h3>{release.title}</h3>

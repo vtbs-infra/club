@@ -6,6 +6,7 @@ import { getAddresses, getAnnouncements, getBinding, getIdentity, getMyGifts } f
 import { GiftCard } from '../components/GiftCard';
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/Ui';
 import { formatDate } from '../lib/format';
+import { announcementSeverityPresentation } from '../lib/status-presentation';
 
 const dashboardLoadedAt = Date.now();
 
@@ -70,13 +71,7 @@ export function DashboardPage() {
           <div className="news-list">
             {announcements.data?.map((announcement) => (
               <Link key={announcement.id} to="/announcements">
-                <StatusBadge status={announcement.severity}>
-                  {announcement.severity === 'INFO'
-                    ? '公告'
-                    : announcement.severity === 'WARNING'
-                      ? '重要'
-                      : '紧急'}
-                </StatusBadge>
+                <StatusBadge {...announcementSeverityPresentation[announcement.severity]} />
                 {announcement.pinned ? <span className="pin-label">置顶</span> : null}
                 <strong>{announcement.title}</strong>
                 <time>{announcement.publishedAt ? formatDate(announcement.publishedAt) : ''}</time>

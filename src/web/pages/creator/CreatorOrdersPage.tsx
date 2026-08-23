@@ -18,7 +18,8 @@ import {
   PageHeader,
   StatusBadge,
 } from '../../components/Ui';
-import { formatDate, formatMonth, orderStatusLabel, tierLabel } from '../../lib/format';
+import { formatDate, formatMonth, tierLabel } from '../../lib/format';
+import { giftOrderPresentation } from '../../lib/status-presentation';
 
 const filters: readonly { readonly label: string; readonly value?: GiftOrderStatus }[] = [
   { label: '全部' },
@@ -172,9 +173,7 @@ export function CreatorOrdersPage() {
                     <small>{tierLabel[order.tier]}</small>
                   </td>
                   <td>
-                    <StatusBadge status={order.status}>
-                      {orderStatusLabel[order.status]}
-                    </StatusBadge>
+                    <StatusBadge {...giftOrderPresentation[order.status]} />
                   </td>
                   <td>{formatDate(order.updatedAt, true)}</td>
                   <td>

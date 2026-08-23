@@ -21,16 +21,11 @@ import {
   StatusBadge,
 } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
-
-const statusLabel: Readonly<Record<string, string>> = {
-  CANCELLED: '已取消',
-  FAILED: '失败',
-  FINALIZED: '已冻结',
-  PENDING_APPROVAL: '待确认',
-  REJECTED: '已拒绝',
-  RUNNING: '同步中',
-  SCHEDULED: '已计划',
-};
+import {
+  integrityPresentation,
+  snapshotConsistencyPresentation,
+  snapshotRunPresentation,
+} from '../../lib/status-presentation';
 
 const failureLabel: Readonly<Record<string, string>> = {
   CAPTURE_ATTEMPT_LIMIT_REACHED: '已达到最大同步次数',
@@ -152,9 +147,7 @@ export function AdminRostersPage() {
                     <strong>{creator.displayName}</strong>
                     <small>{formatMonth(run.periodStart)}</small>
                   </span>
-                  <StatusBadge status={run.status}>
-                    {statusLabel[run.status] ?? run.status}
-                  </StatusBadge>
+                  <StatusBadge {...snapshotRunPresentation(run.status)} />
                   <time>{formatDate(run.scheduledCutoffAt, true)}</time>
                 </button>
               ))}
@@ -178,9 +171,7 @@ export function AdminRostersPage() {
                   <p className="eyebrow">{selected.creator.displayName}</p>
                   <h2>{formatMonth(detail.data.run.periodStart)}名单</h2>
                 </div>
-                <StatusBadge status={detail.data.run.status}>
-                  {statusLabel[detail.data.run.status] ?? detail.data.run.status}
-                </StatusBadge>
+                <StatusBadge {...snapshotRunPresentation(detail.data.run.status)} />
               </div>
               <dl className="detail-grid">
                 <div>
@@ -266,13 +257,9 @@ export function AdminRostersPage() {
                       <article key={attempt.attemptNumber}>
                         <header>
                           <strong>第 {attempt.attemptNumber} 次</strong>
-                          <StatusBadge status={attempt.consistencyStatus}>
-                            {attempt.consistencyStatus === 'CONSISTENT'
-                              ? '一致'
-                              : attempt.consistencyStatus === 'INCONSISTENT'
-                                ? '不一致'
-                                : '进行中'}
-                          </StatusBadge>
+                          <StatusBadge
+                            {...snapshotConsistencyPresentation[attempt.consistencyStatus]}
+                          />
                         </header>
                         <dl>
                           <div>
@@ -383,12 +370,8 @@ export function AdminRostersPage() {
                     </button>
                     {integrity.data ? (
                       <StatusBadge
-                        status={integrity.data.every((result) => result.ok) ? 'ok' : 'failed'}
-                      >
-                        {integrity.data.every((result) => result.ok)
-                          ? '全部哈希一致'
-                          : '发现不一致'}
-                      </StatusBadge>
+                        {...integrityPresentation(integrity.data.every((result) => result.ok))}
+                      />
                     ) : null}
                   </div>
                   {integrity.isError ? <ErrorNotice error={integrity.error} /> : null}

@@ -18,6 +18,7 @@ import {
   StatusBadge,
 } from '../../components/Ui';
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
+import { roomHealthPresentation } from '../../lib/status-presentation';
 
 interface RoomForm {
   biliRoomId: string;
@@ -150,15 +151,7 @@ export function AdminVerificationPage() {
                       直播间 {room.biliRoomId} · 优先级 {room.priority}
                     </small>
                   </span>
-                  <StatusBadge status={room.enabled ? room.healthStatus : 'disabled'}>
-                    {room.enabled
-                      ? room.healthStatus === 'HEALTHY'
-                        ? '健康'
-                        : room.healthStatus === 'UNHEALTHY'
-                          ? '异常'
-                          : '未知'
-                      : '已停用'}
-                  </StatusBadge>
+                  <StatusBadge {...roomHealthPresentation(room.healthStatus, room.enabled)} />
                 </button>
               ))}
             </div>

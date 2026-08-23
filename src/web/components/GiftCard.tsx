@@ -2,7 +2,8 @@ import { ArrowRight, Gift } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { GiftOrder } from '../api/client';
-import { formatMonth, orderStatusLabel, relativeDeadline, tierLabel } from '../lib/format';
+import { formatMonth, relativeDeadline, tierLabel } from '../lib/format';
+import { giftOrderPresentation, shipmentPresentation } from '../lib/status-presentation';
 import { StatusBadge } from './Ui';
 
 function action(order: GiftOrder): string {
@@ -12,8 +13,27 @@ function action(order: GiftOrder): string {
   return '查看详情';
 }
 
-export function GiftCard({ order }: { readonly order: GiftOrder }) {
+function progress(order: GiftOrder): string {
   const shipment = order.shipments[0];
+  switch (order.status) {
+    case 'CLAIMABLE':
+      return relativeDeadline(order.release.claimDeadlineAt);
+    case 'SUBMITTED':
+      return '领取信息已提交，等待主播发货';
+    case 'SHIPPED':
+      return shipment
+        ? `${shipment.carrierName} · ${shipmentPresentation(shipment.status).label}`
+        : '已发货，物流信息正在更新';
+    case 'COMPLETED':
+      return '礼物流程已完成';
+    case 'EXPIRED':
+      return '未在领取期内提交';
+    case 'CANCELLED':
+      return '礼物单已取消';
+  }
+}
+
+export function GiftCard({ order }: { readonly order: GiftOrder }) {
   return (
     <article className={`gift-card gift-${order.status.toLowerCase()}`}>
       <div className="gift-art">
@@ -27,7 +47,7 @@ export function GiftCard({ order }: { readonly order: GiftOrder }) {
             <small>舰长礼物</small>
           </div>
         )}
-        <StatusBadge status={order.status}>{orderStatusLabel[order.status]}</StatusBadge>
+        <StatusBadge {...giftOrderPresentation[order.status]} />
       </div>
       <div className="gift-copy">
         <div className="gift-creator">
@@ -38,17 +58,7 @@ export function GiftCard({ order }: { readonly order: GiftOrder }) {
         <p className="gift-meta">
           {formatMonth(order.release.eligibilityMonth)} · {tierLabel[order.tier]}
         </p>
-        <p className="gift-progress">
-          {order.status === 'CLAIMABLE'
-            ? relativeDeadline(order.release.claimDeadlineAt)
-            : shipment
-              ? `${shipment.carrierName} · ${shipment.status === 'DELIVERED' ? '已签收' : '运输中'}`
-              : order.status === 'SUBMITTED'
-                ? '领取信息已提交，等待主播发货'
-                : order.status === 'EXPIRED'
-                  ? '未在领取期内提交'
-                  : '状态更新后会在这里显示'}
-        </p>
+        <p className="gift-progress">{progress(order)}</p>
         <Link className="text-action" to={`/gifts/${order.id}`}>
           {action(order)}
           <ArrowRight aria-hidden="true" size={15} />

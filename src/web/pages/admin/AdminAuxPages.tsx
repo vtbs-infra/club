@@ -6,24 +6,20 @@ import { getAdminAuditLogs, getAdminSystem } from '../../api/client';
 import { AnnouncementManager } from '../../components/AnnouncementManager';
 import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate } from '../../lib/format';
+import {
+  roomHealthPresentation,
+  runtimeStatePresentation,
+  shipmentPresentation,
+  snapshotRunPresentation,
+  systemStatusPresentation,
+  type StatusTone,
+} from '../../lib/status-presentation';
 
-const snapshotStatusLabel: Readonly<Record<string, string>> = {
-  CANCELLED: '已取消',
-  FAILED: '失败',
-  FINALIZED: '已冻结',
-  PENDING_APPROVAL: '待确认',
-  REJECTED: '已拒绝',
-  RUNNING: '同步中',
-  SCHEDULED: '已计划',
-};
-
-const shipmentStatusLabel: Readonly<Record<string, string>> = {
-  DELIVERED: '已送达',
-  EXCEPTION: '物流异常',
-  IN_TRANSIT: '运输中',
-  LABEL_CREATED: '已录单',
-  OUT_FOR_DELIVERY: '派送中',
-};
+function runtimeMetricTone(tone: StatusTone): 'amber' | 'green' | 'red' {
+  if (tone === 'success') return 'green';
+  if (tone === 'warning') return 'amber';
+  return 'red';
+}
 
 const auditActionLabel: Readonly<Record<string, string>> = {
   'address.created': '新增收货地址',
@@ -66,21 +62,16 @@ export function AdminSystemPage() {
   if (system.isError || audit.isError) return <ErrorState error={system.error ?? audit.error} />;
   const data = system.data;
   const auditItems = audit.data.items;
+  const bindingRuntime = runtimeStatePresentation[data.runtimes.binding.state];
+  const rosterRuntime = runtimeStatePresentation[data.runtimes.roster.state];
+  const trackingRuntime = runtimeStatePresentation[data.runtimes.tracking.state];
   return (
     <div className="stack-lg">
       <PageHeader
         eyebrow="系统状态"
         intro={`Club ${data.version} · 数据库、私有存储和后台任务的运行状态。`}
         title="系统"
-        actions={
-          <StatusBadge status={data.status}>
-            {data.status === 'ok'
-              ? '运行正常'
-              : data.status === 'needs_setup'
-                ? '需要配置'
-                : '需要检查'}
-          </StatusBadge>
-        }
+        actions={<StatusBadge {...systemStatusPresentation[data.status]} />}
       />
       <section className="metric-grid system-metrics">
         <MetricCard
@@ -105,8 +96,8 @@ export function AdminSystemPage() {
           }
           icon={RadioTower}
           label="验证连接"
-          tone={data.runtimes.binding.state === 'RUNNING' ? 'green' : 'red'}
-          value={data.runtimes.binding.state === 'RUNNING' ? '运行中' : '需要检查'}
+          tone={runtimeMetricTone(bindingRuntime.tone)}
+          value={bindingRuntime.label}
         />
         <MetricCard
           description={
@@ -116,22 +107,18 @@ export function AdminSystemPage() {
           }
           icon={CalendarSync}
           label="名单调度器"
-          tone={data.runtimes.roster.state === 'RUNNING' ? 'green' : 'red'}
-          value={data.runtimes.roster.state === 'RUNNING' ? '运行中' : '需要检查'}
+          tone={runtimeMetricTone(rosterRuntime.tone)}
+          value={rosterRuntime.label}
         />
         <MetricCard
           description={`${data.trackingDueCount} 个物流等待刷新`}
           icon={Truck}
           label="物流刷新"
-          tone={data.runtimes.tracking.state === 'RUNNING' ? 'green' : 'red'}
+          tone={runtimeMetricTone(trackingRuntime.tone)}
           value={
-            data.runtimes.tracking.configured
-              ? data.runtimes.tracking.state === 'RUNNING'
-                ? '运行中'
-                : '需要检查'
-              : data.runtimes.tracking.state === 'RUNNING'
-                ? '定时清理运行中'
-                : '需要检查'
+            !data.runtimes.tracking.configured && data.runtimes.tracking.state === 'RUNNING'
+              ? '定时清理运行中'
+              : trackingRuntime.label
           }
         />
       </section>
@@ -149,9 +136,7 @@ export function AdminSystemPage() {
             ) : (
               Object.entries(data.snapshotRunCounts).map(([status, count]) => (
                 <div key={status}>
-                  <StatusBadge status={status}>
-                    {snapshotStatusLabel[status] ?? '未知状态'}
-                  </StatusBadge>
+                  <StatusBadge {...snapshotRunPresentation(status)} />
                   <strong>{count}</strong>
                 </div>
               ))
@@ -171,9 +156,7 @@ export function AdminSystemPage() {
             ) : (
               Object.entries(data.shipmentCounts).map(([status, count]) => (
                 <div key={status}>
-                  <StatusBadge status={status}>
-                    {shipmentStatusLabel[status] ?? '未知状态'}
-                  </StatusBadge>
+                  <StatusBadge {...shipmentPresentation(status)} />
                   <strong>{count}</strong>
                 </div>
               ))
@@ -203,17 +186,7 @@ export function AdminSystemPage() {
                         : '尚未连接'}
                     </small>
                   </span>
-                  <StatusBadge status={room.enabled ? room.healthStatus : 'disabled'}>
-                    {room.enabled
-                      ? room.healthStatus === 'HEALTHY'
-                        ? '健康'
-                        : room.healthStatus === 'CONNECTING'
-                          ? '连接中'
-                          : room.healthStatus === 'UNHEALTHY'
-                            ? '异常'
-                            : '未知'
-                      : '已停用'}
-                  </StatusBadge>
+                  <StatusBadge {...roomHealthPresentation(room.healthStatus, room.enabled)} />
                 </div>
               ))
             )}

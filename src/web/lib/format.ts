@@ -1,13 +1,4 @@
-import type { GiftOrderStatus, GuardTier } from '../api/client';
-
-export const orderStatusLabel: Readonly<Record<GiftOrderStatus, string>> = {
-  CANCELLED: '已取消',
-  CLAIMABLE: '待领取',
-  COMPLETED: '已完成',
-  EXPIRED: '已过期',
-  SHIPPED: '已发货',
-  SUBMITTED: '待发货',
-};
+import type { GuardTier } from '../api/client';
 
 export const tierLabel: Readonly<Record<GuardTier, string>> = {
   ADMIRAL: '提督',

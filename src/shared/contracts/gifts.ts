@@ -19,6 +19,15 @@ export const GiftOrderStatusSchema = Type.Union([
 ]);
 export type GiftOrderStatus = Static<typeof GiftOrderStatusSchema>;
 
+export const ShipmentStatusSchema = Type.Union([
+  Type.Literal('LABEL_CREATED'),
+  Type.Literal('IN_TRANSIT'),
+  Type.Literal('OUT_FOR_DELIVERY'),
+  Type.Literal('DELIVERED'),
+  Type.Literal('EXCEPTION'),
+]);
+export type ShipmentStatus = Static<typeof ShipmentStatusSchema>;
+
 export const GiftFormFieldTypeSchema = Type.Union([
   Type.Literal('TEXT'),
   Type.Literal('TEXTAREA'),
@@ -161,11 +170,11 @@ const ShipmentSchema = Type.Object({
       description: Type.String(),
       location: Nullable(Type.String()),
       occurredAt: DateTimeSchema,
-      status: Type.String(),
+      status: ShipmentStatusSchema,
     }),
   ),
   id: IdSchema,
-  status: Type.String(),
+  status: ShipmentStatusSchema,
   trackingNumber: Type.String(),
   trackingUrl: Nullable(Type.String()),
 });

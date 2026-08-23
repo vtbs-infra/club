@@ -10,6 +10,7 @@ import {
   type BilibiliChallenge,
   type IssuedBilibiliChallenge,
 } from '../api/client';
+import { connectionStatePresentation } from '../lib/status-presentation';
 import { ConfirmDialog, ErrorNotice, ErrorState, InlineNotice, LoadingState } from './Ui';
 
 const pageLoadedAt = Date.now();
@@ -131,11 +132,9 @@ export function BilibiliPanel() {
           <div className="code-card-status">
             <span className={`connection-dot state-${current.connectionState?.toLowerCase()}`} />
             <span>
-              {current.connectionState === 'HEALTHY'
-                ? '正在监听直播间'
-                : current.connectionState === 'CONNECTING'
-                  ? '正在连接直播间'
-                  : '连接恢复中'}
+              {current.connectionState
+                ? connectionStatePresentation[current.connectionState].label
+                : '等待连接直播间'}
             </span>
             <strong>{timerLabel(remaining)}</strong>
           </div>

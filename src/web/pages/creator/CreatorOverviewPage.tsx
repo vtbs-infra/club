@@ -10,6 +10,7 @@ import {
 } from '../../api/client';
 import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
+import { giftReleasePresentation, snapshotRunPresentation } from '../../lib/status-presentation';
 
 export function CreatorOverviewPage() {
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
@@ -104,15 +105,7 @@ export function CreatorOverviewPage() {
             <div className="latest-run">
               <span>最近任务</span>
               <strong>{formatMonth(latestRoster.periodStart)}</strong>
-              <StatusBadge status={latestRoster.status}>
-                {latestRoster.status === 'FINALIZED'
-                  ? '已冻结'
-                  : latestRoster.status === 'PENDING_APPROVAL'
-                    ? '等待平台确认'
-                    : latestRoster.status === 'FAILED'
-                      ? '同步失败'
-                      : '已计划'}
-              </StatusBadge>
+              <StatusBadge {...snapshotRunPresentation(latestRoster.status)} />
             </div>
           ) : null}
         </section>
@@ -129,7 +122,7 @@ export function CreatorOverviewPage() {
           </div>
           {activeRelease ? (
             <div className="active-release-card">
-              <StatusBadge status={activeRelease.status}>已发布</StatusBadge>
+              <StatusBadge {...giftReleasePresentation[activeRelease.status]} />
               <h3>{activeRelease.title}</h3>
               <p>{formatMonth(activeRelease.eligibilityMonth)}资格</p>
               <dl>

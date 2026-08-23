@@ -12,6 +12,7 @@ import { useRef, type ReactNode } from 'react';
 
 import { ApiError } from '../api/http';
 import { errorMessage } from '../lib/error-message';
+import type { StatusTone } from '../lib/status-presentation';
 
 function ErrorDetails({ error }: { readonly error: unknown }) {
   if (!(error instanceof ApiError)) return null;
@@ -151,17 +152,13 @@ export function EmptyState({
 }
 
 export function StatusBadge({
-  status,
-  children,
+  label,
+  tone,
 }: {
-  readonly children: ReactNode;
-  readonly status: string;
+  readonly label: ReactNode;
+  readonly tone: StatusTone;
 }) {
-  return (
-    <span className={`status-badge status-${status.toLowerCase().replaceAll('_', '-')}`}>
-      {children}
-    </span>
-  );
+  return <span className={`status-badge status-tone-${tone}`}>{label}</span>;
 }
 
 export function InlineNotice({

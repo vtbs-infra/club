@@ -13,6 +13,7 @@ import {
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { dateTimeLocalToIso, isoToDateTimeLocal, PLATFORM_TIME_ZONE } from '../lib/date-time';
 import { formatDate } from '../lib/format';
+import { announcementStatePresentation } from '../lib/status-presentation';
 import {
   ConfirmDialog,
   EmptyState,
@@ -206,9 +207,11 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
                 type="button"
               >
                 <span>
-                  <StatusBadge status={announcement.publishedAt ? 'published' : 'draft'}>
-                    {announcement.publishedAt ? '已发布' : '草稿'}
-                  </StatusBadge>
+                  <StatusBadge
+                    {...announcementStatePresentation[
+                      announcement.publishedAt ? 'published' : 'draft'
+                    ]}
+                  />
                   {announcement.pinned ? <small>置顶</small> : null}
                 </span>
                 <strong>{announcement.title}</strong>
