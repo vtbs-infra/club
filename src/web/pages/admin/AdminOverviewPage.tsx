@@ -11,12 +11,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import {
-  getAdminCreators,
-  getAdminOverview,
-  getAdminRosters,
-  getVerificationRooms,
-} from '../../api/client';
+import { getAdminOverview, getAdminRosters, getVerificationRooms } from '../../api/client';
 import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
 import {
@@ -27,21 +22,22 @@ import {
 
 export function AdminOverviewPage() {
   const overview = useQuery({ queryFn: getAdminOverview, queryKey: ['admin', 'overview'] });
-  const creators = useQuery({ queryFn: getAdminCreators, queryKey: ['admin', 'creators'] });
   const rosters = useQuery({ queryFn: getAdminRosters, queryKey: ['admin', 'rosters'] });
   const rooms = useQuery({ queryFn: getVerificationRooms, queryKey: ['admin', 'verification'] });
-  if (overview.isPending || creators.isPending || rosters.isPending || rooms.isPending) {
-    return <LoadingState label="正在准备平台概览…" />;
-  }
-  if (overview.isError || creators.isError || rosters.isError || rooms.isError) {
-    return <ErrorState error={overview.error ?? creators.error ?? rosters.error ?? rooms.error} />;
-  }
-  const pendingApproval = rosters.data.filter(({ run }) => run.status === 'PENDING_APPROVAL');
-  const failures = rosters.data.filter(({ run }) => run.status === 'FAILED');
-  const unhealthyRooms = rooms.data.filter(
+  const pendingApproval =
+    rosters.data?.filter(({ run }) => run.status === 'PENDING_APPROVAL') ?? [];
+  const failures = rosters.data?.filter(({ run }) => run.status === 'FAILED') ?? [];
+  const unhealthyRooms = (rooms.data ?? []).filter(
     (room) => room.enabled && room.healthStatus !== 'HEALTHY',
   );
-  const verificationNeedsSetup = !rooms.data.some((room) => room.enabled);
+  const verificationNeedsSetup = rooms.data ? !rooms.data.some((room) => room.enabled) : false;
+  const attentionUnresolved =
+    rosters.isPending || rooms.isPending || rosters.isError || rooms.isError;
+  const hasAttention =
+    pendingApproval.length > 0 ||
+    failures.length > 0 ||
+    unhealthyRooms.length > 0 ||
+    verificationNeedsSetup;
   return (
     <div className="stack-xl">
       <PageHeader
@@ -51,37 +47,71 @@ export function AdminOverviewPage() {
       />
       <section className="metric-grid">
         <MetricCard
-          description={`${overview.data.activeCreators} 位启用中`}
+          description={
+            overview.isPending
+              ? '正在读取主播数据'
+              : overview.isError
+                ? '主播数据暂时不可用'
+                : `${overview.data.activeCreators} 位启用中`
+          }
           icon={UsersRound}
           label="注册主播"
-          value={overview.data.creators}
+          tone={overview.isError ? 'red' : 'blue'}
+          value={overview.data?.creators ?? '—'}
         />
         <MetricCard
-          description="迟到抓取需要人工决定"
+          description={
+            rosters.isPending
+              ? '正在读取名单数据'
+              : rosters.isError
+                ? '名单数据暂时不可用'
+                : '迟到抓取需要人工决定'
+          }
           icon={CalendarClock}
           label="待确认名单"
-          tone={pendingApproval.length > 0 ? 'amber' : 'green'}
-          value={pendingApproval.length}
+          tone={
+            rosters.isPending
+              ? 'blue'
+              : rosters.isError
+                ? 'red'
+                : pendingApproval.length > 0
+                  ? 'amber'
+                  : 'green'
+          }
+          value={rosters.data ? pendingApproval.length : '—'}
         />
         <MetricCard
-          description="等待检查或重试"
+          description={
+            rosters.isPending
+              ? '正在读取名单数据'
+              : rosters.isError
+                ? '名单数据暂时不可用'
+                : '等待检查或重试'
+          }
           icon={CircleAlert}
           label="同步失败"
-          tone={failures.length > 0 ? 'red' : 'green'}
-          value={failures.length}
+          tone={
+            rosters.isPending ? 'blue' : rosters.isError || failures.length > 0 ? 'red' : 'green'
+          }
+          value={rosters.data ? failures.length : '—'}
         />
         <MetricCard
-          description={`${rooms.data.length} 个房间已配置`}
+          description={
+            rooms.isPending
+              ? '正在读取直播间数据'
+              : rooms.isError
+                ? '直播间数据暂时不可用'
+                : `${rooms.data.length} 个房间已配置`
+          }
           icon={RadioTower}
           label="验证直播间异常"
-          tone={unhealthyRooms.length > 0 ? 'red' : 'green'}
-          value={unhealthyRooms.length}
+          tone={
+            rooms.isPending ? 'blue' : rooms.isError || unhealthyRooms.length > 0 ? 'red' : 'green'
+          }
+          value={rooms.data ? unhealthyRooms.length : '—'}
         />
       </section>
-      {pendingApproval.length > 0 ||
-      failures.length > 0 ||
-      unhealthyRooms.length > 0 ||
-      verificationNeedsSetup ? (
+      {attentionUnresolved || hasAttention ? (
         <section className="panel attention-panel">
           <div className="section-heading compact">
             <div>
@@ -89,6 +119,32 @@ export function AdminOverviewPage() {
               <h2>需要处理</h2>
             </div>
           </div>
+          {rosters.isPending ? (
+            <p className="quiet-line" role="status">
+              正在读取名单待办…
+            </p>
+          ) : null}
+          {rosters.isError ? (
+            <ErrorState
+              error={rosters.error}
+              onRetry={() => void rosters.refetch()}
+              retryLabel="重试名单数据"
+              title="名单待办暂时无法加载"
+            />
+          ) : null}
+          {rooms.isPending ? (
+            <p className="quiet-line" role="status">
+              正在读取直播间状态…
+            </p>
+          ) : null}
+          {rooms.isError ? (
+            <ErrorState
+              error={rooms.error}
+              onRetry={() => void rooms.refetch()}
+              retryLabel="重试直播间数据"
+              title="直播间状态暂时无法加载"
+            />
+          ) : null}
           <div className="attention-list">
             {verificationNeedsSetup ? (
               <Link to="/admin/verification">
@@ -177,17 +233,25 @@ export function AdminOverviewPage() {
               <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
-          <div className="simple-list">
-            {overview.data.recent.map((creator) => (
-              <div key={creator.id}>
-                <span className="mini-avatar">{creator.displayName.slice(0, 1)}</span>
-                <strong>{creator.displayName}</strong>
-                <StatusBadge
-                  {...activeStatusPresentation[creator.active ? 'active' : 'inactive']}
-                />
-              </div>
-            ))}
-          </div>
+          {overview.isPending ? (
+            <LoadingState label="正在读取主播…" />
+          ) : overview.isError ? (
+            <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
+          ) : overview.data.recent.length === 0 ? (
+            <p className="quiet-line">暂无主播。</p>
+          ) : (
+            <div className="simple-list">
+              {overview.data.recent.map((creator) => (
+                <div key={creator.id}>
+                  <span className="mini-avatar">{creator.displayName.slice(0, 1)}</span>
+                  <strong>{creator.displayName}</strong>
+                  <StatusBadge
+                    {...activeStatusPresentation[creator.active ? 'active' : 'inactive']}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
         <section className="panel">
           <div className="section-heading compact">
@@ -200,17 +264,25 @@ export function AdminOverviewPage() {
               <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
-          <div className="simple-list roster">
-            {rosters.data.slice(0, 5).map(({ creator, run }) => (
-              <div key={run.id}>
-                <span>
-                  <strong>{creator.displayName}</strong>
-                  <small>{formatMonth(run.periodStart)}</small>
-                </span>
-                <StatusBadge {...snapshotRunPresentation(run.status)} />
-              </div>
-            ))}
-          </div>
+          {rosters.isPending ? (
+            <LoadingState label="正在读取名单任务…" />
+          ) : rosters.isError ? (
+            <ErrorState error={rosters.error} onRetry={() => void rosters.refetch()} />
+          ) : rosters.data.length === 0 ? (
+            <p className="quiet-line">暂无名单任务。</p>
+          ) : (
+            <div className="simple-list roster">
+              {rosters.data.slice(0, 5).map(({ creator, run }) => (
+                <div key={run.id}>
+                  <span>
+                    <strong>{creator.displayName}</strong>
+                    <small>{formatMonth(run.periodStart)}</small>
+                  </span>
+                  <StatusBadge {...snapshotRunPresentation(run.status)} />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

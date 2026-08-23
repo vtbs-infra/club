@@ -2,7 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarSync, CircleCheck, Database, HardDrive, RadioTower, Truck } from 'lucide-react';
 import { useState } from 'react';
 
-import { getAdminAuditLogs, getAdminSystem } from '../../api/client';
+import {
+  getAdminAuditLogs,
+  getAdminSystem,
+  type AuditLogPage,
+  type SystemStatus,
+} from '../../api/client';
 import { AnnouncementManager } from '../../components/AnnouncementManager';
 import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate } from '../../lib/format';
@@ -51,28 +56,12 @@ export function AdminAnnouncementsPage() {
   );
 }
 
-export function AdminSystemPage() {
-  const [auditBefore, setAuditBefore] = useState<string | undefined>();
-  const system = useQuery({ queryFn: getAdminSystem, queryKey: ['admin', 'system'] });
-  const audit = useQuery({
-    queryFn: () => getAdminAuditLogs(auditBefore),
-    queryKey: ['admin', 'audit', auditBefore],
-  });
-  if (system.isPending || audit.isPending) return <LoadingState label="正在检查系统…" />;
-  if (system.isError || audit.isError) return <ErrorState error={system.error ?? audit.error} />;
-  const data = system.data;
-  const auditItems = audit.data.items;
+function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
   const bindingRuntime = runtimeStatePresentation[data.runtimes.binding.state];
   const rosterRuntime = runtimeStatePresentation[data.runtimes.roster.state];
   const trackingRuntime = runtimeStatePresentation[data.runtimes.tracking.state];
   return (
-    <div className="stack-lg">
-      <PageHeader
-        eyebrow="系统状态"
-        intro={`Club ${data.version} · 数据库、私有存储和后台任务的运行状态。`}
-        title="系统"
-        actions={<StatusBadge {...systemStatusPresentation[data.status]} />}
-      />
+    <>
       <section className="metric-grid system-metrics">
         <MetricCard
           description="业务数据与审计记录"
@@ -217,77 +206,149 @@ export function AdminSystemPage() {
           )}
         </section>
       </div>
-      <section className="panel">
-        <div className="section-heading compact">
-          <div>
-            <p className="eyebrow">审计记录</p>
-            <h2>最近平台操作</h2>
+    </>
+  );
+}
+
+function AuditLogPanel({
+  auditBefore,
+  data,
+  error,
+  isFetching,
+  isPending,
+  onFirstPage,
+  onNextPage,
+  onRetry,
+}: {
+  readonly auditBefore: string | undefined;
+  readonly data: AuditLogPage | undefined;
+  readonly error: unknown;
+  readonly isFetching: boolean;
+  readonly isPending: boolean;
+  readonly onFirstPage: () => void;
+  readonly onNextPage: (before: string) => void;
+  readonly onRetry: () => void;
+}) {
+  return (
+    <section className="panel">
+      <div className="section-heading compact">
+        <div>
+          <p className="eyebrow">审计记录</p>
+          <h2>最近平台操作</h2>
+        </div>
+      </div>
+      {isPending ? (
+        <LoadingState label="正在读取审计记录…" />
+      ) : error || !data ? (
+        <ErrorState error={error} onRetry={onRetry} title="审计记录暂时无法加载" />
+      ) : data.items.length === 0 ? (
+        <p className="quiet-line">暂无审计记录。</p>
+      ) : (
+        <div className="audit-list">
+          {data.items.map((item) => (
+            <details key={item.id}>
+              <summary>
+                <time>{formatDate(item.createdAt, true)}</time>
+                <strong>{auditActionLabel[item.action] ?? item.action}</strong>
+                <span>{item.actorName ?? item.actorEmail ?? '系统'}</span>
+              </summary>
+              <dl className="detail-grid">
+                <div>
+                  <dt>目标</dt>
+                  <dd>
+                    {item.targetType} · {item.targetId}
+                  </dd>
+                </div>
+                <div>
+                  <dt>请求 ID</dt>
+                  <dd>{item.requestId ?? '—'}</dd>
+                </div>
+                {item.reason ? (
+                  <div>
+                    <dt>原因</dt>
+                    <dd>{item.reason}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {item.beforeSummary || item.afterSummary ? (
+                <pre>
+                  {JSON.stringify(
+                    { after: item.afterSummary, before: item.beforeSummary },
+                    null,
+                    2,
+                  )}
+                </pre>
+              ) : null}
+            </details>
+          ))}
+          <div className="form-actions">
+            {auditBefore ? (
+              <button className="button ghost" onClick={onFirstPage} type="button">
+                返回最新记录
+              </button>
+            ) : null}
+            {data.nextBefore ? (
+              <button
+                className="button secondary"
+                disabled={isFetching}
+                onClick={() => onNextPage(data.nextBefore!)}
+                type="button"
+              >
+                {isFetching ? '正在加载…' : '查看更早记录'}
+              </button>
+            ) : null}
           </div>
         </div>
-        {auditItems.length === 0 ? (
-          <p className="quiet-line">暂无审计记录。</p>
-        ) : (
-          <div className="audit-list">
-            {auditItems.map((item) => (
-              <details key={item.id}>
-                <summary>
-                  <time>{formatDate(item.createdAt, true)}</time>
-                  <strong>{auditActionLabel[item.action] ?? item.action}</strong>
-                  <span>{item.actorName ?? item.actorEmail ?? '系统'}</span>
-                </summary>
-                <dl className="detail-grid">
-                  <div>
-                    <dt>目标</dt>
-                    <dd>
-                      {item.targetType} · {item.targetId}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>请求 ID</dt>
-                    <dd>{item.requestId ?? '—'}</dd>
-                  </div>
-                  {item.reason ? (
-                    <div>
-                      <dt>原因</dt>
-                      <dd>{item.reason}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-                {item.beforeSummary || item.afterSummary ? (
-                  <pre>
-                    {JSON.stringify(
-                      { after: item.afterSummary, before: item.beforeSummary },
-                      null,
-                      2,
-                    )}
-                  </pre>
-                ) : null}
-              </details>
-            ))}
-            <div className="form-actions">
-              {auditBefore ? (
-                <button
-                  className="button ghost"
-                  onClick={() => setAuditBefore(undefined)}
-                  type="button"
-                >
-                  返回最新记录
-                </button>
-              ) : null}
-              {audit.data.nextBefore ? (
-                <button
-                  className="button secondary"
-                  disabled={audit.isFetching}
-                  onClick={() => setAuditBefore(audit.data.nextBefore ?? undefined)}
-                  type="button"
-                >
-                  {audit.isFetching ? '正在加载…' : '查看更早记录'}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        )}
-      </section>
+      )}
+    </section>
+  );
+}
+
+export function AdminSystemPage() {
+  const [auditBefore, setAuditBefore] = useState<string | undefined>();
+  const system = useQuery({ queryFn: getAdminSystem, queryKey: ['admin', 'system'] });
+  const audit = useQuery({
+    queryFn: () => getAdminAuditLogs(auditBefore),
+    queryKey: ['admin', 'audit', auditBefore],
+  });
+  return (
+    <div className="stack-lg">
+      <PageHeader
+        actions={
+          system.data ? (
+            <StatusBadge {...systemStatusPresentation[system.data.status]} />
+          ) : undefined
+        }
+        eyebrow="系统状态"
+        intro={
+          system.data
+            ? `Club ${system.data.version} · 数据库、私有存储和后台任务的运行状态。`
+            : '数据库、私有存储和后台任务的运行状态。'
+        }
+        title="系统"
+      />
+      {system.isPending ? (
+        <LoadingState label="正在检查系统状态…" />
+      ) : system.isError ? (
+        <ErrorState
+          error={system.error}
+          onRetry={() => void system.refetch()}
+          retryLabel="重试系统检查"
+          title="系统状态暂时无法加载"
+        />
+      ) : (
+        <SystemStatusContent data={system.data} />
+      )}
+      <AuditLogPanel
+        auditBefore={auditBefore}
+        data={audit.data}
+        error={audit.error}
+        isFetching={audit.isFetching}
+        isPending={audit.isPending}
+        onFirstPage={() => setAuditBefore(undefined)}
+        onNextPage={setAuditBefore}
+        onRetry={() => void audit.refetch()}
+      />
     </div>
   );
 }

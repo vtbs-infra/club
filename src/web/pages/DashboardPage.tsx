@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { getAddresses, getAnnouncements, getBinding, getIdentity, getMyGifts } from '../api/client';
 import { GiftCard } from '../components/GiftCard';
-import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../components/Ui';
+import { EmptyState, ErrorNotice, ErrorState, LoadingState, StatusBadge } from '../components/Ui';
 import { formatDate } from '../lib/format';
 import { announcementSeverityPresentation } from '../lib/status-presentation';
 
@@ -20,11 +20,11 @@ export function DashboardPage() {
   const binding = useQuery({ queryFn: getBinding, queryKey: ['me', 'bilibili-binding'] });
   const addresses = useQuery({ queryFn: getAddresses, queryKey: ['me', 'addresses'] });
 
-  if (identity.isPending || gifts.isPending) return <LoadingState label="正在准备仪表盘…" />;
-  if (identity.isError || gifts.isError)
-    return <ErrorState error={identity.error ?? gifts.error} />;
-  const claimable = gifts.data.filter((gift) => gift.status === 'CLAIMABLE');
-  const shipped = gifts.data.find((gift) => gift.status === 'SHIPPED');
+  if (identity.isPending) return <LoadingState label="正在准备仪表盘…" />;
+  if (identity.isError) return <ErrorState error={identity.error} />;
+  const visibleGifts = gifts.data ?? [];
+  const claimable = visibleGifts.filter((gift) => gift.status === 'CLAIMABLE');
+  const shipped = visibleGifts.find((gift) => gift.status === 'SHIPPED');
   const urgent = claimable.find(
     (gift) => new Date(gift.release.claimDeadlineAt).getTime() - dashboardLoadedAt < 3 * 86_400_000,
   );
@@ -41,9 +41,13 @@ export function DashboardPage() {
           <p>欢迎回来</p>
           <h1>欢迎回来，{identity.data.user.name}！</h1>
           <span>
-            {claimable.length > 0
-              ? `你有 ${claimable.length} 份礼物等待领取。`
-              : '新的舰长礼物会自动出现在这里。'}
+            {gifts.isPending
+              ? '正在读取你的礼物单…'
+              : gifts.isError
+                ? '礼物单暂时无法读取，其他功能仍可继续使用。'
+                : claimable.length > 0
+                  ? `你有 ${claimable.length} 份礼物等待领取。`
+                  : '新的舰长礼物会自动出现在这里。'}
           </span>
         </div>
         <div className="dashboard-banner-gift" aria-hidden="true">
@@ -62,14 +66,20 @@ export function DashboardPage() {
             <ArrowRight aria-hidden="true" size={15} />
           </Link>
         </div>
-        {announcements.isPending ? <LoadingState label="正在读取资讯…" /> : null}
-        {announcements.isError ? (
-          <p className="quiet-line">资讯暂时无法加载，请稍后再试。</p>
-        ) : announcements.data?.length === 0 ? (
+        {announcements.isPending ? (
+          <LoadingState label="正在读取资讯…" />
+        ) : announcements.isError ? (
+          <ErrorState
+            error={announcements.error}
+            onRetry={() => void announcements.refetch()}
+            retryLabel="重试资讯"
+            title="近期资讯暂时无法加载"
+          />
+        ) : announcements.data.length === 0 ? (
           <p className="quiet-line">暂时没有新公告。</p>
         ) : (
           <div className="news-list">
-            {announcements.data?.map((announcement) => (
+            {announcements.data.map((announcement) => (
               <Link key={announcement.id} to="/announcements">
                 <StatusBadge {...announcementSeverityPresentation[announcement.severity]} />
                 {announcement.pinned ? <span className="pin-label">置顶</span> : null}
@@ -80,6 +90,31 @@ export function DashboardPage() {
           </div>
         )}
       </section>
+
+      {binding.isError ? (
+        <div className="stack-md">
+          <ErrorNotice error={binding.error} />
+          <button
+            className="button secondary small"
+            onClick={() => void binding.refetch()}
+            type="button"
+          >
+            重试 B站绑定状态
+          </button>
+        </div>
+      ) : null}
+      {addresses.isError && binding.data && claimable.length > 0 ? (
+        <div className="stack-md">
+          <ErrorNotice error={addresses.error} />
+          <button
+            className="button secondary small"
+            onClick={() => void addresses.refetch()}
+            type="button"
+          >
+            重试收货地址
+          </button>
+        </div>
+      ) : null}
 
       {!binding.isPending && !binding.isError && !binding.data ? (
         <section className="action-callout">
@@ -154,19 +189,30 @@ export function DashboardPage() {
             全部礼物
           </Link>
         </div>
-        {gifts.data.length === 0 ? (
+        {gifts.isPending ? (
+          <LoadingState label="正在读取礼物单…" />
+        ) : gifts.isError ? (
+          <ErrorState
+            error={gifts.error}
+            onRetry={() => void gifts.refetch()}
+            retryLabel="重试礼物单"
+            title="礼物单暂时无法加载"
+          />
+        ) : gifts.data.length === 0 ? (
           <EmptyState
             action={
-              binding.data ? null : (
+              binding.data === null ? (
                 <Link className="button secondary" to="/account/bilibili">
                   绑定 B站账号
                 </Link>
-              )
+              ) : null
             }
             description={
               binding.data
                 ? '主播发布礼物并完成月末名单同步后，属于你的礼物会自动出现。'
-                : '完成 B站 UID 绑定后，系统会匹配现在和过去属于你的礼物。'
+                : binding.data === null
+                  ? '完成 B站 UID 绑定后，系统会匹配现在和过去属于你的礼物。'
+                  : '礼物单会在这里显示；B站绑定状态暂时无法读取。'
             }
             icon={Gift}
             title="目前没有礼物单"

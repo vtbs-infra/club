@@ -8,7 +8,14 @@ import {
   getCreatorRosters,
   getIdentity,
 } from '../../api/client';
-import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
+import {
+  ErrorNotice,
+  ErrorState,
+  LoadingState,
+  MetricCard,
+  PageHeader,
+  StatusBadge,
+} from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
 import { giftReleasePresentation, snapshotRunPresentation } from '../../lib/status-presentation';
 
@@ -23,22 +30,16 @@ export function CreatorOverviewPage() {
     queryFn: getCreatorRosters,
     queryKey: ['creator', 'rosters'],
   });
-  if (identity.isPending || releases.isPending || orders.isPending || rosters.isPending) {
-    return <LoadingState label="正在准备主播工作台…" />;
-  }
-  if (identity.isError || releases.isError || orders.isError || rosters.isError) {
-    return <ErrorState error={identity.error ?? releases.error ?? orders.error ?? rosters.error} />;
-  }
-  const activeRelease = releases.data.find((release) => release.status === 'PUBLISHED');
-  const waiting = orders.data.filter((order) => order.status === 'SUBMITTED').length;
-  const shipped = orders.data.filter((order) => order.status === 'SHIPPED').length;
-  const nextRoster = rosters.data
+  const activeRelease = releases.data?.find((release) => release.status === 'PUBLISHED');
+  const waiting = orders.data?.filter((order) => order.status === 'SUBMITTED').length ?? 0;
+  const shipped = orders.data?.filter((order) => order.status === 'SHIPPED').length ?? 0;
+  const nextRoster = (rosters.data ?? [])
     .filter((roster) => roster.status === 'SCHEDULED')
     .sort(
       (left, right) =>
         new Date(left.scheduledCutoffAt).getTime() - new Date(right.scheduledCutoffAt).getTime(),
     )[0];
-  const latestRoster = [...rosters.data].sort((left, right) =>
+  const latestRoster = [...(rosters.data ?? [])].sort((left, right) =>
     right.periodStart.localeCompare(left.periodStart),
   )[0];
 
@@ -46,7 +47,13 @@ export function CreatorOverviewPage() {
     <div className="stack-xl">
       <PageHeader
         eyebrow="主播工作台"
-        intro={`欢迎回来，${identity.data.creator?.displayName ?? identity.data.user.name}。`}
+        intro={
+          identity.data
+            ? `欢迎回来，${identity.data.creator?.displayName ?? identity.data.user.name}。`
+            : identity.isPending
+              ? '正在读取主播资料…'
+              : '主播资料暂时无法读取。'
+        }
         title="主播概览"
         actions={
           <Link className="button primary" to="/creator/releases/new">
@@ -55,26 +62,53 @@ export function CreatorOverviewPage() {
           </Link>
         }
       />
+      {identity.isError ? (
+        <ErrorState
+          error={identity.error}
+          onRetry={() => void identity.refetch()}
+          retryLabel="重试主播资料"
+          title="主播资料暂时无法加载"
+        />
+      ) : null}
       <section className="metric-grid">
         <MetricCard
-          description="等待录入运单"
+          description={
+            orders.isPending
+              ? '正在读取礼物单'
+              : orders.isError
+                ? '礼物单数据暂时不可用'
+                : '等待录入运单'
+          }
           icon={Clock3}
           label="待发货"
-          tone={waiting > 0 ? 'amber' : 'blue'}
-          value={waiting}
+          tone={orders.isError ? 'red' : waiting > 0 ? 'amber' : 'blue'}
+          value={orders.data ? waiting : '—'}
         />
         <MetricCard
-          description="已发货礼物单"
+          description={
+            orders.isPending
+              ? '正在读取礼物单'
+              : orders.isError
+                ? '礼物单数据暂时不可用'
+                : '已发货礼物单'
+          }
           icon={Truck}
           label="运输中"
-          tone="violet"
-          value={shipped}
+          tone={orders.isError ? 'red' : 'violet'}
+          value={orders.data ? shipped : '—'}
         />
         <MetricCard
-          description="历史发布总数"
+          description={
+            releases.isPending
+              ? '正在读取发布数据'
+              : releases.isError
+                ? '发布数据暂时不可用'
+                : '历史发布总数'
+          }
           icon={Gift}
           label="礼物发布"
-          value={releases.data.length}
+          tone={releases.isError ? 'red' : 'blue'}
+          value={releases.data?.length ?? '—'}
         />
       </section>
 
@@ -90,24 +124,33 @@ export function CreatorOverviewPage() {
               <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
-          {nextRoster ? (
-            <div className="cutoff-card">
-              <span>下一次名单冻结</span>
-              <strong>{formatDate(nextRoster.scheduledCutoffAt, true)}</strong>
-              <p>
-                {formatMonth(nextRoster.periodStart)}资格 · {identity.data.creator?.timezone}
-              </p>
-            </div>
+          {rosters.isPending ? (
+            <LoadingState label="正在读取名单任务…" />
+          ) : rosters.isError ? (
+            <ErrorState error={rosters.error} onRetry={() => void rosters.refetch()} />
           ) : (
-            <p className="quiet-line">系统正在准备下一次月末名单任务。</p>
+            <>
+              {nextRoster ? (
+                <div className="cutoff-card">
+                  <span>下一次名单冻结</span>
+                  <strong>{formatDate(nextRoster.scheduledCutoffAt, true)}</strong>
+                  <p>
+                    {formatMonth(nextRoster.periodStart)}资格 ·{' '}
+                    {identity.data?.creator?.timezone ?? '时区读取中'}
+                  </p>
+                </div>
+              ) : (
+                <p className="quiet-line">系统正在准备下一次月末名单任务。</p>
+              )}
+              {latestRoster ? (
+                <div className="latest-run">
+                  <span>最近任务</span>
+                  <strong>{formatMonth(latestRoster.periodStart)}</strong>
+                  <StatusBadge {...snapshotRunPresentation(latestRoster.status)} />
+                </div>
+              ) : null}
+            </>
           )}
-          {latestRoster ? (
-            <div className="latest-run">
-              <span>最近任务</span>
-              <strong>{formatMonth(latestRoster.periodStart)}</strong>
-              <StatusBadge {...snapshotRunPresentation(latestRoster.status)} />
-            </div>
-          ) : null}
         </section>
         <section className="panel">
           <div className="section-heading compact">
@@ -120,7 +163,11 @@ export function CreatorOverviewPage() {
               <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
-          {activeRelease ? (
+          {releases.isPending ? (
+            <LoadingState label="正在读取礼物发布…" />
+          ) : releases.isError ? (
+            <ErrorState error={releases.error} onRetry={() => void releases.refetch()} />
+          ) : activeRelease ? (
             <div className="active-release-card">
               <StatusBadge {...giftReleasePresentation[activeRelease.status]} />
               <h3>{activeRelease.title}</h3>
@@ -129,31 +176,39 @@ export function CreatorOverviewPage() {
                 <div>
                   <dt>待领取</dt>
                   <dd>
-                    {
-                      orders.data.filter(
-                        (order) =>
-                          order.release.id === activeRelease.id && order.status === 'CLAIMABLE',
-                      ).length
-                    }
+                    {orders.data?.filter(
+                      (order) =>
+                        order.release.id === activeRelease.id && order.status === 'CLAIMABLE',
+                    ).length ?? '—'}
                   </dd>
                 </div>
                 <div>
                   <dt>已提交</dt>
                   <dd>
-                    {
-                      orders.data.filter(
-                        (order) =>
-                          order.release.id === activeRelease.id &&
-                          order.status !== 'CLAIMABLE' &&
-                          order.status !== 'EXPIRED',
-                      ).length
-                    }
+                    {orders.data?.filter(
+                      (order) =>
+                        order.release.id === activeRelease.id &&
+                        order.status !== 'CLAIMABLE' &&
+                        order.status !== 'EXPIRED',
+                    ).length ?? '—'}
                   </dd>
                 </div>
               </dl>
               <Link className="button secondary" to={`/creator/releases/${activeRelease.id}`}>
                 查看发布
               </Link>
+              {orders.isError ? (
+                <div className="stack-md">
+                  <ErrorNotice error={orders.error} />
+                  <button
+                    className="button secondary small"
+                    onClick={() => void orders.refetch()}
+                    type="button"
+                  >
+                    重试礼物单数据
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="calm-empty">
@@ -178,7 +233,11 @@ export function CreatorOverviewPage() {
             <ArrowRight aria-hidden="true" size={15} />
           </Link>
         </div>
-        {waiting === 0 ? (
+        {orders.isPending ? (
+          <LoadingState label="正在读取待办礼物单…" />
+        ) : orders.isError ? (
+          <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />
+        ) : waiting === 0 ? (
           <p className="quiet-line">目前没有待发货的礼物单。</p>
         ) : (
           <div className="task-strips">

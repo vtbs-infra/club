@@ -22,11 +22,15 @@ function AccountTabs() {
 export function AccountPage() {
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
   const binding = useQuery({ queryFn: getBinding, queryKey: ['me', 'bilibili-binding'] });
-  if (identity.isPending || binding.isPending) return <LoadingState />;
+  if (identity.isPending) return <LoadingState />;
   if (identity.isError || !identity.data) return <ErrorState error={identity.error} />;
-  if (binding.data === undefined) {
-    return <ErrorState error={binding.error} title="暂时无法读取 B站绑定" />;
-  }
+  const bindingPresentation = binding.isPending
+    ? { label: '正在读取', tone: 'info' as const }
+    : binding.isError
+      ? { label: '暂时未知', tone: 'danger' as const }
+      : binding.data
+        ? bindingStatusPresentation.verified
+        : bindingStatusPresentation.pending;
   return (
     <div className="stack-lg">
       <PageHeader eyebrow="账号资料" intro="管理你的登录账号和领取所需资料。" title="账号" />
@@ -41,8 +45,8 @@ export function AccountPage() {
         <div className="account-status">
           <span>B站身份</span>
           <StatusBadge
-            {...bindingStatusPresentation[binding.data ? 'verified' : 'pending']}
-            label={binding.data ? `已绑定 UID ${binding.data.biliUid}` : '尚未绑定'}
+            {...bindingPresentation}
+            label={binding.data ? `已绑定 UID ${binding.data.biliUid}` : bindingPresentation.label}
           />
         </div>
       </section>

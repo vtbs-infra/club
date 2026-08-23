@@ -113,9 +113,13 @@ export function LoadingState({ label = '正在加载…' }: { readonly label?: s
 
 export function ErrorState({
   error,
+  onRetry,
+  retryLabel = '重试',
   title = '暂时无法加载',
 }: {
   readonly error: unknown;
+  readonly onRetry?: () => void;
+  readonly retryLabel?: string;
   readonly title?: string;
 }) {
   return (
@@ -124,6 +128,11 @@ export function ErrorState({
       <strong>{title}</strong>
       <p>{errorMessage(error)}</p>
       <ErrorDetails error={error} />
+      {onRetry ? (
+        <button className="button secondary small" onClick={onRetry} type="button">
+          {retryLabel}
+        </button>
+      ) : null}
     </div>
   );
 }
