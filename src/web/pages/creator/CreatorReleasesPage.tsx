@@ -67,6 +67,7 @@ export function CreatorReleasesPage() {
                         ? '已发布'
                         : '已关闭'}
                   </StatusBadge>
+                  {release.publicVisible ? <span className="soft-tag">首页公开</span> : null}
                 </span>
                 <h3>{release.title}</h3>
                 <p>{formatMonth(release.eligibilityMonth)}资格</p>

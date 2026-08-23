@@ -45,7 +45,11 @@ const auditActionLabel: Readonly<Record<string, string>> = {
 export function AdminAnnouncementsPage() {
   return (
     <div className="stack-lg">
-      <PageHeader eyebrow="平台公告" intro="平台公告对所有已登录用户可见。" title="平台公告" />
+      <PageHeader
+        eyebrow="平台公告"
+        intro="平台公告默认只对已登录用户可见，也可以为单条公告开启公开首页展示。"
+        title="平台公告"
+      />
       <AnnouncementManager area="admin" />
     </div>
   );

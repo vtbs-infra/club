@@ -71,6 +71,7 @@ export function ReleaseEditorPage() {
   const [claimDeadlineAt, setClaimDeadlineAt] = useState(defaultClaimDeadline);
   const [fulfillmentMode, setFulfillmentMode] =
     useState<ReleaseInput['fulfillmentMode']>('HIGHEST_ONLY');
+  const [publicVisible, setPublicVisible] = useState(false);
   const [packages, setPackages] = useState<EditablePackage[]>([
     {
       description: '',
@@ -102,6 +103,7 @@ export function ReleaseEditorPage() {
     setClaimStartAt(isoToDateTimeLocal(release.data.claimStartAt, timeZone));
     setClaimDeadlineAt(isoToDateTimeLocal(release.data.claimDeadlineAt, timeZone));
     setFulfillmentMode(release.data.fulfillmentMode);
+    setPublicVisible(release.data.publicVisible);
     setPackages(
       release.data.packages?.map((package_) => ({
         description: package_.description,
@@ -170,6 +172,7 @@ export function ReleaseEditorPage() {
     })),
     fulfillmentMode,
     packages,
+    publicVisible,
     tierPackageIndexes,
     title,
   });
@@ -322,7 +325,9 @@ export function ReleaseEditorPage() {
           onDescriptionChange={setDescription}
           onEligibilityMonthChange={setEligibilityMonth}
           onFulfillmentModeChange={setFulfillmentMode}
+          onPublicVisibleChange={setPublicVisible}
           onTitleChange={setTitle}
+          publicVisible={publicVisible}
           timeZone={timeZone}
           title={title}
         />
@@ -384,7 +389,7 @@ export function ReleaseEditorPage() {
       <ConfirmDialog
         busy={publish.isPending}
         confirmLabel="发布并生成礼物单"
-        description="发布会原子保存当前页面中的全部内容，并冻结这份礼物配置。发布后不能再编辑。"
+        description={`发布会原子保存当前页面中的全部内容，并冻结这份礼物配置。发布后不能再编辑。${publicVisible ? '这份礼物会同时展示在公开首页。' : '这份礼物不会展示在公开首页。'}`}
         onCancel={() => setConfirmation(null)}
         onConfirm={() => publish.mutate()}
         open={confirmation === 'publish'}

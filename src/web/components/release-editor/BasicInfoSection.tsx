@@ -12,7 +12,9 @@ interface BasicInfoSectionProps {
   readonly onDescriptionChange: (value: string) => void;
   readonly onEligibilityMonthChange: (value: string) => void;
   readonly onFulfillmentModeChange: (value: ReleaseInput['fulfillmentMode']) => void;
+  readonly onPublicVisibleChange: (value: boolean) => void;
   readonly onTitleChange: (value: string) => void;
+  readonly publicVisible: boolean;
   readonly timeZone: string;
   readonly title: string;
 }
@@ -29,7 +31,9 @@ export function BasicInfoSection({
   onDescriptionChange,
   onEligibilityMonthChange,
   onFulfillmentModeChange,
+  onPublicVisibleChange,
   onTitleChange,
+  publicVisible,
   timeZone,
   title,
 }: BasicInfoSectionProps) {
@@ -108,6 +112,18 @@ export function BasicInfoSection({
             value={claimDeadlineAt}
           />
           <small>时区：{timeZone}</small>
+        </label>
+        <label className="switch-field span-full">
+          <input
+            checked={publicVisible}
+            disabled={!editable}
+            onChange={(event) => onPublicVisibleChange(event.target.checked)}
+            type="checkbox"
+          />
+          <span>
+            <strong>在公开首页展示</strong>
+            <small>仅公开主播、礼物说明、资格月份和领取期限；用户仍需登录检查资格。</small>
+          </span>
         </label>
       </div>
     </section>

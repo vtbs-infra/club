@@ -258,6 +258,7 @@ integration('exclusive platform roles and creator ownership', () => {
           name: '八月礼物',
         },
       ],
+      publicVisible: true,
       tierPackageIndexes: { ADMIRAL: 0, CAPTAIN: 0, GOVERNOR: 0 },
       title: '八月舰长礼物',
     } as const;
@@ -294,12 +295,35 @@ integration('exclusive platform roles and creator ownership', () => {
     });
     expect(published.statusCode, published.body).toBe(200);
 
+    const privateReleaseInput = {
+      ...releaseInput,
+      eligibilityMonth: '2026-09-01',
+      publicVisible: false,
+      title: '九月登录后可见礼物',
+    } as const;
+    const privateDraftResponse = await app.inject({
+      headers: { cookie: creatorTwoCookie, origin },
+      method: 'POST',
+      payload: privateReleaseInput,
+      url: '/api/v1/creator/releases',
+    });
+    expect(privateDraftResponse.statusCode, privateDraftResponse.body).toBe(201);
+    const privateDraft = privateDraftResponse.json<{ id: string; version: number }>();
+    const privatePublished = await app.inject({
+      headers: { cookie: creatorTwoCookie, origin },
+      method: 'POST',
+      payload: { ...privateReleaseInput, expectedVersion: privateDraft.version },
+      url: `/api/v1/creator/releases/${privateDraft.id}/publish`,
+    });
+    expect(privatePublished.statusCode, privatePublished.body).toBe(200);
+
     const creatorAnnouncement = await app.inject({
       headers: { cookie: creatorOneCookie, origin },
       method: 'POST',
       payload: {
         body: '只应显示给相关礼物领取用户。',
         pinned: false,
+        publicVisible: false,
         publishNow: true,
         severity: 'INFO',
         title: '主播定向公告',
@@ -313,6 +337,7 @@ integration('exclusive platform roles and creator ownership', () => {
       payload: {
         body: '本月礼物已经开放领取。',
         pinned: true,
+        publicVisible: true,
         publishNow: true,
         severity: 'INFO',
         title: '八月礼物领取通知',
@@ -320,6 +345,20 @@ integration('exclusive platform roles and creator ownership', () => {
       url: '/api/v1/admin/announcements',
     });
     expect(platformAnnouncement.statusCode, platformAnnouncement.body).toBe(201);
+    const loginOnlyAnnouncement = await app.inject({
+      headers: { cookie: adminCookie, origin },
+      method: 'POST',
+      payload: {
+        body: '这条公告只应在登录后显示。',
+        pinned: false,
+        publicVisible: false,
+        publishNow: true,
+        severity: 'INFO',
+        title: '登录用户公告',
+      },
+      url: '/api/v1/admin/announcements',
+    });
+    expect(loginOnlyAnnouncement.statusCode, loginOnlyAnnouncement.body).toBe(201);
     const managedAnnouncement = platformAnnouncement.json<{ id: string; version: number }>();
     const updatedAnnouncement = await app.inject({
       headers: { cookie: adminCookie, origin },
@@ -329,6 +368,7 @@ integration('exclusive platform roles and creator ownership', () => {
         expectedVersion: managedAnnouncement.version,
         expiresAt: null,
         pinned: true,
+        publicVisible: true,
         publishNow: true,
         severity: 'INFO',
         title: '八月礼物领取通知',
@@ -339,7 +379,10 @@ integration('exclusive platform roles and creator ownership', () => {
 
     const publicPortal = await app.inject({ method: 'GET', url: '/api/v1/portal/home' });
     expect(publicPortal.statusCode, publicPortal.body).toBe(200);
-    expect(publicPortal.json<PortalHome>()).toMatchObject({
+    const portalHome = publicPortal.json<PortalHome>();
+    expect(portalHome.announcements).toHaveLength(1);
+    expect(portalHome.releases).toHaveLength(1);
+    expect(portalHome).toMatchObject({
       announcements: [
         {
           pinned: true,

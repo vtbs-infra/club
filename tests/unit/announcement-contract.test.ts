@@ -8,6 +8,7 @@ describe('announcement update contract', () => {
     body: '公告正文',
     expectedVersion: 1,
     pinned: false,
+    publicVisible: false,
     publishNow: true,
     severity: 'INFO',
     title: '公告标题',

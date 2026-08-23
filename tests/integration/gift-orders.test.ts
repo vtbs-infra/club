@@ -91,6 +91,7 @@ function releaseDraft(eligibilityMonth: string): ReleaseDraftInput {
         name: '总督礼物',
       },
     ],
+    publicVisible: false,
     tierPackageIndexes: { ADMIRAL: 1, CAPTAIN: 0, GOVERNOR: 2 },
     title: `${eligibilityMonth.slice(0, 7)} 舰长礼物`,
   };

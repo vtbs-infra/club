@@ -259,6 +259,9 @@ Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请�
 | 状态与物流 | `gift_order_status_history`, `shipments`, `tracking_events`                                            |
 | 公告与审计 | `announcements`, `announcement_reads`, `audit_logs`                                                    |
 
+礼物发布和平台公告分别保存显式的 `public_visible` 标记。匿名门户只查询已发布、明确公开且
+仍在有效期内的内容；发布操作本身不会隐式改变门户可见性。
+
 Drizzle 定义位于 `src/server/infrastructure/db/schema/`，统一从 `index.ts` 导出。SQL
 迁移位于 `migrations/`，应用启动前必须完成全部迁移。
 

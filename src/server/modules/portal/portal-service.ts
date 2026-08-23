@@ -64,6 +64,7 @@ export class PortalService {
         .where(
           and(
             eq(giftReleases.status, 'PUBLISHED'),
+            eq(giftReleases.publicVisible, true),
             eq(creators.active, true),
             lte(giftReleases.claimStartAt, now),
             gt(giftReleases.claimDeadlineAt, now),
@@ -85,6 +86,7 @@ export class PortalService {
         .where(
           and(
             eq(announcements.scope, 'PLATFORM'),
+            eq(announcements.publicVisible, true),
             isNull(announcements.creatorId),
             lte(announcements.publishedAt, now),
             or(isNull(announcements.expiresAt), gt(announcements.expiresAt, now)),

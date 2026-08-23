@@ -242,6 +242,7 @@ export class GiftReleaseService {
             eligibilityMonth: input.eligibilityMonth,
             formSchema: input.formFields,
             fulfillmentMode: input.fulfillmentMode,
+            publicVisible: input.publicVisible,
             title: validated.title,
           })
           .returning();
@@ -254,6 +255,7 @@ export class GiftReleaseService {
             afterSummary: {
               eligibilityMonth: created.eligibilityMonth,
               packageCount: input.packages.length,
+              publicVisible: created.publicVisible,
               title: created.title,
             },
             creatorId,
@@ -318,6 +320,7 @@ export class GiftReleaseService {
             eligibilityMonth: input.eligibilityMonth,
             formSchema: input.formFields,
             fulfillmentMode: input.fulfillmentMode,
+            publicVisible: input.publicVisible,
             title: validated.title,
             updatedAt: new Date(),
             version: before.version + 1,
@@ -331,10 +334,12 @@ export class GiftReleaseService {
             afterSummary: {
               eligibilityMonth: input.eligibilityMonth,
               packageCount: input.packages.length,
+              publicVisible: input.publicVisible,
               title: validated.title,
             },
             beforeSummary: {
               eligibilityMonth: before.eligibilityMonth,
+              publicVisible: before.publicVisible,
               title: before.title,
             },
             creatorId,
@@ -405,6 +410,7 @@ export class GiftReleaseService {
             eligibilityMonth: input.eligibilityMonth,
             formSchema: input.formFields,
             fulfillmentMode: input.fulfillmentMode,
+            publicVisible: input.publicVisible,
             publishedAt: now,
             status: 'PUBLISHED',
             title: validated.title,
@@ -421,10 +427,12 @@ export class GiftReleaseService {
               eligibilityMonth: input.eligibilityMonth,
               generatedOrders: createdOrders,
               packageCount: input.packages.length,
+              publicVisible: input.publicVisible,
               title: validated.title,
             },
             beforeSummary: {
               eligibilityMonth: release.eligibilityMonth,
+              publicVisible: release.publicVisible,
               title: release.title,
             },
             creatorId,

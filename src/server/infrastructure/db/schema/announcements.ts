@@ -25,6 +25,7 @@ export const announcements = pgTable(
     body: text('body').notNull(),
     severity: text('severity').default('INFO').notNull(),
     pinned: boolean('pinned').default(false).notNull(),
+    publicVisible: boolean('public_visible').default(false).notNull(),
     publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }),
     createdByUserId: uuid('created_by_user_id')

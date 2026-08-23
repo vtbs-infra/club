@@ -1,11 +1,17 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import sharp from 'sharp';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { giftReleases } from '../../infrastructure/db/schema/index.js';
+import {
+  bilibiliBindings,
+  creators,
+  giftOrders,
+  giftReleases,
+} from '../../infrastructure/db/schema/index.js';
+import type { AccountRole } from '../../infrastructure/db/schema/index.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
 
@@ -152,14 +158,56 @@ export class GiftMediaService {
     if (oldObjectKey) await this.storage.delete(oldObjectKey).catch(() => undefined);
   }
 
-  public async openCover(releaseId: string) {
+  public async openCover(
+    releaseId: string,
+    viewer: { readonly role: AccountRole; readonly userId: string } | null,
+  ) {
     const [release] = await this.database.orm
-      .select({ objectKey: giftReleases.coverObjectKey })
+      .select({
+        claimDeadlineAt: giftReleases.claimDeadlineAt,
+        claimStartAt: giftReleases.claimStartAt,
+        creatorActive: creators.active,
+        creatorUserId: creators.userId,
+        objectKey: giftReleases.coverObjectKey,
+        publicVisible: giftReleases.publicVisible,
+        status: giftReleases.status,
+      })
       .from(giftReleases)
+      .innerJoin(creators, eq(creators.id, giftReleases.creatorId))
       .where(eq(giftReleases.id, releaseId))
       .limit(1);
     if (!release?.objectKey)
       throw new AppError('GIFT_COVER_NOT_FOUND', 'Gift cover not found.', 404);
+    const now = new Date();
+    const publiclyAccessible =
+      release.creatorActive &&
+      release.publicVisible &&
+      release.status === 'PUBLISHED' &&
+      release.claimStartAt <= now &&
+      release.claimDeadlineAt > now;
+    let authorized = publiclyAccessible || viewer?.role === 'PLATFORM_ADMIN';
+    if (!authorized && viewer && release.creatorUserId === viewer.userId) authorized = true;
+    if (!authorized && viewer) {
+      const [binding] = await this.database.orm
+        .select({ biliUid: bilibiliBindings.biliUid })
+        .from(bilibiliBindings)
+        .where(and(eq(bilibiliBindings.userId, viewer.userId), isNull(bilibiliBindings.unboundAt)))
+        .limit(1);
+      const [order] = await this.database.orm
+        .select({ id: giftOrders.id })
+        .from(giftOrders)
+        .where(
+          and(
+            eq(giftOrders.giftReleaseId, releaseId),
+            binding
+              ? or(eq(giftOrders.userId, viewer.userId), eq(giftOrders.biliUid, binding.biliUid))
+              : eq(giftOrders.userId, viewer.userId),
+          ),
+        )
+        .limit(1);
+      authorized = Boolean(order);
+    }
+    if (!authorized) throw new AppError('GIFT_COVER_NOT_FOUND', 'Gift cover not found.', 404);
     return this.storage.open(release.objectKey);
   }
 }

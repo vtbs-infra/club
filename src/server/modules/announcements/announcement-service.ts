@@ -14,6 +14,7 @@ export interface AnnouncementInput {
   readonly body: string;
   readonly expiresAt?: null | string;
   readonly pinned: boolean;
+  readonly publicVisible: boolean;
   readonly publishNow: boolean;
   readonly severity: 'INFO' | 'WARNING' | 'CRITICAL';
   readonly title: string;
@@ -130,6 +131,7 @@ export class AnnouncementService {
         creatorId: target.scope === 'CREATOR' ? target.creatorId : null,
         expiresAt: normalized.expiresAt,
         pinned: input.pinned,
+        publicVisible: target.scope === 'PLATFORM' && input.publicVisible,
         publishedAt: input.publishNow ? now : null,
         scope: target.scope,
         severity: input.severity,
@@ -142,6 +144,7 @@ export class AnnouncementService {
       actorUserId: context.actorUserId,
       afterSummary: {
         published: Boolean(created.publishedAt),
+        publicVisible: created.publicVisible,
         scope: created.scope,
         severity: created.severity,
         title: created.title,
@@ -199,6 +202,7 @@ export class AnnouncementService {
           body: normalized.body,
           expiresAt: normalized.expiresAt,
           pinned: input.pinned,
+          publicVisible: target.scope === 'PLATFORM' && input.publicVisible,
           publishedAt,
           severity: input.severity,
           title: normalized.title,
@@ -220,11 +224,13 @@ export class AnnouncementService {
           actorUserId: context.actorUserId,
           afterSummary: {
             published: Boolean(updated.publishedAt),
+            publicVisible: updated.publicVisible,
             severity: updated.severity,
             title: updated.title,
           },
           beforeSummary: {
             published: Boolean(before.publishedAt),
+            publicVisible: before.publicVisible,
             severity: before.severity,
             title: before.title,
           },

@@ -25,6 +25,7 @@ const emptyDraft: ManagedAnnouncementInput = {
   body: '',
   expiresAt: null,
   pinned: false,
+  publicVisible: false,
   publishNow: false,
   severity: 'INFO',
   title: '',
@@ -92,7 +93,11 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
         <div className="section-heading compact">
           <div>
             <h2>公告列表</h2>
-            <p>草稿仅自己可见，发布后立即出现在相关用户的资讯中。</p>
+            <p>
+              {area === 'admin'
+                ? '发布后面向所有已登录用户；只有明确开启公开展示时才会进入首页。'
+                : '发布后出现在拥有你当前或历史礼物单的用户资讯中。'}
+            </p>
           </div>
           <button
             className="button secondary"
@@ -119,6 +124,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
                     body: announcement.body,
                     expiresAt: announcement.expiresAt,
                     pinned: announcement.pinned,
+                    publicVisible: announcement.publicVisible,
                     publishNow: announcement.publishedAt !== null,
                     severity: announcement.severity,
                     title: announcement.title,
@@ -223,6 +229,18 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             />
             置顶显示
           </label>
+          {area === 'admin' ? (
+            <label className="check-field">
+              <input
+                checked={draft.publicVisible}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, publicVisible: event.target.checked }))
+                }
+                type="checkbox"
+              />
+              同时展示在公开首页
+            </label>
+          ) : null}
           <label className="check-field">
             <input
               checked={draft.publishNow}

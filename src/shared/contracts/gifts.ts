@@ -70,6 +70,7 @@ export const ReleaseInputSchema = Type.Object(
     formFields: Type.Array(GiftFormFieldSchema, { maxItems: 20 }),
     fulfillmentMode: Type.Union([Type.Literal('HIGHEST_ONLY'), Type.Literal('CUMULATIVE')]),
     packages: Type.Array(ReleasePackageInputSchema, { maxItems: 12, minItems: 1 }),
+    publicVisible: Type.Boolean(),
     tierPackageIndexes: Type.Object(
       {
         ADMIRAL: Type.Integer({ minimum: 0 }),
@@ -121,6 +122,7 @@ export const GiftReleaseSchema = Type.Object({
   fulfillmentMode: Type.Union([Type.Literal('HIGHEST_ONLY'), Type.Literal('CUMULATIVE')]),
   id: IdSchema,
   packages: Type.Optional(Type.Array(ReleasePackageSchema)),
+  publicVisible: Type.Boolean(),
   publishedAt: Nullable(DateTimeSchema),
   status: Type.Union([Type.Literal('DRAFT'), Type.Literal('PUBLISHED'), Type.Literal('CLOSED')]),
   tierPackageIndexes: Type.Optional(

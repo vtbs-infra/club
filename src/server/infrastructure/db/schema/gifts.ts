@@ -34,6 +34,7 @@ export const giftReleases = pgTable(
     title: text('title').notNull(),
     description: text('description').default('').notNull(),
     coverObjectKey: text('cover_object_key'),
+    publicVisible: boolean('public_visible').default(false).notNull(),
     claimStartAt: timestamp('claim_start_at', { mode: 'date', withTimezone: true }).notNull(),
     claimDeadlineAt: timestamp('claim_deadline_at', { mode: 'date', withTimezone: true }).notNull(),
     fulfillmentMode: text('fulfillment_mode').default('HIGHEST_ONLY').notNull(),
