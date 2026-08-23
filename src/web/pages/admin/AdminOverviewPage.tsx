@@ -65,9 +65,19 @@ export function AdminOverviewPage() {
               ? '正在读取名单数据'
               : rosters.isError
                 ? '名单数据暂时不可用'
-                : '迟到抓取需要人工决定'
+                : pendingApproval.length > 0
+                  ? '迟到抓取需要人工决定'
+                  : '当前没有待确认名单'
           }
-          icon={CalendarClock}
+          icon={
+            rosters.isPending
+              ? CircleDotDashed
+              : rosters.isError
+                ? CircleAlert
+                : pendingApproval.length > 0
+                  ? CalendarClock
+                  : CircleCheck
+          }
           label="待确认名单"
           tone={
             rosters.isPending
@@ -86,10 +96,18 @@ export function AdminOverviewPage() {
               ? '正在读取名单数据'
               : rosters.isError
                 ? '名单数据暂时不可用'
-                : '等待检查或重试'
+                : failures.length > 0
+                  ? '等待检查或重试'
+                  : '当前没有失败任务'
           }
-          icon={CircleAlert}
-          label="同步失败"
+          icon={
+            rosters.isPending
+              ? CircleDotDashed
+              : rosters.isError || failures.length > 0
+                ? CircleAlert
+                : CircleCheck
+          }
+          label="失败任务"
           tone={
             rosters.isPending ? 'blue' : rosters.isError || failures.length > 0 ? 'red' : 'green'
           }
@@ -101,14 +119,24 @@ export function AdminOverviewPage() {
               ? '正在读取直播间数据'
               : rooms.isError
                 ? '直播间数据暂时不可用'
-                : `${rooms.data.length} 个房间已配置`
+                : verificationNeedsSetup
+                  ? '尚未启用可用房间'
+                  : unhealthyRooms.length > 0
+                    ? `${unhealthyRooms.length} 个启用房间需要检查`
+                    : '启用中的房间均正常'
           }
           icon={RadioTower}
-          label="验证直播间异常"
+          label="验证直播间"
           tone={
-            rooms.isPending ? 'blue' : rooms.isError || unhealthyRooms.length > 0 ? 'red' : 'green'
+            rooms.isPending
+              ? 'blue'
+              : rooms.isError || unhealthyRooms.length > 0
+                ? 'red'
+                : verificationNeedsSetup
+                  ? 'amber'
+                  : 'green'
           }
-          value={rooms.data ? unhealthyRooms.length : '—'}
+          value={rooms.data ? rooms.data.length : '—'}
         />
       </section>
       {attentionUnresolved || hasAttention ? (
