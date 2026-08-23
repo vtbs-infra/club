@@ -4,7 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { getBinding, getIdentity } from '../api/client';
 import { AddressBook } from '../components/AddressEditor';
 import { BilibiliPanel } from '../components/BilibiliPanel';
-import { ErrorState, LoadingState, PageHeader, StatusBadge } from '../components/Ui';
+import { ErrorNotice, ErrorState, LoadingState, PageHeader, StatusBadge } from '../components/Ui';
 
 function AccountTabs() {
   return (
@@ -21,8 +21,11 @@ function AccountTabs() {
 export function AccountPage() {
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
   const binding = useQuery({ queryFn: getBinding, queryKey: ['me', 'bilibili-binding'] });
-  if (identity.isPending) return <LoadingState />;
+  if (identity.isPending || binding.isPending) return <LoadingState />;
   if (identity.isError || !identity.data) return <ErrorState error={identity.error} />;
+  if (binding.data === undefined) {
+    return <ErrorState error={binding.error} title="暂时无法读取 B站绑定" />;
+  }
   return (
     <div className="stack-lg">
       <PageHeader eyebrow="账号资料" intro="管理你的登录账号和领取所需资料。" title="账号" />
@@ -41,6 +44,7 @@ export function AccountPage() {
           </StatusBadge>
         </div>
       </section>
+      {binding.isError ? <ErrorNotice error={binding.error} /> : null}
     </div>
   );
 }

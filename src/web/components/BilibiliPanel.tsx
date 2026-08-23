@@ -7,9 +7,10 @@ import {
   getBinding,
   getChallenge,
   unbindBilibili,
+  type BilibiliChallenge,
   type IssuedBilibiliChallenge,
 } from '../api/client';
-import { ConfirmDialog, ErrorNotice, InlineNotice, LoadingState } from './Ui';
+import { ConfirmDialog, ErrorNotice, ErrorState, InlineNotice, LoadingState } from './Ui';
 
 const pageLoadedAt = Date.now();
 
@@ -45,6 +46,13 @@ export function BilibiliPanel() {
     mutationFn: createChallenge,
     onSuccess: async (result) => {
       setIssued(result);
+      queryClient.setQueryData<BilibiliChallenge>(['me', 'bilibili-challenge'], {
+        connectionState: null,
+        expiresAt: result.expiresAt,
+        id: result.id,
+        room: result.room,
+        status: 'ACTIVE',
+      });
       await queryClient.invalidateQueries({ queryKey: ['me', 'bilibili-challenge'] });
     },
   });
@@ -60,6 +68,9 @@ export function BilibiliPanel() {
   const remaining = useCountdown(issued?.expiresAt ?? challenge.data?.expiresAt);
 
   if (binding.isPending) return <LoadingState label="正在读取 B站绑定…" />;
+  if (binding.isError && binding.data === undefined) {
+    return <ErrorState error={binding.error} title="暂时无法读取 B站绑定" />;
+  }
   if (binding.data) {
     return (
       <>
@@ -81,6 +92,7 @@ export function BilibiliPanel() {
             解除绑定
           </button>
         </section>
+        {binding.isError ? <ErrorNotice error={binding.error} /> : null}
         {remove.isError ? <ErrorNotice error={remove.error} /> : null}
         <ConfirmDialog
           busy={remove.isPending}
@@ -96,6 +108,11 @@ export function BilibiliPanel() {
     );
   }
 
+  if (challenge.isPending) return <LoadingState label="正在读取当前验证码…" />;
+  if (challenge.isError && challenge.data === undefined) {
+    return <ErrorState error={challenge.error} title="暂时无法读取验证码状态" />;
+  }
+
   const current = challenge.data;
   const active = current?.status === 'ACTIVE' && remaining > 0;
   return (
@@ -107,6 +124,8 @@ export function BilibiliPanel() {
           <p>平台会自动选择验证直播间。无需输入 UID，也不会要求 B站密码。</p>
         </div>
       </div>
+      {binding.isError ? <ErrorNotice error={binding.error} /> : null}
+      {challenge.isError ? <ErrorNotice error={challenge.error} /> : null}
       {active && issued ? (
         <div className="code-card">
           <div className="code-card-status">
