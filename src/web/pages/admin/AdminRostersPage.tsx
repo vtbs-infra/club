@@ -47,6 +47,7 @@ export function AdminRostersPage() {
   const [parameters, setParameters] = useSearchParams();
   const runId = parameters.get('run');
   const [memberSearch, setMemberSearch] = useState('');
+  const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const rosters = useQuery({ queryFn: getAdminRosters, queryKey: ['admin', 'rosters'] });
@@ -67,7 +68,13 @@ export function AdminRostersPage() {
     ]);
   };
   const retry = useMutation({ mutationFn: () => retryAdminRoster(runId!), onSuccess: refresh });
-  const approve = useMutation({ mutationFn: () => approveAdminRoster(runId!), onSuccess: refresh });
+  const approve = useMutation({
+    mutationFn: () => approveAdminRoster(runId!),
+    onSuccess: async () => {
+      setApproveOpen(false);
+      await refresh();
+    },
+  });
   const reject = useMutation({
     mutationFn: (reason: string) => rejectAdminRoster(runId!, reason),
     onSuccess: async () => {
@@ -92,7 +99,11 @@ export function AdminRostersPage() {
     );
   }, [detail.data?.members, memberSearch]);
   const selectRun = (id: string) => {
+    retry.reset();
+    approve.reset();
+    reject.reset();
     setMemberSearch('');
+    setApproveOpen(false);
     setRejectOpen(false);
     setRejectReason('');
     setParameters({ run: id }, { replace: true });
@@ -107,6 +118,7 @@ export function AdminRostersPage() {
   if (rosters.isPending) return <LoadingState label="正在读取名单任务…" />;
   if (rosters.isError) return <ErrorState error={rosters.error} />;
   const mutationError = retry.error ?? approve.error ?? reject.error;
+  const decisionPending = approve.isPending || reject.isPending;
   return (
     <div className="stack-lg">
       <PageHeader
@@ -204,16 +216,24 @@ export function AdminRostersPage() {
                   <div>
                     <button
                       className="button primary"
-                      disabled={approve.isPending}
-                      onClick={() => approve.mutate()}
+                      disabled={decisionPending}
+                      onClick={() => {
+                        approve.reset();
+                        reject.reset();
+                        setApproveOpen(true);
+                      }}
                       type="button"
                     >
                       确认并冻结
                     </button>
                     <button
                       className="button ghost danger"
-                      disabled={reject.isPending}
-                      onClick={() => setRejectOpen(true)}
+                      disabled={decisionPending}
+                      onClick={() => {
+                        approve.reset();
+                        reject.reset();
+                        setRejectOpen(true);
+                      }}
                       type="button"
                     >
                       拒绝此次抓取
@@ -419,21 +439,40 @@ export function AdminRostersPage() {
         </section>
       </div>
       <ConfirmDialog
+        busy={approve.isPending}
+        confirmLabel="确认并冻结"
+        description={
+          <div className="stack-md">
+            <p>
+              本次名单会成为不可变的月度资格快照，并立即为已发布的对应礼物生成礼物单。此操作无法撤销。
+            </p>
+            {approve.isError ? <ErrorNotice error={approve.error} /> : null}
+          </div>
+        }
+        onCancel={() => setApproveOpen(false)}
+        onConfirm={() => approve.mutate()}
+        open={approveOpen}
+        title="确认冻结这次迟到名单？"
+      />
+      <ConfirmDialog
         busy={reject.isPending}
         confirmDisabled={rejectReason.trim().length < 3}
         confirmLabel="拒绝此次抓取"
         description={
-          <label>
-            拒绝原因
-            <textarea
-              maxLength={500}
-              onChange={(event) => setRejectReason(event.target.value)}
-              placeholder="请说明本次名单不能定稿的原因"
-              rows={4}
-              value={rejectReason}
-            />
-            <small>至少 3 个字符；原因会写入审计记录。</small>
-          </label>
+          <div className="stack-md">
+            <label>
+              拒绝原因
+              <textarea
+                maxLength={500}
+                onChange={(event) => setRejectReason(event.target.value)}
+                placeholder="请说明本次名单不能定稿的原因"
+                rows={4}
+                value={rejectReason}
+              />
+              <small>至少 3 个字符；原因会写入审计记录。</small>
+            </label>
+            {reject.isError ? <ErrorNotice error={reject.error} /> : null}
+          </div>
         }
         onCancel={() => setRejectOpen(false)}
         onConfirm={() => reject.mutate(rejectReason.trim())}

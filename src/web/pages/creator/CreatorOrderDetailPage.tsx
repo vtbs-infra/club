@@ -47,6 +47,8 @@ export function CreatorOrderDetailPage() {
   const [carrierName, setCarrierName] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [trackingUrl, setTrackingUrl] = useState('');
+  const [shipOpen, setShipOpen] = useState(false);
+  const [completeOpen, setCompleteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const update = async (updated: Awaited<ReturnType<typeof getCreatorOrder>>) => {
@@ -57,15 +59,21 @@ export function CreatorOrderDetailPage() {
     mutationFn: () =>
       shipCreatorOrder(giftOrderId, {
         carrierCode: carrierCodes[carrierName.trim()] ?? 'OTHER',
-        carrierName,
-        trackingNumber,
-        ...(trackingUrl ? { trackingUrl } : {}),
+        carrierName: carrierName.trim(),
+        trackingNumber: trackingNumber.trim(),
+        ...(trackingUrl.trim() ? { trackingUrl: trackingUrl.trim() } : {}),
       }),
-    onSuccess: update,
+    onSuccess: async (updated) => {
+      setShipOpen(false);
+      await update(updated);
+    },
   });
   const complete = useMutation({
     mutationFn: () => completeCreatorOrder(giftOrderId),
-    onSuccess: update,
+    onSuccess: async (updated) => {
+      setCompleteOpen(false);
+      await update(updated);
+    },
   });
   const cancel = useMutation({
     mutationFn: (reason: string) => cancelCreatorOrder(giftOrderId, reason),
@@ -80,6 +88,7 @@ export function CreatorOrderDetailPage() {
   if (order.isError || !order.data) return <ErrorState error={order.error} />;
   const data = order.data;
   const mutationError = ship.error ?? complete.error ?? cancel.error;
+  const operationPending = ship.isPending || complete.isPending || cancel.isPending;
   return (
     <div className="stack-lg">
       <Link className="back-link" to="/creator/orders">
@@ -101,8 +110,13 @@ export function CreatorOrderDetailPage() {
           {data.status === 'SHIPPED' ? (
             <button
               className="button secondary"
-              disabled={complete.isPending}
-              onClick={() => complete.mutate()}
+              disabled={operationPending}
+              onClick={() => {
+                ship.reset();
+                complete.reset();
+                cancel.reset();
+                setCompleteOpen(true);
+              }}
               type="button"
             >
               标记已完成
@@ -112,8 +126,13 @@ export function CreatorOrderDetailPage() {
           {data.status === 'SUBMITTED' ? (
             <button
               className="button ghost danger"
-              disabled={cancel.isPending}
-              onClick={() => setCancelOpen(true)}
+              disabled={operationPending}
+              onClick={() => {
+                ship.reset();
+                complete.reset();
+                cancel.reset();
+                setCancelOpen(true);
+              }}
               type="button"
             >
               取消礼物单
@@ -233,7 +252,10 @@ export function CreatorOrderDetailPage() {
               className="panel shipment-form"
               onSubmit={(event: FormEvent) => {
                 event.preventDefault();
-                ship.mutate();
+                ship.reset();
+                complete.reset();
+                cancel.reset();
+                setShipOpen(true);
               }}
             >
               <div>
@@ -273,9 +295,9 @@ export function CreatorOrderDetailPage() {
                   value={trackingUrl}
                 />
               </label>
-              <button className="button primary wide" disabled={ship.isPending} type="submit">
-                {ship.isPending ? '正在保存…' : '确认发货'}
-                {!ship.isPending ? <PackageCheck aria-hidden="true" size={16} /> : null}
+              <button className="button primary wide" disabled={operationPending} type="submit">
+                确认发货
+                <PackageCheck aria-hidden="true" size={16} />
               </button>
             </form>
           ) : data.shipments.length > 0 ? (
@@ -302,20 +324,61 @@ export function CreatorOrderDetailPage() {
         </aside>
       </div>
       <ConfirmDialog
+        busy={ship.isPending}
+        confirmLabel="确认发货"
+        description={
+          <div className="stack-md">
+            <p>提交后礼物单会进入已发货状态，用户将立即看到以下物流信息。</p>
+            <dl className="dialog-summary">
+              <div>
+                <dt>快递公司</dt>
+                <dd>{carrierName.trim()}</dd>
+              </div>
+              <div>
+                <dt>运单号</dt>
+                <dd>{trackingNumber.trim()}</dd>
+              </div>
+            </dl>
+            {ship.isError ? <ErrorNotice error={ship.error} /> : null}
+          </div>
+        }
+        onCancel={() => setShipOpen(false)}
+        onConfirm={() => ship.mutate()}
+        open={shipOpen}
+        title="核对并提交发货信息"
+      />
+      <ConfirmDialog
+        busy={complete.isPending}
+        confirmLabel="标记已完成"
+        description={
+          <div className="stack-md">
+            <p>礼物单会结束当前履约流程。请仅在确认无需继续跟进物流时执行。</p>
+            {complete.isError ? <ErrorNotice error={complete.error} /> : null}
+          </div>
+        }
+        onCancel={() => setCompleteOpen(false)}
+        onConfirm={() => complete.mutate()}
+        open={completeOpen}
+        title="确认将礼物单标记为已完成？"
+      />
+      <ConfirmDialog
         busy={cancel.isPending}
         confirmDisabled={cancelReason.trim().length < 3}
         confirmLabel="取消礼物单"
         description={
-          <label>
-            取消原因
-            <textarea
-              maxLength={500}
-              onChange={(event) => setCancelReason(event.target.value)}
-              placeholder="用户会在礼物单中看到已取消状态"
-              rows={4}
-              value={cancelReason}
-            />
-          </label>
+          <div className="stack-md">
+            <label>
+              取消原因
+              <textarea
+                maxLength={500}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder="用户会在礼物单中看到已取消状态"
+                rows={4}
+                value={cancelReason}
+              />
+            </label>
+            {cancel.isError ? <ErrorNotice error={cancel.error} /> : null}
+          </div>
         }
         onCancel={() => setCancelOpen(false)}
         onConfirm={() => cancel.mutate(cancelReason.trim())}

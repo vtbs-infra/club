@@ -233,9 +233,28 @@ code {
   border-color: var(--line-strong);
 }
 
-.button.danger,
+.button.danger {
+  background: var(--red);
+  border-color: var(--red);
+  box-shadow: 0 8px 20px rgb(198 68 85 / 18%);
+  color: white;
+}
+
+.button.danger:hover:not(:disabled) {
+  background: #ad3547;
+  border-color: #ad3547;
+  box-shadow: 0 10px 24px rgb(198 68 85 / 24%);
+}
+
 .button.ghost.danger {
+  background: var(--red-soft);
+  border-color: var(--red-border);
   color: var(--red);
+}
+
+.button.ghost.danger:hover:not(:disabled) {
+  background: #ffe3e7;
+  border-color: var(--red);
 }
 
 .button.large {
@@ -585,6 +604,32 @@ textarea:disabled {
 .confirm-dialog-copy {
   color: var(--muted);
   line-height: 1.65;
+}
+
+.dialog-summary {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.dialog-summary > div {
+  align-items: baseline;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  padding: 0.65rem 0.75rem;
+}
+
+.dialog-summary dt {
+  font-size: 0.8rem;
+}
+
+.dialog-summary dd {
+  color: var(--ink);
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .required {
