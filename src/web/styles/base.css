@@ -43,7 +43,7 @@ a {
   text-decoration: none;
 }
 
-:where(a, button, input, select, textarea, summary):focus-visible {
+:where(a, button, summary):focus-visible {
   outline: 3px solid rgb(36 143 213 / 24%);
   outline-offset: 3px;
 }
