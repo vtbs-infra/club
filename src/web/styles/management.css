@@ -909,7 +909,7 @@
   border-color: #c3e5f6;
 }
 
-.roster-run > span {
+.roster-run-summary {
   display: flex;
   flex-direction: column;
 }

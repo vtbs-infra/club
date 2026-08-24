@@ -141,7 +141,7 @@ export function AdminRostersPage() {
                   onClick={() => selectRun(run.id)}
                   type="button"
                 >
-                  <span>
+                  <span className="roster-run-summary">
                     <strong>{creator.displayName}</strong>
                     <small>{formatMonth(run.periodStart)}</small>
                   </span>
