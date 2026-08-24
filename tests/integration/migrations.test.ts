@@ -4,23 +4,21 @@ import { join, resolve } from 'node:path';
 
 import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import {
   createDatabase,
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
 import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integration = testDatabaseUrl ? describe : describe.skip;
+import { integration, integrationDatabaseUrl } from '../helpers/integration-database.js';
 
 integration('database migration baseline', () => {
   let admin: ReturnType<typeof postgres>;
   const databases: string[] = [];
 
   beforeAll(() => {
-    const adminUrl = new URL(testDatabaseUrl!);
+    const adminUrl = new URL(integrationDatabaseUrl());
     adminUrl.pathname = '/postgres';
     admin = postgres(adminUrl.toString(), { max: 1 });
   });
@@ -41,7 +39,7 @@ integration('database migration baseline', () => {
     const name = `club_baseline_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
     await admin.unsafe(`create database "${name}"`);
     databases.push(name);
-    const targetUrl = new URL(testDatabaseUrl!);
+    const targetUrl = new URL(integrationDatabaseUrl());
     targetUrl.pathname = `/${name}`;
     return createDatabase(targetUrl.toString());
   }

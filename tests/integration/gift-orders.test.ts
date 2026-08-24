@@ -1,17 +1,10 @@
-import { resolve } from 'node:path';
-
 import { and, count, eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
-import postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
-import {
-  createDatabase,
-  type DatabaseService,
-} from '../../src/server/infrastructure/db/database.js';
+import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
-import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
 import {
   bilibiliBindings,
   bindingChallenges,
@@ -32,14 +25,14 @@ import { AddressService } from '../../src/server/modules/addresses/address-servi
 import type { AppAuth } from '../../src/server/modules/auth/auth.js';
 import { TrackingRefreshService } from '../../src/server/modules/fulfillment/tracking-refresh-service.js';
 import { GiftOrderService } from '../../src/server/modules/gifts/order-service.js';
-import {
-  GiftReleaseService,
-  type ReleaseDraftInput,
-} from '../../src/server/modules/gifts/release-service.js';
+import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
 import { createTestConfig } from '../helpers/test-config.js';
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integration = testDatabaseUrl ? describe : describe.skip;
+import { createReleaseDraft } from '../helpers/gift-release.js';
+import {
+  createIntegrationDatabase,
+  integration,
+  type IntegrationDatabase,
+} from '../helpers/integration-database.js';
 
 const addressPayload = {
   city: '上海市',
@@ -57,50 +50,9 @@ function requestContext(actorUserId: string, requestId: string) {
   return { actorUserId, ipAddress: '127.0.0.1', requestId };
 }
 
-function releaseDraft(eligibilityMonth: string): ReleaseDraftInput {
-  const now = Date.now();
-  return {
-    claimDeadlineAt: new Date(now + 30 * 86_400_000).toISOString(),
-    claimStartAt: new Date(now - 86_400_000).toISOString(),
-    description: `${eligibilityMonth} 舰长纪念礼物`,
-    eligibilityMonth,
-    formFields: [
-      {
-        key: 'color',
-        label: '颜色',
-        options: ['蓝色', '粉色'],
-        required: true,
-        type: 'SELECT',
-      },
-    ],
-    fulfillmentMode: 'CUMULATIVE',
-    packages: [
-      {
-        description: '舰长基础礼物',
-        items: [{ description: '', name: '舰长徽章', quantity: 1 }],
-        name: '舰长礼物',
-      },
-      {
-        description: '提督追加礼物',
-        items: [{ description: '', name: '提督纪念卡', quantity: 1 }],
-        name: '提督礼物',
-      },
-      {
-        description: '总督追加礼物',
-        items: [{ description: '', name: '总督纪念盒', quantity: 1 }],
-        name: '总督礼物',
-      },
-    ],
-    publicVisible: false,
-    tierPackageIndexes: { ADMIRAL: 1, CAPTAIN: 0, GOVERNOR: 2 },
-    title: `${eligibilityMonth.slice(0, 7)} 舰长礼物`,
-  };
-}
-
 integration('gift order lifecycle', () => {
-  let admin: ReturnType<typeof postgres>;
   let database: DatabaseService;
-  let databaseName: string;
+  let integrationDatabase: IntegrationDatabase;
   let creatorId: string;
   let otherCreatorId: string;
   let creatorUserId: string;
@@ -113,15 +65,8 @@ integration('gift order lifecycle', () => {
   let orderService: GiftOrderService;
 
   beforeAll(async () => {
-    const adminUrl = new URL(testDatabaseUrl!);
-    adminUrl.pathname = '/postgres';
-    admin = postgres(adminUrl.toString(), { max: 1 });
-    databaseName = `club_gifts_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
-    await admin.unsafe(`create database "${databaseName}"`);
-    const databaseUrl = new URL(testDatabaseUrl!);
-    databaseUrl.pathname = `/${databaseName}`;
-    database = createDatabase(databaseUrl.toString());
-    await migrateDatabase(database, resolve('migrations'));
+    integrationDatabase = await createIntegrationDatabase('gift_orders');
+    database = integrationDatabase.database;
 
     const accounts = await database.orm
       .insert(users)
@@ -184,16 +129,7 @@ integration('gift order lifecycle', () => {
   });
 
   afterAll(async () => {
-    if (database) await database.close();
-    if (admin) {
-      await admin`
-        select pg_terminate_backend(pid)
-        from pg_stat_activity
-        where datname = ${databaseName} and pid <> pg_backend_pid()
-      `;
-      await admin.unsafe(`drop database if exists "${databaseName}"`);
-      await admin.end({ timeout: 5 });
-    }
+    if (integrationDatabase) await integrationDatabase.cleanup();
   });
 
   async function finalizeSnapshot(
@@ -274,20 +210,20 @@ integration('gift order lifecycle', () => {
     ]);
     const june = await releaseService.create(
       creatorId,
-      releaseDraft('2026-06-01'),
+      createReleaseDraft('2026-06-01'),
       requestContext(creatorUserId, 'create-june'),
     );
     await Promise.all([
       releaseService.publish(
         creatorId,
         june.id,
-        { ...releaseDraft('2026-06-01'), expectedVersion: june.version },
+        { ...createReleaseDraft('2026-06-01'), expectedVersion: june.version },
         requestContext(creatorUserId, 'publish-june'),
       ),
       releaseService.publish(
         creatorId,
         june.id,
-        { ...releaseDraft('2026-06-01'), expectedVersion: june.version },
+        { ...createReleaseDraft('2026-06-01'), expectedVersion: june.version },
         requestContext(creatorUserId, 'publish-june-again'),
       ),
     ]);
@@ -557,13 +493,13 @@ integration('gift order lifecycle', () => {
 
     const july = await releaseService.create(
       creatorId,
-      releaseDraft('2026-07-01'),
+      createReleaseDraft('2026-07-01'),
       requestContext(creatorUserId, 'create-july'),
     );
     await releaseService.publish(
       creatorId,
       july.id,
-      { ...releaseDraft('2026-07-01'), expectedVersion: july.version },
+      { ...createReleaseDraft('2026-07-01'), expectedVersion: july.version },
       requestContext(creatorUserId, 'publish-july'),
     );
     expect(
@@ -589,36 +525,9 @@ integration('gift order lifecycle', () => {
     await expect(
       releaseService.create(
         creatorId,
-        releaseDraft('2026-07-01'),
+        createReleaseDraft('2026-07-01'),
         requestContext(creatorUserId, 'duplicate-july'),
       ),
     ).rejects.toMatchObject({ code: 'GIFT_RELEASE_MONTH_CONFLICT' });
-  });
-
-  it('atomically publishes current unsaved content with optimistic locking', async () => {
-    const initial = releaseDraft('2026-08-01');
-    const draft = await releaseService.create(
-      creatorId,
-      { ...initial, title: '保存过的旧标题' },
-      requestContext(creatorUserId, 'create-august'),
-    );
-    const published = await releaseService.publish(
-      creatorId,
-      draft.id,
-      {
-        ...initial,
-        description: '直接发布时输入的新说明',
-        expectedVersion: draft.version,
-        title: '直接发布时输入的新标题',
-      },
-      requestContext(creatorUserId, 'publish-august-current-content'),
-    );
-
-    expect(published).toMatchObject({
-      description: '直接发布时输入的新说明',
-      status: 'PUBLISHED',
-      title: '直接发布时输入的新标题',
-      version: draft.version + 1,
-    });
   });
 });

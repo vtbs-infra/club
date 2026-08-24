@@ -1,15 +1,8 @@
-import { resolve } from 'node:path';
-
 import { and, count, eq, inArray } from 'drizzle-orm';
-import postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
-import {
-  createDatabase,
-  type DatabaseService,
-} from '../../src/server/infrastructure/db/database.js';
-import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
+import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
   auditLogs,
   creators,
@@ -36,9 +29,11 @@ import type {
 } from '../../src/server/modules/bilibili/guard-roster-source.js';
 import { CreatorService } from '../../src/server/modules/creators/creator-service.js';
 import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integration = testDatabaseUrl ? describe : describe.skip;
+import {
+  createIntegrationDatabase,
+  integration,
+  type IntegrationDatabase,
+} from '../helpers/integration-database.js';
 
 class MutableClock implements Clock {
   public constructor(public current: Date) {}
@@ -148,23 +143,15 @@ class BlockingEmptySource implements GuardRosterSource {
 }
 
 integration('month-end snapshot capture', () => {
-  let admin: ReturnType<typeof postgres>;
   let database: DatabaseService;
-  let databaseName: string;
+  let integrationDatabase: IntegrationDatabase;
   let storage: TemporaryStorage;
   let ownerId: string;
   const creatorIds: string[] = [];
 
   beforeAll(async () => {
-    const adminUrl = new URL(testDatabaseUrl!);
-    adminUrl.pathname = '/postgres';
-    admin = postgres(adminUrl.toString(), { max: 1 });
-    databaseName = `club_snapshots_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
-    await admin.unsafe(`create database "${databaseName}"`);
-    const databaseUrl = new URL(testDatabaseUrl!);
-    databaseUrl.pathname = `/${databaseName}`;
-    database = createDatabase(databaseUrl.toString());
-    await migrateDatabase(database, resolve('migrations'));
+    integrationDatabase = await createIntegrationDatabase('snapshots');
+    database = integrationDatabase.database;
     storage = await createTemporaryStorage();
     const [owner] = await database.orm
       .insert(users)
@@ -195,17 +182,8 @@ integration('month-end snapshot capture', () => {
   });
 
   afterAll(async () => {
-    if (database) await database.close();
     if (storage) await storage.cleanup();
-    if (admin) {
-      await admin`
-        select pg_terminate_backend(pid)
-        from pg_stat_activity
-        where datname = ${databaseName} and pid <> pg_backend_pid()
-      `;
-      await admin.unsafe(`drop database if exists "${databaseName}"`);
-      await admin.end({ timeout: 5 });
-    }
+    if (integrationDatabase) await integrationDatabase.cleanup();
   });
 
   async function julyRun(creatorId: string) {

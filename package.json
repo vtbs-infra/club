@@ -25,7 +25,7 @@
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration --passWithNoTests",
-    "test:e2e": "pnpm build && playwright test",
+    "test:browser": "pnpm build && playwright test",
     "browser:install": "playwright install chromium",
     "club": "tsx src/server/cli.ts",
     "club:prod": "node dist/server/server/cli.js",

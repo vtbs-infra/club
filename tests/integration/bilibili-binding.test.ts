@@ -1,39 +1,38 @@
-import { resolve } from 'node:path';
-
 import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
-import postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
-import {
-  createDatabase,
-  type DatabaseService,
-} from '../../src/server/infrastructure/db/database.js';
-import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
+import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
   users,
-  verificationRooms,
 } from '../../src/server/infrastructure/db/schema/index.js';
 import {
   createTemporaryStorage,
   type TemporaryStorage,
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
-import { createAuth, type AppAuth } from '../../src/server/modules/auth/auth.js';
+import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { FakeLiveMessageSource } from '../../src/server/modules/bilibili/fake-live-message-source.js';
 import {
   createBindingRuntime,
   type BindingRuntime,
 } from '../../src/server/modules/binding/binding-runtime.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
+import {
+  registerTestUser,
+  signInTestUser,
+  TEST_PASSWORD,
+  TEST_ORIGIN,
+} from '../helpers/auth-session.js';
+import {
+  createIntegrationDatabase,
+  integration,
+  type IntegrationDatabase,
+} from '../helpers/integration-database.js';
 import { createTestConfig } from '../helpers/test-config.js';
-
-const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-const integration = testDatabaseUrl ? describe : describe.skip;
-const origin = 'http://localhost:3000';
 
 interface RoomResponse {
   readonly biliRoomId: string;
@@ -56,23 +55,10 @@ interface ErrorResponse {
   readonly error: { readonly code: string };
 }
 
-function cookieFrom(response: LightMyRequestResponse): string {
-  const header = response.headers['set-cookie'];
-  const cookies = Array.isArray(header) ? header : header ? [header] : [];
-  const cookie = cookies
-    .map((value) => value.split(';', 1)[0])
-    .filter(Boolean)
-    .join('; ');
-  if (!cookie) throw new Error('Authentication response did not set a session cookie.');
-  return cookie;
-}
-
 integration('platform verification rooms and Bilibili UID binding', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
-  let admin: ReturnType<typeof postgres>;
-  let auth: AppAuth;
   let database: DatabaseService;
-  let databaseName: string;
+  let integrationDatabase: IntegrationDatabase;
   let runtime: BindingRuntime;
   let source: FakeLiveMessageSource;
   let storage: TemporaryStorage;
@@ -82,35 +68,6 @@ integration('platform verification rooms and Bilibili UID binding', () => {
   let charlieCookie: string;
   let roomA: RoomResponse;
   let roomB: RoomResponse;
-  let aliceChallenge: ChallengeResponse;
-  let bobChallenge: ChallengeResponse;
-  let restartRoomId: string;
-
-  async function register(name: string, email: string): Promise<string> {
-    const response = await app.inject({
-      method: 'POST',
-      payload: { email, name, password: 'correct-horse-battery-staple' },
-      url: '/api/auth/sign-up/email',
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    const [user] = await database.orm
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-    if (!user) throw new Error(`Registration did not create ${email}.`);
-    return user.id;
-  }
-
-  async function signIn(email: string): Promise<string> {
-    const response = await app.inject({
-      method: 'POST',
-      payload: { email, password: 'correct-horse-battery-staple' },
-      url: '/api/auth/sign-in/email',
-    });
-    expect(response.statusCode, response.body).toBe(200);
-    return cookieFrom(response);
-  }
 
   async function createRoom(
     biliRoomId: string,
@@ -118,7 +75,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     priority: number,
   ): Promise<RoomResponse> {
     const response = await app.inject({
-      headers: { cookie: adminCookie, origin },
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
       method: 'POST',
       payload: {
         biliRoomId,
@@ -136,7 +93,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     remoteAddress = '127.0.0.1',
   ): Promise<LightMyRequestResponse> {
     return app.inject({
-      headers: { cookie, origin },
+      headers: { cookie, origin: TEST_ORIGIN },
       method: 'POST',
       payload: {},
       remoteAddress,
@@ -145,24 +102,17 @@ integration('platform verification rooms and Bilibili UID binding', () => {
   }
 
   beforeAll(async () => {
-    const adminUrl = new URL(testDatabaseUrl!);
-    adminUrl.pathname = '/postgres';
-    admin = postgres(adminUrl.toString(), { max: 1 });
-    databaseName = `club_binding_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
-    await admin.unsafe(`create database "${databaseName}"`);
-    const databaseUrl = new URL(testDatabaseUrl!);
-    databaseUrl.pathname = `/${databaseName}`;
-    database = createDatabase(databaseUrl.toString());
-    await migrateDatabase(database, resolve('migrations'));
+    integrationDatabase = await createIntegrationDatabase('binding');
+    database = integrationDatabase.database;
     storage = await createTemporaryStorage();
-    const config = createTestConfig({ databaseUrl: databaseUrl.toString() });
-    auth = createAuth({ config, database });
+    const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
+    const auth = createAuth({ config, database });
     await bootstrapPlatformAdmin({
       auth,
       database,
       email: 'admin@example.com',
       name: 'Platform Admin',
-      password: 'correct-horse-battery-staple',
+      password: TEST_PASSWORD,
     });
     source = new FakeLiveMessageSource();
     runtime = createBindingRuntime({
@@ -182,23 +132,25 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       storage: storage.driver,
     });
 
-    await register('Alice', 'alice@example.com');
-    await register('Bob', 'bob@example.com');
-    await register('Charlie', 'charlie@example.com');
-    adminCookie = await signIn('admin@example.com');
-    aliceCookie = await signIn('alice@example.com');
-    bobCookie = await signIn('bob@example.com');
-    charlieCookie = await signIn('charlie@example.com');
+    for (const [name, email] of [
+      ['Alice', 'alice@example.com'],
+      ['Bob', 'bob@example.com'],
+      ['Charlie', 'charlie@example.com'],
+    ] as const) {
+      await registerTestUser({ app, database, email, name });
+    }
+    adminCookie = await signInTestUser({ app, email: 'admin@example.com' });
+    aliceCookie = await signInTestUser({ app, email: 'alice@example.com' });
+    bobCookie = await signInTestUser({ app, email: 'bob@example.com' });
+    charlieCookie = await signInTestUser({ app, email: 'charlie@example.com' });
+    roomA = await createRoom('10001', 'Primary room', 10);
+    roomB = await createRoom('10002', 'Fallback room', 20);
   });
 
   afterAll(async () => {
     if (app) await app.close();
-    if (database) await database.close();
     if (storage) await storage.cleanup();
-    if (admin) {
-      await admin.unsafe(`drop database if exists "${databaseName}"`);
-      await admin.end();
-    }
+    if (integrationDatabase) await integrationDatabase.cleanup();
   });
 
   it('lets only a platform administrator configure and test verification rooms', async () => {
@@ -209,11 +161,9 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     });
     expect(forbidden.statusCode).toBe(403);
 
-    roomA = await createRoom('10001', 'Primary room', 10);
-    roomB = await createRoom('10002', 'Fallback room', 20);
     for (const room of [roomA, roomB]) {
       const response = await app.inject({
-        headers: { cookie: adminCookie, origin },
+        headers: { cookie: adminCookie, origin: TEST_ORIGIN },
         method: 'POST',
         payload: {},
         url: `/api/v1/admin/verification-rooms/${room.id}/test`,
@@ -223,18 +173,18 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     }
   });
 
-  it('never accepts a user-supplied room ID or UID and stores only a code digest', async () => {
+  it('binds only an assigned-room proof, records UID conflicts, and preserves history', async () => {
     const rejected = await app.inject({
-      headers: { cookie: aliceCookie, origin },
+      headers: { cookie: aliceCookie, origin: TEST_ORIGIN },
       method: 'POST',
       payload: { roomId: roomB.id, uid: '123456789' },
       url: '/api/v1/me/bilibili-challenges',
     });
     expect(rejected.statusCode).toBe(400);
 
-    const response = await issue(aliceCookie);
-    expect(response.statusCode, response.body).toBe(201);
-    aliceChallenge = response.json<ChallengeResponse>();
+    const aliceIssued = await issue(aliceCookie);
+    expect(aliceIssued.statusCode, aliceIssued.body).toBe(201);
+    const aliceChallenge = aliceIssued.json<ChallengeResponse>();
     expect(aliceChallenge.code).toMatch(/^CLUB-[A-HJ-NP-Z2-9]{6}$/);
     expect(aliceChallenge.room.link).toBe('https://live.bilibili.com/10001');
     const [stored] = await database.orm
@@ -243,11 +193,8 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       .where(eq(bindingChallenges.id, aliceChallenge.id));
     expect(stored?.codeDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(stored?.codeDigest).not.toContain(aliceChallenge.code);
-  });
-
-  it('does not consume a challenge from the wrong room and binds the event UID once', async () => {
     const disablePrimary = await app.inject({
-      headers: { cookie: adminCookie, origin },
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
       method: 'PATCH',
       payload: { enabled: false },
       url: `/api/v1/admin/verification-rooms/${roomA.id}`,
@@ -255,7 +202,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     expect(disablePrimary.statusCode).toBe(200);
     const bobResponse = await issue(bobCookie);
     expect(bobResponse.statusCode, bobResponse.body).toBe(201);
-    bobChallenge = bobResponse.json<ChallengeResponse>();
+    const bobChallenge = bobResponse.json<ChallengeResponse>();
     expect(bobChallenge.room.link).toBe('https://live.bilibili.com/10002');
 
     await source.emitMessage({
@@ -273,7 +220,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     expect(stillUnbound.json()).toBeNull();
 
     await app.inject({
-      headers: { cookie: adminCookie, origin },
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
       method: 'PATCH',
       payload: { enabled: true },
       url: `/api/v1/admin/verification-rooms/${roomA.id}`,
@@ -310,9 +257,6 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     const cannotRebind = await issue(aliceCookie);
     expect(cannotRebind.statusCode).toBe(409);
     expect(cannotRebind.json<ErrorResponse>().error.code).toBe('BILIBILI_BINDING_EXISTS');
-  });
-
-  it('records a conflict when another user proves an already-bound UID', async () => {
     await source.emitMessage({
       biliDisplayName: 'Same UID',
       biliUid: '123456789',
@@ -320,27 +264,24 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       message: bobChallenge.code,
       roomId: roomB.biliRoomId,
     });
-    const response = await app.inject({
+    const conflictState = await app.inject({
       headers: { cookie: bobCookie },
       method: 'GET',
       url: '/api/v1/me/bilibili-challenges/current',
     });
-    expect(response.json()).toMatchObject({ status: 'CONFLICT' });
+    expect(conflictState.json()).toMatchObject({ status: 'CONFLICT' });
     const [record] = await database.orm
       .select({ action: auditLogs.action })
       .from(auditLogs)
       .where(eq(auditLogs.action, 'bilibili-binding.conflict'))
       .limit(1);
     expect(record?.action).toBe('bilibili-binding.conflict');
-  });
-
-  it('preserves binding history when a user unbinds', async () => {
-    const response = await app.inject({
-      headers: { cookie: aliceCookie, origin },
+    const unbound = await app.inject({
+      headers: { cookie: aliceCookie, origin: TEST_ORIGIN },
       method: 'DELETE',
       url: '/api/v1/me/bilibili-binding',
     });
-    expect(response.statusCode).toBe(204);
+    expect(unbound.statusCode).toBe(204);
     const [history] = await database.orm
       .select({ unboundAt: bilibiliBindings.unboundAt })
       .from(bilibiliBindings)
@@ -351,8 +292,8 @@ integration('platform verification rooms and Bilibili UID binding', () => {
   });
 
   it('expires stale challenges before accepting their proof message', async () => {
-    await register('Dave', 'dave@example.com');
-    const daveCookie = await signIn('dave@example.com');
+    await registerTestUser({ app, database, email: 'dave@example.com', name: 'Dave' });
+    const daveCookie = await signInTestUser({ app, email: 'dave@example.com' });
     const issued = await issue(daveCookie, '192.0.2.40');
     expect(issued.statusCode, issued.body).toBe(201);
     const challenge = issued.json<ChallengeResponse>();
@@ -384,8 +325,8 @@ integration('platform verification rooms and Bilibili UID binding', () => {
   });
 
   it('rejects replayed proof messages from before challenge creation', async () => {
-    await register('Erin', 'erin@example.com');
-    const erinCookie = await signIn('erin@example.com');
+    await registerTestUser({ app, database, email: 'erin@example.com', name: 'Erin' });
+    const erinCookie = await signInTestUser({ app, email: 'erin@example.com' });
     const issued = await issue(erinCookie, '192.0.2.41');
     expect(issued.statusCode, issued.body).toBe(201);
     const challenge = issued.json<ChallengeResponse>();
@@ -420,26 +361,28 @@ integration('platform verification rooms and Bilibili UID binding', () => {
   });
 
   it('lets a platform administrator remove a binding with an audited reason', async () => {
-    const issued = await issue(bobCookie, '192.0.2.50');
+    await registerTestUser({ app, database, email: 'frank@example.com', name: 'Frank' });
+    const frankCookie = await signInTestUser({ app, email: 'frank@example.com' });
+    const issued = await issue(frankCookie, '192.0.2.50');
     expect(issued.statusCode, issued.body).toBe(201);
     const challenge = issued.json<ChallengeResponse>();
     await source.emitMessage({
-      biliDisplayName: 'Bob on Bilibili',
-      biliUid: '123456789',
+      biliDisplayName: 'Frank on Bilibili',
+      biliUid: '666666666',
       eventId: 'administrator-removal-binding-event',
       message: challenge.code,
       roomId: challenge.room.link.split('/').at(-1)!,
     });
     const bindingResponse = await app.inject({
-      headers: { cookie: bobCookie },
+      headers: { cookie: frankCookie },
       method: 'GET',
       url: '/api/v1/me/bilibili-binding',
     });
     const binding = bindingResponse.json<BindingResponse>();
-    expect(binding.biliUid).toBe('123456789');
+    expect(binding.biliUid).toBe('666666666');
 
     const removed = await app.inject({
-      headers: { cookie: adminCookie, origin },
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
       method: 'DELETE',
       payload: { reason: 'Resolved a verified account ownership request.' },
       url: `/api/v1/admin/bilibili-bindings/${binding.id}`,
@@ -467,7 +410,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     const limited = await issue(charlieCookie, '192.0.2.30');
     expect(limited.statusCode).toBe(429);
     expect(limited.headers['retry-after']).toBeDefined();
-    restartRoomId = latest!.room.link.split('/').at(-1)!;
+    expect(latest?.room.link).toContain('https://live.bilibili.com/');
     const [activeChallenges] = await database.orm
       .select({ value: count() })
       .from(bindingChallenges)
@@ -484,46 +427,5 @@ integration('platform verification rooms and Bilibili UID binding', () => {
         ),
       );
     expect(activeChallenges?.value).toBe(1);
-  });
-
-  it('restores unexpired listening after restart and contains source failures', async () => {
-    await app.close();
-    source = new FakeLiveMessageSource();
-    source.failNextConnections(restartRoomId);
-    const config = createTestConfig({ databaseUrl: testDatabaseUrl! });
-    runtime = createBindingRuntime({
-      clock: { now: () => new Date() },
-      config,
-      database,
-      idleGraceMs: 0,
-      reconnectDelaysMs: [1],
-      source,
-    });
-    auth = createAuth({ config, database });
-    app = await buildApp({
-      auth,
-      bindingRuntime: runtime,
-      config,
-      database,
-      startBackground: false,
-      storage: storage.driver,
-    });
-
-    await expect(runtime.start()).resolves.toBeUndefined();
-    expect(runtime.connections.getState(restartRoomId)).toBe('UNHEALTHY');
-    const live = await app.inject({ method: 'GET', url: '/health/live' });
-    expect(live.statusCode).toBe(200);
-    await expect
-      .poll(() => source.activeConnectionCount(restartRoomId), { timeout: 1_000 })
-      .toBe(1);
-    await expect
-      .poll(() => runtime.connections.getState(restartRoomId), { timeout: 1_000 })
-      .toBe('HEALTHY');
-
-    const [restoredRoom] = await database.orm
-      .select({ healthStatus: verificationRooms.healthStatus })
-      .from(verificationRooms)
-      .where(eq(verificationRooms.biliRoomId, restartRoomId));
-    expect(restoredRoom?.healthStatus).toBe('HEALTHY');
   });
 });

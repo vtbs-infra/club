@@ -172,7 +172,7 @@ pnpm test
 $env:TEST_DATABASE_URL = '<postgres-admin-url>'
 pnpm test:integration
 pnpm build
-pnpm test:e2e
+pnpm test:browser
 docker compose build app
 ```
 

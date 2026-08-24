@@ -48,7 +48,7 @@ Vite 会把 API 与健康检查请求代理到 Fastify。
 | `pnpm check`            | 格式、ESLint 和 TypeScript      |
 | `pnpm test`             | 单元测试                        |
 | `pnpm test:integration` | PostgreSQL 集成测试             |
-| `pnpm test:e2e`         | 生产构建和 Playwright           |
+| `pnpm test:browser`     | 生产构建和浏览器工作流测试      |
 | `pnpm build`            | 生成生产服务端和 Web 输出       |
 | `pnpm db:generate`      | 根据 Drizzle Schema 生成迁移    |
 | `pnpm db:migrate`       | 应用迁移                        |
@@ -71,7 +71,8 @@ src/web/app/App.tsx                   浏览器路由
 migrations/                           PostgreSQL 迁移
 tests/unit/                            纯逻辑与基础设施测试
 tests/integration/                     真实 PostgreSQL 测试
-tests/e2e/                             Playwright 浏览器测试
+tests/browser/                         Playwright 浏览器工作流测试
+tests/helpers/                         显式、跨场景复用的测试基础设施
 ```
 
 ## 服务端开发
@@ -151,7 +152,11 @@ pnpm db:migrate
 
 已经进入发布版本的迁移文件保持不变。新的结构调整使用新的迁移。
 
-## 单元测试
+## 测试
+
+测试按它实际证明的边界组织，而不是按生产代码目录逐层镜像。
+
+### 单元测试
 
 ```powershell
 pnpm test
@@ -167,9 +172,11 @@ pnpm test
 - 本地对象存储；
 - Fastify 路由、OpenAPI 与生命周期。
 
-单元测试不连接真实 B站服务。
+单元测试验证纯逻辑、适配器边界以及通过显式 Stub 组装的应用行为，不连接真实
+PostgreSQL、B站或物流服务。应用健康检查、HTTP Shell 和后台运行时生命周期分别测试，
+使失败能够直接指向对应边界。
 
-## PostgreSQL 集成测试
+### PostgreSQL 集成测试
 
 设置 PostgreSQL 管理连接并运行：
 
@@ -182,10 +189,14 @@ Remove-Item Env:TEST_DATABASE_URL
 集成测试从该连接创建临时数据库，执行迁移后验证认证、UID 绑定、名单、礼物单、状态
 机、数据库触发器和就绪检查。测试完成后会删除自己的临时数据库。
 
+测试按业务能力组织。每个普通测试文件通过 `tests/helpers/integration-database.ts` 获得
+独立数据库；用户、主播、礼物和名单等业务数据仍在对应测试中明确创建，不能藏入全局
+Seed。迁移测试需要控制多个数据库和不完整迁移目录，因此保留自己的生命周期。
+
 测试地址对应的账号必须具备创建和删除临时数据库的权限。套件只把该 URL 用作管理
 入口，不会清空 URL 中指定的数据库。
 
-## 浏览器测试
+### 浏览器工作流测试
 
 首次安装 Chromium：
 
@@ -196,13 +207,25 @@ pnpm browser:install
 运行：
 
 ```powershell
-pnpm test:e2e
+pnpm test:browser
 ```
 
-该命令先执行生产构建，再启动测试服务并运行 Playwright。E2E 覆盖生产 React Shell、
-注册反馈、手机仪表盘、默认地址领取、主播当前内容发布和 800px 管理编辑器。
+该命令先执行生产构建，再启动测试服务并运行 Playwright。浏览器测试使用真实生产 React
+Shell 和按共享契约构造的 Mock API，覆盖注册反馈、手机仪表盘、默认地址领取、主播当前
+内容发布和 800px 管理编辑器。它验证导航、响应式布局、表单值、焦点、弹窗和请求意图，
+不验证后端事务或数据库状态，也不替代真实 PostgreSQL 集成测试。
+
+浏览器数据构造器复用 `src/shared/contracts/` 类型，并以固定时钟生成稳定日期。每个场景
+只配置自己使用的 API；不要增加通用假后端或 Page Object 层。
 
 对领取、主播发货或管理员流程进行界面修改时，应增加相应的浏览器场景。
+
+### 公共测试助手
+
+- 公共助手只提取重复的技术搭建或稳定的测试数据词汇。
+- 业务前置条件和关键状态变化留在测试文件中，使场景可以独立阅读。
+- 不为减少行数创建可配置的巨型 Fixture、隐式全局 Hook 或跨测试共享的可变状态。
+- 同一规则只在最低且足够的层级证明；浏览器测试可以检查请求意图，但不重复数据库断言。
 
 ## 完整质量检查
 
@@ -213,7 +236,7 @@ pnpm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 pnpm build
-pnpm test:e2e
+pnpm test:browser
 docker compose build app
 ```
 
