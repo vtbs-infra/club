@@ -2,12 +2,12 @@
 
 .app-frame {
   background:
-    radial-gradient(circle at 0% 0%, rgb(120 221 245 / 8%), transparent 24rem), var(--canvas);
+    radial-gradient(circle at 0% 0%, var(--canvas-glow-soft), transparent 24rem), var(--canvas);
   min-height: 100vh;
 }
 
 .topbar {
-  background: rgb(255 255 255 / 94%);
+  background: var(--surface-translucent);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -52,13 +52,13 @@
 
 .nav-link:hover {
   background: var(--surface-soft);
-  color: var(--blue-dark);
+  color: var(--primary-hover);
 }
 
 .nav-link.active {
-  background: var(--blue-soft);
-  border-color: var(--blue-border);
-  color: var(--blue-dark);
+  background: var(--primary-soft);
+  border-color: var(--primary-border);
+  color: var(--primary-hover);
 }
 
 .account-menu {
@@ -89,9 +89,9 @@
 .mini-avatar,
 .large-avatar {
   align-items: center;
-  background: linear-gradient(135deg, #d7f7ff, #e8edff);
-  border: 1px solid #cce8f5;
-  color: #29729e;
+  background: var(--avatar-background);
+  border: 1px solid var(--avatar-border);
+  color: var(--avatar-ink);
   display: inline-flex;
   flex: 0 0 auto;
   font-weight: 850;
@@ -146,7 +146,7 @@
 }
 
 .account-popover {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);

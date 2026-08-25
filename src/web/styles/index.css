@@ -1,7 +1,8 @@
 @import './tokens.css';
 @import './base.css';
 @import './shell.css';
-@import './public.css';
+@import './portal.css';
+@import './auth.css';
 @import './recipient.css';
 @import './management.css';
 @import './responsive.css';

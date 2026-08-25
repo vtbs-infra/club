@@ -29,9 +29,9 @@
 
   .main-nav {
     align-items: stretch;
-    background: white;
+    background: var(--surface);
     border-bottom: 1px solid var(--line);
-    box-shadow: 0 12px 30px rgb(30 56 92 / 8%);
+    box-shadow: var(--shadow-sm);
     display: none;
     flex-direction: column;
     left: 0;
@@ -53,7 +53,7 @@
     padding: 0.7rem;
   }
   .nav-link.active {
-    background: var(--blue-soft);
+    background: var(--primary-soft);
   }
   .account-menu {
     margin-left: 0.4rem;
@@ -446,7 +446,7 @@
 
   .portal-trust > div + div {
     border-left: 0;
-    border-top: 1px solid #e8eff4;
+    border-top: 1px solid var(--line);
   }
 
   .portal-final-cta {

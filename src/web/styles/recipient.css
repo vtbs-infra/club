@@ -3,9 +3,14 @@
 .dashboard-banner {
   align-items: center;
   background:
-    radial-gradient(circle at 14% 50%, rgb(255 255 255 / 70%), transparent 14rem),
-    linear-gradient(112deg, #e7fbff, #f2f7ff 58%, #fff2f6);
-  border: 1px solid var(--blue-border);
+    radial-gradient(circle at 14% 50%, var(--surface-glass), transparent 14rem),
+    linear-gradient(
+      112deg,
+      var(--accent-cool-soft),
+      var(--primary-soft) 58%,
+      var(--accent-warm-soft)
+    );
+  border: 1px solid var(--primary-border);
   border-radius: var(--radius-xl);
   display: flex;
   min-height: 220px;
@@ -21,26 +26,26 @@
 }
 
 .dashboard-banner p {
-  color: var(--blue-dark);
+  color: var(--primary-hover);
   font-size: 0.76rem;
   font-weight: 900;
   letter-spacing: 0.1em;
 }
 
 .dashboard-banner h1 {
-  color: var(--blue-deep);
+  color: var(--primary-strong);
   font-size: clamp(2.1rem, 4.5vw, 3.65rem);
   margin: 0.5rem 0;
-  text-shadow: 3px 3px 0 rgb(255 159 189 / 30%);
+  text-shadow: 3px 3px 0 color-mix(in srgb, var(--accent-warm) 30%, transparent);
 }
 
 .dashboard-banner > div > span {
-  color: #536579;
+  color: var(--muted-strong);
 }
 
 .banner-stars {
   bottom: 0;
-  color: var(--cyan);
+  color: var(--accent-cool);
   display: flex;
   justify-content: space-around;
   left: 0;
@@ -52,17 +57,17 @@
 
 .banner-stars svg:nth-child(even) {
   align-self: flex-end;
-  color: var(--pink);
+  color: var(--accent-warm);
   margin-bottom: 1rem;
 }
 
 .dashboard-banner-gift {
   align-items: center;
-  background: rgb(255 255 255 / 72%);
-  border: 1px solid rgb(255 255 255 / 88%);
+  background: var(--surface-glass);
+  border: 1px solid var(--surface-glass-border);
   border-radius: 28px;
-  box-shadow: 0 20px 48px rgb(55 119 159 / 13%);
-  color: var(--pink);
+  box-shadow: var(--shadow-md);
+  color: var(--accent-warm);
   display: flex;
   height: 150px;
   justify-content: center;
@@ -109,12 +114,12 @@
 }
 
 .news-list time {
-  color: #8b94a3;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 
 .pin-label {
-  color: var(--pink);
+  color: var(--accent-warm);
   font-size: 0.7rem;
   font-weight: 800;
 }
@@ -129,8 +134,8 @@
 .action-callout,
 .all-clear {
   align-items: center;
-  background: var(--blue-soft);
-  border: 1px solid var(--blue-border);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-border);
   border-radius: var(--radius-lg);
   display: flex;
   gap: 1rem;
@@ -138,23 +143,23 @@
 }
 
 .action-callout.urgent {
-  background: var(--amber-soft);
-  border-color: var(--amber-border);
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
 }
 
 .action-callout.success,
 .all-clear {
-  background: var(--green-soft);
-  border-color: var(--green-border);
+  background: var(--success-soft);
+  border-color: var(--success-border);
 }
 
 .callout-icon,
 .all-clear > span {
   align-items: center;
-  background: white;
-  border: 1px solid rgb(36 143 213 / 12%);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
   border-radius: var(--radius-md);
-  color: var(--blue);
+  color: var(--primary);
   display: flex;
   flex: 0 0 auto;
   font-weight: 900;
@@ -200,7 +205,7 @@
 
 .gift-art {
   aspect-ratio: 16 / 8.2;
-  background: linear-gradient(145deg, #e6faff, #f5f1ff);
+  background: linear-gradient(145deg, var(--accent-cool-soft), var(--info-soft));
   overflow: hidden;
   position: relative;
 }
@@ -221,9 +226,9 @@
 .gift-placeholder {
   align-items: center;
   background:
-    radial-gradient(circle at 25% 25%, rgb(255 255 255 / 75%), transparent 5rem),
-    linear-gradient(135deg, #dff9ff, #f9eaf2);
-  color: var(--pink);
+    radial-gradient(circle at 25% 25%, var(--surface-glass), transparent 5rem),
+    linear-gradient(135deg, var(--accent-cool-soft), var(--accent-warm-soft));
+  color: var(--accent-warm);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -232,12 +237,12 @@
 }
 
 .gift-placeholder span {
-  color: var(--cyan);
+  color: var(--accent-cool);
   display: inline-flex;
 }
 
 .gift-placeholder small {
-  color: var(--blue-dark);
+  color: var(--primary-hover);
   font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -267,7 +272,7 @@
 }
 
 .gift-meta {
-  color: #66758a;
+  color: var(--muted);
   font-size: 0.8rem;
 }
 
@@ -307,8 +312,8 @@
 
 .filter-tabs button.active {
   background: var(--surface);
-  box-shadow: 0 2px 8px rgb(30 56 92 / 8%);
-  color: var(--blue-dark);
+  box-shadow: var(--shadow-xs);
+  color: var(--primary-hover);
 }
 
 .subnav {
@@ -324,8 +329,8 @@
 }
 
 .subnav a.active {
-  border-color: var(--blue);
-  color: var(--blue-dark);
+  border-color: var(--primary);
+  color: var(--primary-hover);
 }
 
 .back-link {
@@ -339,7 +344,7 @@
 }
 
 .gift-detail-hero {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 18px;
   display: grid;
@@ -444,9 +449,9 @@
 
 .step-number {
   align-items: center;
-  background: var(--blue);
+  background: var(--primary);
   border-radius: 50%;
-  color: white;
+  color: var(--on-primary);
   display: flex;
   font-size: 0.86rem;
   font-weight: 850;
@@ -472,12 +477,12 @@
 }
 
 .address-choice.selected {
-  background: var(--blue-soft);
-  border-color: #8ecce9;
+  background: var(--primary-soft);
+  border-color: var(--primary-border);
 }
 
 .address-choice input {
-  accent-color: var(--blue);
+  accent-color: var(--primary);
   margin-top: 0.15rem;
   width: auto;
 }
@@ -496,9 +501,9 @@
 }
 
 .address-choice strong small {
-  background: white;
+  background: var(--surface);
   border-radius: 999px;
-  color: var(--blue);
+  color: var(--primary);
   padding: 0.15rem 0.35rem;
 }
 
@@ -571,7 +576,7 @@
 }
 
 .progress-step::before {
-  background: #e3e7ed;
+  background: var(--line);
   content: '';
   height: 2px;
   position: absolute;
@@ -587,10 +592,10 @@
 
 .progress-step i {
   align-items: center;
-  background: #e8ebf0;
+  background: var(--surface-muted);
   border: 3px solid var(--surface);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px #dfe4eb;
+  box-shadow: 0 0 0 1px var(--line);
   display: flex;
   font-size: 0.65rem;
   height: 28px;
@@ -601,12 +606,12 @@
 }
 
 .progress-step.done i {
-  background: var(--green);
-  color: white;
+  background: var(--success);
+  color: var(--on-primary);
 }
 
 .progress-step.done::before {
-  background: #8ed0b8;
+  background: var(--success-border);
 }
 
 .progress-step strong {
@@ -716,7 +721,7 @@
 }
 
 .unread-dot {
-  background: var(--pink);
+  background: var(--accent-warm);
   border-radius: 50%;
   display: inline-block;
   flex: 0 0 auto;
@@ -726,7 +731,7 @@
 
 .announcement-body {
   border-top: 1px solid var(--line);
-  color: #4e5b6e;
+  color: var(--muted-strong);
   line-height: 1.75;
   padding: 1.2rem;
 }
@@ -766,7 +771,7 @@
 }
 
 .address-card {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 1rem;
@@ -803,7 +808,7 @@
 
 .empty-inline {
   align-items: center;
-  background: white;
+  background: var(--surface);
   border: 1px dashed var(--line);
   border-radius: 12px;
   color: var(--muted);
@@ -826,9 +831,9 @@
 
 .identity-icon {
   align-items: center;
-  background: var(--green-soft);
+  background: var(--success-soft);
   border-radius: var(--radius-md);
-  color: var(--green);
+  color: var(--success);
   display: flex;
   font-size: 1.5rem;
   height: 58px;
@@ -852,8 +857,8 @@
 }
 
 .code-card {
-  background: linear-gradient(145deg, #eefbff, #f7f9ff);
-  border: 1px solid #d7eaf5;
+  background: linear-gradient(145deg, var(--primary-soft), var(--surface-soft));
+  border: 1px solid var(--line);
   border-radius: 14px;
   margin-top: 1rem;
   max-width: 640px;
@@ -874,22 +879,22 @@
 }
 
 .connection-dot {
-  background: var(--amber);
+  background: var(--warning);
   border-radius: 50%;
   height: 8px;
   width: 8px;
 }
 
 .connection-dot.state-healthy {
-  background: var(--green);
-  box-shadow: 0 0 0 4px rgb(32 138 101 / 12%);
+  background: var(--success);
+  box-shadow: 0 0 0 4px var(--success-focus-ring);
 }
 
 .code-card code {
-  background: white;
-  border: 1px solid #cfe2ee;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  color: var(--blue-dark);
+  color: var(--primary-hover);
   display: block;
   font-size: clamp(1.8rem, 5vw, 3rem);
   font-weight: 800;
@@ -900,7 +905,7 @@
 }
 
 .code-card ol {
-  color: #526176;
+  color: var(--muted-strong);
   font-size: 0.85rem;
   line-height: 1.9;
   padding-left: 1.25rem;
