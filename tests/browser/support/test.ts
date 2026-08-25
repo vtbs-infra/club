@@ -16,7 +16,20 @@ interface BrowserWorkerFixtures {
   readonly appUrl: string;
 }
 
-export const test = base.extend<Record<never, never>, BrowserWorkerFixtures>({
+interface BrowserTestFixtures {
+  readonly defaultAppearance: void;
+}
+
+export const test = base.extend<BrowserTestFixtures, BrowserWorkerFixtures>({
+  defaultAppearance: [
+    async ({ page }, provide) => {
+      await page.route('**/api/v1/appearance', (route) =>
+        route.fulfill({ json: { themePreset: 'moe' } }),
+      );
+      await provide();
+    },
+    { auto: true },
+  ],
   appUrl: [
     // Playwright requires fixture dependencies to use an object-destructuring pattern.
     // eslint-disable-next-line no-empty-pattern

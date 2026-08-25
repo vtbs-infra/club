@@ -36,6 +36,11 @@ const AdminAnnouncementsPage = lazy(() =>
     default: module.AdminAnnouncementsPage,
   })),
 );
+const AdminAppearancePage = lazy(() =>
+  import('../pages/admin/AdminAppearancePage').then((module) => ({
+    default: module.AdminAppearancePage,
+  })),
+);
 const AdminSystemPage = lazy(() =>
   import('../pages/admin/AdminAuxPages').then((module) => ({
     default: module.AdminSystemPage,
@@ -170,6 +175,7 @@ const router = createBrowserRouter([
           { element: <AdminRostersPage />, path: '/admin/rosters' },
           { element: <AdminVerificationPage />, path: '/admin/verification' },
           { element: <AdminAnnouncementsPage />, path: '/admin/announcements' },
+          { element: <AdminAppearancePage />, path: '/admin/appearance' },
           { element: <AdminSystemPage />, path: '/admin/system' },
         ],
       },

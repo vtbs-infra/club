@@ -20,7 +20,7 @@ export async function mockApi(
   await page.route('**/api/v1/**', async (route) => {
     const body = await resolveBody(route.request());
     if (body === undefined) {
-      await route.continue();
+      await route.fallback();
       return;
     }
     await fulfillJson(route, body);

@@ -47,7 +47,7 @@ test('publishes the creator current edits without a separate save', async ({ app
       await fulfillJson(route, []);
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   await page.goto(`${appUrl}/creator/releases/${releaseId}`);
@@ -134,7 +134,7 @@ test('exports submitted orders by release without changing the active list filte
       await fulfillJson(route, [order(testId(35), 'SUBMITTED'), order(testId(36), 'SHIPPED')]);
       return;
     }
-    await route.continue();
+    await route.fallback();
   });
 
   await page.goto(`${appUrl}/creator/orders?status=SHIPPED`);

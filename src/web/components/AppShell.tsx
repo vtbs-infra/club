@@ -13,6 +13,7 @@ import {
   MapPin,
   Megaphone,
   Menu,
+  Palette,
   RadioTower,
   Settings,
   UserRound,
@@ -55,6 +56,7 @@ const adminNavigation: readonly NavigationItem[] = [
   { icon: CalendarSync, label: '名单同步', to: '/admin/rosters' },
   { icon: RadioTower, label: '验证直播间', to: '/admin/verification' },
   { icon: Megaphone, label: '平台公告', to: '/admin/announcements' },
+  { icon: Palette, label: '主题', to: '/admin/appearance' },
   { icon: Activity, label: '系统', to: '/admin/system' },
 ];
 
