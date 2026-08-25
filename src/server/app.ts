@@ -27,6 +27,8 @@ import { createBindingRuntime, type BindingRuntime } from './modules/binding/bin
 import bindingRoutes from './modules/binding/routes.js';
 import { AnnouncementService } from './modules/announcements/announcement-service.js';
 import announcementRoutes from './modules/announcements/routes.js';
+import { AppearanceService } from './modules/appearance/appearance-service.js';
+import appearanceRoutes from './modules/appearance/routes.js';
 import { AuditQueryService } from './modules/audit/audit-query-service.js';
 import auditRoutes from './modules/audit/routes.js';
 import { CreatorService } from './modules/creators/creator-service.js';
@@ -100,6 +102,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const creatorService = new CreatorService(database);
   const releaseService = new GiftReleaseService(database);
   const announcementService = new AnnouncementService(database);
+  const appearanceService = new AppearanceService(database);
   const portalService = new PortalService(database, clock);
   const giftMediaService = new GiftMediaService(database, storage);
   const auditQueryService = new AuditQueryService(database);
@@ -243,6 +246,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     service: announcementService,
   });
   await app.register(portalRoutes, { service: portalService });
+  await app.register(appearanceRoutes, { auth, service: appearanceService });
   await app.register(auditRoutes, {
     auth,
     service: auditQueryService,

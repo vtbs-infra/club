@@ -64,6 +64,13 @@
       "when": 1787505054065,
       "tag": "0008_early_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787678039535,
+      "tag": "0009_platform_appearance",
+      "breakpoints": true
     }
   ]
 }

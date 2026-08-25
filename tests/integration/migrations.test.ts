@@ -82,12 +82,19 @@ integration('database migration baseline', () => {
         'gift_order_addresses',
         'shipments',
         'announcements',
+        'platform_appearance',
       ]) {
         expect(await tableExists(database, table), table).toBe(true);
       }
       expect(await tableExists(database, 'idempotency_records')).toBe(false);
       expect(await columnExists(database, 'creators', 'archived_at')).toBe(false);
       expect(await columnExists(database, 'verification_rooms', 'bili_owner_uid')).toBe(false);
+      const appearance = await database.orm.execute<{ themePreset: string }>(sql`
+        select theme_preset as "themePreset"
+        from platform_appearance
+        where id = 'global'
+      `);
+      expect(appearance).toEqual([{ themePreset: 'moe' }]);
       const migrations = await database.orm.execute<{ value: number }>(
         sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
       );
@@ -263,6 +270,13 @@ integration('database migration baseline', () => {
       `);
 
       await migrateDatabase(database, sourceFolder);
+
+      const appearance = await database.orm.execute<{ themePreset: string }>(sql`
+        select theme_preset as "themePreset"
+        from platform_appearance
+        where id = 'global'
+      `);
+      expect(appearance).toEqual([{ themePreset: 'moe' }]);
 
       const orders = await database.orm.execute<{ status: string }>(sql`
         select status

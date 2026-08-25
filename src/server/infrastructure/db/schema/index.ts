@@ -1,4 +1,5 @@
 import { accounts, sessions, users, verifications } from './auth.js';
+import { platformAppearance } from './appearance.js';
 import { announcementReads, announcements } from './announcements.js';
 import {
   addresses,
@@ -30,6 +31,7 @@ import {
 } from './snapshots.js';
 
 export * from './announcements.js';
+export * from './appearance.js';
 export * from './auth.js';
 export * from './gifts.js';
 export * from './identity.js';
@@ -41,6 +43,7 @@ export const schema = {
   addresses,
   announcementReads,
   announcements,
+  platformAppearance,
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
