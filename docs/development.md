@@ -123,6 +123,8 @@ throw new AppError('GIFT_ORDER_NOT_CLAIMABLE', 'This gift cannot be claimed.', 4
 - TanStack Query 管理 API 服务端状态；
 - `src/web/api/` 按领域组织请求，并从共享契约取得响应类型；
 - `src/web/api/http.ts` 统一处理凭据、JSON 和 API Error；
+- 应用主题由路由外的 `AppearanceProvider` 统一管理，页面不得自行读取或持久化主题；
+- 业务样式使用 `tokens.css` 的语义令牌，预设差异只在 `themes.css` 覆盖令牌；
 - 表单在提交前显示明确校验错误；
 - 状态修改成功后使相关 Query 失效；
 - 桌面和 390px 宽度都应保持核心流程可用。
@@ -212,13 +214,14 @@ pnpm test:browser
 
 该命令先执行生产构建，再启动测试服务并运行 Playwright。浏览器测试使用真实生产 React
 Shell 和按共享契约构造的 Mock API，覆盖注册反馈、手机仪表盘、默认地址领取、主播当前
-内容发布和 800px 管理编辑器。它验证导航、响应式布局、表单值、焦点、弹窗和请求意图，
-不验证后端事务或数据库状态，也不替代真实 PostgreSQL 集成测试。
+内容发布、800px 管理编辑器以及全局主题预览和应用。它验证导航、响应式布局、表单值、
+焦点、弹窗、主题继承和请求意图，不验证后端事务或数据库状态，也不替代真实 PostgreSQL
+集成测试。
 
 浏览器数据构造器复用 `src/shared/contracts/` 类型，并以固定时钟生成稳定日期。每个场景
 只配置自己使用的 API；不要增加通用假后端或 Page Object 层。
 
-对领取、主播发货或管理员流程进行界面修改时，应增加相应的浏览器场景。
+对领取、主播发货、管理员流程或全局主题运行时进行界面修改时，应增加相应的浏览器场景。
 
 ### 公共测试助手
 

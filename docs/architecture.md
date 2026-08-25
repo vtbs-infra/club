@@ -247,6 +247,9 @@ nextRetryAt
 
 Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请求 ID。
 
+公开的 `GET /api/v1/appearance` 返回当前部署使用的主题预设，无需登录。只有平台管理员
+可以通过 `PUT /api/v1/admin/appearance` 更新该值；重复应用当前主题是无副作用操作。
+
 ## 数据域
 
 | 领域       | 主要表                                                                                                 |
@@ -258,6 +261,7 @@ Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请�
 | 领取       | `gift_order_items`, `addresses`, `gift_order_addresses`, `gift_order_option_values`                    |
 | 状态与物流 | `gift_order_status_history`, `shipments`, `tracking_events`                                            |
 | 公告与审计 | `announcements`, `announcement_reads`, `audit_logs`                                                    |
+| 平台外观   | `platform_appearance`                                                                                  |
 
 礼物发布和平台公告分别保存显式的 `public_visible` 标记。匿名门户只查询已发布、明确公开且
 仍在有效期内的内容；发布操作本身不会隐式改变门户可见性。
@@ -270,9 +274,13 @@ Drizzle 定义位于 `src/server/infrastructure/db/schema/`，统一从 `index.t
 React Router 根据身份提供三个清晰区域。受保护页面按路由懒加载；TanStack Query 管理
 服务端状态，页面本地状态只保存尚未提交的编辑内容。
 
+`AppearanceProvider` 在路由外读取部署级主题，并把稳定的主题 ID 写到 `<html>`。全部页面、
+Shell 和挂载到 `body` 的 Radix 浮层通过同一套语义设计令牌继承主题。读取失败时使用 Moe
+默认主题，不阻塞公开页面或登录；管理员预览只存在于当前页面，显式应用成功后才持久化。
+
 全局 Shell 负责导航、账号菜单和错误边界。对话框和菜单使用 Radix 无头原语，支持
 Escape、焦点返回和 Tab 循环；视觉样式仍由语义化 CSS 提供，并按 token、基础、Shell、
-公开页面、普通用户、管理工作区和响应式规则拆分。
+主题覆盖、公开页面、认证页面、普通用户、管理工作区和响应式规则拆分。
 
 ## 部署边界
 
