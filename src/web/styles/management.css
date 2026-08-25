@@ -352,7 +352,7 @@
 .cover-uploader {
   align-items: center;
   background: var(--surface-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: grid;
   gap: 1.25rem;
   grid-template-columns: 260px 1fr;
@@ -362,7 +362,7 @@
 .cover-preview {
   aspect-ratio: 16 / 9;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -385,7 +385,7 @@
 .file-button {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   color: var(--primary-hover);
   cursor: pointer;
   display: inline-flex;
@@ -407,7 +407,7 @@
 .field-editor {
   background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 1rem;
 }
 
@@ -436,7 +436,7 @@
 .tier-mapping {
   background: linear-gradient(135deg, var(--primary-soft), var(--info-soft));
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: grid;
   gap: 0.7rem;
   grid-template-columns: repeat(3, 1fr);
@@ -557,7 +557,7 @@
 
 .recipient-card {
   background: var(--surface-soft);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 1rem;
 }
 
@@ -577,7 +577,7 @@
 
 .recipient-note {
   background: var(--warning-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   color: var(--warning);
   font-size: 0.8rem;
   margin-top: 0.8rem;
@@ -592,7 +592,7 @@
 
 .option-values div {
   background: var(--surface-soft);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   padding: 0.8rem;
 }
 
@@ -781,7 +781,7 @@
 
 .readonly-account {
   background: var(--surface-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
   padding: 0.8rem;
@@ -895,7 +895,7 @@
 .roster-run {
   background: var(--surface-soft);
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   display: grid;
   gap: 0.5rem;
   grid-template-columns: 1fr auto;
@@ -926,7 +926,7 @@
   align-items: center;
   background: var(--warning-soft);
   border: 1px solid var(--warning-border);
-  border-radius: 11px;
+  border-radius: var(--radius-md);
   display: flex;
   gap: 1rem;
   justify-content: space-between;
@@ -959,7 +959,7 @@
 
 .attempt-list article {
   background: var(--surface-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 0.9rem;
 }
 
@@ -1033,7 +1033,7 @@
 .mini-success {
   align-items: center;
   background: var(--success-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   color: var(--success);
   display: flex;
   gap: 0.65rem;
@@ -1053,7 +1053,7 @@
 
 .warning-list {
   background: var(--danger-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   color: var(--danger);
   font-size: 0.8rem;
   line-height: 1.5;
@@ -1090,7 +1090,7 @@
 
 .audit-list pre {
   background: var(--surface-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.74rem;
   margin: 0.75rem 0 0;
   max-height: 240px;

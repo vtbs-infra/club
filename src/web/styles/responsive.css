@@ -294,7 +294,7 @@
   }
 
   .portal-brand .brand-mark {
-    border-radius: 9px;
+    border-radius: var(--radius-sm);
     height: 32px;
     width: 32px;
   }
@@ -450,7 +450,7 @@
   }
 
   .portal-final-cta {
-    border-radius: 22px;
+    border-radius: var(--radius-xl);
     gap: 1.7rem;
     margin: 0 18px 48px;
     padding: 2rem 1.3rem;

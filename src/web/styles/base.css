@@ -164,9 +164,9 @@ code {
 .brand-mark {
   align-items: center;
   background: linear-gradient(135deg, var(--accent-cool), var(--primary));
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--primary-shadow-sm);
-  color: var(--on-primary);
+  color: var(--on-accent);
   display: inline-flex;
   height: 32px;
   justify-content: center;
@@ -180,7 +180,7 @@ code {
 
 .brand small {
   background: var(--surface-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--muted-strong);
   font-size: 0.7rem;
   font-weight: 700;
@@ -357,7 +357,7 @@ button.text-button {
 .page-header .eyebrow::before,
 .section-heading .eyebrow::before {
   background: linear-gradient(90deg, var(--accent-cool), var(--primary));
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   content: '';
   height: 3px;
   width: 18px;
@@ -792,7 +792,7 @@ textarea:disabled {
 .soft-tag {
   align-items: center;
   border: 1px solid;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   font-size: 0.7rem;
   font-weight: 800;

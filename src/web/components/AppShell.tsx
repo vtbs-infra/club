@@ -214,7 +214,10 @@ function Shell({
                       type="button"
                       onClick={async () => {
                         await signOut();
-                        queryClient.clear();
+                        queryClient.removeQueries({
+                          predicate: (query) => query.queryKey[0] !== 'appearance',
+                        });
+                        queryClient.getMutationCache().clear();
                         window.location.replace('/login');
                       }}
                     >

@@ -121,7 +121,7 @@
 }
 
 .large-avatar {
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   font-size: 2rem;
   height: 78px;
   width: 78px;

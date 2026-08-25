@@ -6,6 +6,7 @@ import { ProtectedLayout, RoleLanding } from '../components/AppShell';
 import { ErrorState, LoadingState } from '../components/Ui';
 import { AuthPage } from '../pages/AuthPage';
 import { HomePage } from '../pages/HomePage';
+import { AppearanceProvider } from '../theme/AppearanceProvider';
 
 const AccountPage = lazy(() =>
   import('../pages/AccountPages').then((module) => ({ default: module.AccountPage })),
@@ -182,15 +183,17 @@ const router = createBrowserRouter([
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense
-        fallback={
-          <main className="centered-state">
-            <LoadingState label="正在打开页面…" />
-          </main>
-        }
-      >
-        <RouterProvider router={router} />
-      </Suspense>
+      <AppearanceProvider>
+        <Suspense
+          fallback={
+            <main className="centered-state">
+              <LoadingState label="正在打开页面…" />
+            </main>
+          }
+        >
+          <RouterProvider router={router} />
+        </Suspense>
+      </AppearanceProvider>
     </QueryClientProvider>
   );
 }

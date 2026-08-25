@@ -1,5 +1,6 @@
 export * from './addresses';
 export * from './announcements';
+export * from './appearance';
 export * from './auth';
 export * from './binding';
 export * from './creators';
