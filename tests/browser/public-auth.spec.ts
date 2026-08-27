@@ -1,3 +1,5 @@
+import { APPLICATION_VERSION } from '../../src/server/application-version.js';
+
 import { fulfillJson, mockApi, mockJson, requestPath } from './support/api.js';
 import { portalHome, recipientIdentity, testId, testTime } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test } from './support/test.js';
@@ -59,7 +61,10 @@ test('serves the public product shell and liveness API', async ({ appUrl, page, 
 
   const live = await request.get(`${appUrl}/health/live`);
   expect(live.ok()).toBe(true);
-  await expect(live.json()).resolves.toMatchObject({ status: 'ok', version: '0.1.0' });
+  await expect(live.json()).resolves.toMatchObject({
+    status: 'ok',
+    version: APPLICATION_VERSION,
+  });
 });
 
 test('keeps signed-in visitors on the public home until they choose the workspace', async ({

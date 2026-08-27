@@ -79,7 +79,8 @@ docker compose build --no-cache app
 发布 Tag 前再次确认目标提交和版本：
 
 ```powershell
-pnpm release:check -- --tag v0.1.0
+$releaseVersion = (Get-Content package.json | ConvertFrom-Json).version
+pnpm release:check -- --tag "v$releaseVersion"
 git status --short
 git show --stat --oneline HEAD
 ```
@@ -87,8 +88,8 @@ git show --stat --oneline HEAD
 随后创建并推送带注释 Tag：
 
 ```powershell
-git tag -a v0.1.0 -m "Club v0.1.0"
-git push origin v0.1.0
+git tag -a "v$releaseVersion" -m "Club v$releaseVersion"
+git push origin "v$releaseVersion"
 ```
 
 Tag 流水线必须在同一 Revision 上重新执行质量门，成功后才推送版本化镜像并创建 GitHub

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
+import { APPLICATION_VERSION } from '../../src/server/application-version.js';
 import { InMemoryRateLimiter } from '../../src/server/infrastructure/security/request-security.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { fakeDatabase } from '../helpers/app-stubs.js';
@@ -14,6 +15,7 @@ interface ErrorResponse {
 }
 
 interface OpenApiDocument {
+  readonly info: { readonly version: string };
   readonly paths: Record<string, unknown>;
 }
 
@@ -28,6 +30,7 @@ describe('application HTTP shell', () => {
     try {
       const response = await app.inject({ method: 'GET', url: '/openapi.json' });
       expect(response.statusCode).toBe(200);
+      expect(response.json<OpenApiDocument>().info.version).toBe(APPLICATION_VERSION);
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/live');
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/ready');
       expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me');

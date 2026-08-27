@@ -8,6 +8,7 @@ import Fastify, { LogController, type FastifyError } from 'fastify';
 import pino, { type DestinationStream } from 'pino';
 
 import { AppError } from '../shared/errors/app-error.js';
+import { APPLICATION_VERSION } from './application-version.js';
 import { loadConfig, type AppConfig } from './config/env.js';
 import { SystemClock, type Clock } from './infrastructure/clock/clock.js';
 import { createDatabase, type DatabaseService } from './infrastructure/db/database.js';
@@ -51,8 +52,6 @@ import {
   type SnapshotRuntime,
 } from './modules/snapshots/snapshot-runtime.js';
 import verificationRoomRoutes from './modules/verification-rooms/routes.js';
-
-const APPLICATION_VERSION = '0.1.0';
 
 export interface BuildAppOptions {
   readonly auth?: AppAuth;

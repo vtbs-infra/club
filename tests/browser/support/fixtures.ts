@@ -1,3 +1,4 @@
+import { APPLICATION_VERSION } from '../../../src/server/application-version.js';
 import type { AddressRecord } from '../../../src/shared/contracts/addresses.js';
 import type { Announcement } from '../../../src/shared/contracts/announcements.js';
 import type { BilibiliBinding } from '../../../src/shared/contracts/binding.js';
@@ -272,7 +273,7 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
     snapshotRunCounts: {},
     status: 'ok',
     trackingDueCount: 0,
-    version: '0.1.0',
+    version: APPLICATION_VERSION,
     ...overrides,
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
+import { APPLICATION_VERSION } from '../../src/server/application-version.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import type { ReadinessResponse } from '../../src/shared/contracts/health.js';
 import { fakeDatabase } from '../helpers/app-stubs.js';
@@ -17,7 +18,7 @@ describe('application health', () => {
     try {
       const live = await app.inject({ method: 'GET', url: '/health/live' });
       expect(live.statusCode).toBe(200);
-      expect(live.json()).toMatchObject({ status: 'ok', version: '0.1.0' });
+      expect(live.json()).toMatchObject({ status: 'ok', version: APPLICATION_VERSION });
       expect(live.headers['x-request-id']).toBeTypeOf('string');
       expect(live.headers['x-content-type-options']).toBe('nosniff');
       expect(live.headers['x-frame-options']).toBe('DENY');
