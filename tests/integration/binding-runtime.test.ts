@@ -130,10 +130,17 @@ integration('Bilibili binding runtime recovery', () => {
       .poll(() => runtime.connections.getState(roomId), { timeout: 1_000 })
       .toBe('HEALTHY');
 
-    const [restoredRoom] = await database.orm
-      .select({ healthStatus: verificationRooms.healthStatus })
-      .from(verificationRooms)
-      .where(eq(verificationRooms.biliRoomId, roomId));
-    expect(restoredRoom?.healthStatus).toBe('HEALTHY');
+    await expect
+      .poll(
+        async () => {
+          const [restoredRoom] = await database.orm
+            .select({ healthStatus: verificationRooms.healthStatus })
+            .from(verificationRooms)
+            .where(eq(verificationRooms.biliRoomId, roomId));
+          return restoredRoom?.healthStatus;
+        },
+        { timeout: 1_000 },
+      )
+      .toBe('HEALTHY');
   });
 });
