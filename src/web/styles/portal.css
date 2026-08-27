@@ -196,190 +196,154 @@
 }
 
 .portal-hero-art {
+  align-items: center;
+  display: flex;
   height: 450px;
+  isolation: isolate;
+  justify-content: center;
   position: relative;
 }
 
+.portal-hero-illustration {
+  display: block;
+  height: auto;
+  max-width: 520px;
+  overflow: visible;
+  width: 100%;
+}
+
 .portal-art-halo {
-  background: radial-gradient(
-    circle at 48% 42%,
-    var(--surface) 0 18%,
-    var(--accent-cool-soft) 51%,
-    var(--primary-soft) 72%
-  );
-  border: 1px solid color-mix(in srgb, var(--accent-cool) 20%, transparent);
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg), var(--inset-highlight);
-  height: 395px;
-  left: 50%;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 395px;
+  fill: url('#portal-hero-halo');
+  opacity: 0.86;
+  stroke: color-mix(in srgb, var(--primary-border) 72%, transparent);
+  stroke-width: 1.2;
 }
 
-.portal-gift-illustration {
-  height: 230px;
-  left: 50%;
-  position: absolute;
-  top: 115px;
-  transform: translateX(-50%);
-  width: 260px;
-  z-index: 2;
+.portal-art-orbit {
+  fill: none;
+  opacity: 0.45;
+  stroke: var(--accent-cool);
+  stroke-dasharray: 3 10;
+  stroke-linecap: round;
+  stroke-width: 2;
 }
 
-.portal-gift-lid {
-  background: linear-gradient(
-    145deg,
-    var(--accent-cool),
-    color-mix(in srgb, var(--accent-cool) 70%, var(--primary))
-  );
-  border: 1px solid color-mix(in srgb, var(--primary) 14%, transparent);
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-md) var(--radius-md);
-  box-shadow: var(--primary-shadow);
-  height: 55px;
-  left: 0;
-  position: absolute;
-  top: 4px;
-  transform: rotate(-2deg);
-  width: 260px;
-  z-index: 4;
+.portal-art-dot {
+  fill: var(--accent-cool);
+  opacity: 0.72;
 }
 
-.portal-gift-body {
-  align-items: center;
-  background: linear-gradient(150deg, var(--primary-gradient-start), var(--primary));
-  border: 1px solid color-mix(in srgb, var(--primary-strong) 18%, transparent);
-  border-radius: var(--radius-md) var(--radius-md) var(--radius-xl) var(--radius-xl);
-  bottom: 0;
-  box-shadow: var(--primary-shadow-hover);
-  color: color-mix(in srgb, var(--on-primary) 90%, transparent);
-  display: flex;
-  height: 188px;
-  justify-content: center;
-  left: 13px;
-  overflow: hidden;
-  position: absolute;
-  transform: rotate(1deg);
-  width: 234px;
-}
-
-.portal-gift-body::after {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--on-primary) 12%, transparent),
-    transparent
-  );
-  content: '';
-  height: 130%;
-  position: absolute;
-  right: 20px;
-  top: -15%;
-  transform: rotate(18deg);
-  width: 55px;
-}
-
-.portal-gift-ribbon {
-  background: linear-gradient(
-    var(--accent-warm),
-    color-mix(in srgb, var(--accent-warm) 85%, var(--danger))
-  );
-  border-radius: var(--radius-sm);
-  box-shadow: var(--accent-shadow);
-  height: 224px;
-  left: 50%;
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%) rotate(-0.5deg);
-  width: 38px;
-  z-index: 5;
-}
-
-.portal-art-card {
-  align-items: center;
-  backdrop-filter: blur(14px);
-  background: var(--surface-translucent);
-  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  position: absolute;
-  z-index: 6;
-}
-
-.portal-art-card > span:last-child {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.portal-art-card strong {
-  color: var(--ink);
-  font-size: 0.8rem;
-}
-
-.portal-art-card small {
-  color: var(--muted);
-  font-size: 0.68rem;
-}
-
-.portal-art-card-match {
-  left: -8px;
-  top: 105px;
-  transform: rotate(-2.5deg);
-}
-
-.portal-art-card-shipping {
-  bottom: 70px;
-  right: -15px;
-  transform: rotate(2deg);
-}
-
-.portal-art-icon {
-  align-items: center;
-  border-radius: var(--radius-sm);
-  display: flex;
-  height: 38px;
-  justify-content: center;
-  width: 38px;
-}
-
-.portal-art-icon.blue {
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-
-.portal-art-icon.pink {
-  background: var(--accent-warm-soft);
-  color: var(--accent-warm);
+.portal-art-dot-two {
+  fill: var(--accent-warm);
 }
 
 .portal-art-spark {
-  color: var(--accent-cool);
-  font-size: 2.2rem;
-  position: absolute;
-  z-index: 3;
+  fill: var(--accent-cool);
+  opacity: 0.82;
 }
 
-.portal-art-spark-one {
-  left: 42px;
-  top: 35px;
+.portal-art-spark-warm {
+  fill: var(--accent-warm);
 }
 
-.portal-art-spark-two {
-  color: var(--accent-warm);
-  font-size: 1.35rem;
-  right: 28px;
-  top: 78px;
+.portal-art-spark-muted {
+  opacity: 0.55;
 }
 
-.portal-art-spark-three {
-  bottom: 32px;
-  font-size: 1.55rem;
-  left: 84px;
+.portal-art-rising-light {
+  fill: url('#portal-hero-light');
+  opacity: 0.72;
+}
+
+.portal-art-ribbon {
+  fill: none;
+  opacity: 0.52;
+  stroke: var(--accent-cool);
+  stroke-linecap: round;
+  stroke-width: 3;
+}
+
+.portal-art-ribbon-warm {
+  opacity: 0.42;
+  stroke: var(--accent-warm);
+}
+
+.portal-art-main-glow {
+  fill: var(--accent-cool-soft);
+  filter: blur(10px);
+  opacity: 0.9;
+}
+
+.portal-art-main-spark {
+  fill: url('#portal-hero-star');
+  filter: drop-shadow(0 8px 14px color-mix(in srgb, var(--primary) 28%, transparent));
+}
+
+.portal-art-floating-spark {
+  fill: var(--accent-cool);
+  opacity: 0.72;
+}
+
+.portal-art-floating-spark-warm {
+  fill: var(--accent-warm);
+  opacity: 0.58;
+}
+
+.portal-art-box-shadow {
+  fill: color-mix(in srgb, var(--primary-strong) 18%, transparent);
+  filter: blur(9px);
+}
+
+.portal-art-box {
+  filter: drop-shadow(0 18px 24px color-mix(in srgb, var(--primary-strong) 18%, transparent));
+}
+
+.portal-art-box-interior {
+  fill: var(--primary-strong);
+  opacity: 0.92;
+}
+
+.portal-art-flap {
+  fill: url('#portal-hero-flap');
+  stroke: color-mix(in srgb, var(--primary-strong) 22%, transparent);
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+}
+
+.portal-art-flap-left {
+  opacity: 0.88;
+}
+
+.portal-art-flap-right {
+  opacity: 0.72;
+}
+
+.portal-art-box-front {
+  fill: url('#portal-hero-box');
+  stroke: color-mix(in srgb, var(--primary-strong) 28%, transparent);
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+}
+
+.portal-art-box-side {
+  fill: color-mix(in srgb, var(--primary-strong) 22%, transparent);
+}
+
+.portal-art-box-rim {
+  fill: none;
+  opacity: 0.5;
+  stroke: var(--on-primary);
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+}
+
+.portal-art-box-mark {
+  fill: none;
+  opacity: 0.82;
+  stroke: var(--on-primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.3;
 }
 
 .portal-announcement-strip {

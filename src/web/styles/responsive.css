@@ -350,40 +350,8 @@
     height: 335px;
   }
 
-  .portal-art-halo {
-    height: 315px;
-    width: 315px;
-  }
-
-  .portal-gift-illustration {
-    top: 60px;
-    transform: translateX(-50%) scale(0.78);
-    transform-origin: top center;
-  }
-
-  .portal-art-card {
-    max-width: 195px;
-    padding: 0.7rem;
-  }
-
-  .portal-art-card-match {
-    left: 0;
-    top: 55px;
-  }
-
-  .portal-art-card-shipping {
-    bottom: 25px;
-    right: 0;
-  }
-
-  .portal-art-spark-one {
-    left: 16px;
-    top: 6px;
-  }
-
-  .portal-art-spark-two {
-    right: 16px;
-    top: 18px;
+  .portal-hero-illustration {
+    max-width: 390px;
   }
 
   .portal-announcement-strip {

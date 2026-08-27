@@ -10,16 +10,15 @@ import {
   Link2,
   LockKeyhole,
   MapPin,
-  PackageCheck,
   ShieldCheck,
   Sparkles,
   Truck,
-  UserRoundCheck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { getIdentity } from '../api/client';
 import { getPortalHome, type PortalRelease } from '../api/portal';
+import { PortalHeroArtwork } from '../components/PortalHeroArtwork';
 import { ProductBrand } from '../components/ProductBrand';
 import { useNow } from '../hooks/useNow';
 import { formatDate, formatMonth, relativeDeadline } from '../lib/format';
@@ -179,37 +178,7 @@ export function HomePage() {
             </p>
           </div>
 
-          <div className="portal-hero-art" aria-hidden="true">
-            <span className="portal-art-spark portal-art-spark-one">✦</span>
-            <span className="portal-art-spark portal-art-spark-two">✦</span>
-            <span className="portal-art-spark portal-art-spark-three">✦</span>
-            <div className="portal-art-halo" />
-            <div className="portal-gift-illustration">
-              <div className="portal-gift-lid" />
-              <div className="portal-gift-body">
-                <Gift size={76} strokeWidth={1.55} />
-              </div>
-              <div className="portal-gift-ribbon" />
-            </div>
-            <div className="portal-art-card portal-art-card-match">
-              <span className="portal-art-icon blue">
-                <UserRoundCheck size={20} />
-              </span>
-              <span>
-                <strong>资格已匹配</strong>
-                <small>已关联 B站 UID</small>
-              </span>
-            </div>
-            <div className="portal-art-card portal-art-card-shipping">
-              <span className="portal-art-icon pink">
-                <PackageCheck size={20} />
-              </span>
-              <span>
-                <strong>发货进度可追踪</strong>
-                <small>礼物状态实时可见</small>
-              </span>
-            </div>
-          </div>
+          <PortalHeroArtwork />
         </div>
       </section>
 
