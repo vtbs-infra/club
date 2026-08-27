@@ -50,15 +50,24 @@ ADDRESS_ENCRYPTION_KEY_RING=1:<32 字节 base64 密钥>
 
 完整变量说明见[配置参考](configuration.md)。
 
-## 2. 构建并启动数据库
+`.env.example` 中的 `CLUB_IMAGE` 固定到当前发布版本。不要使用浮动 Tag 替代生产部署记录
+中的精确版本或镜像 Digest。
+
+## 2. 获取应用镜像并启动数据库
 
 ```powershell
-docker compose build app
+docker compose pull app
 docker compose up -d postgres
 docker compose ps
 ```
 
 等待 `postgres` 显示为 `healthy`。
+
+从源码构建时，删除 `.env` 中的 `CLUB_IMAGE`，并用以下命令替代 `pull`：
+
+```powershell
+docker compose build app
+```
 
 ## 3. 创建数据库结构
 
@@ -82,7 +91,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 ## 5. 启动 Club
 
 ```powershell
-docker compose up -d app
+docker compose up -d --no-build app
 docker compose ps
 ```
 

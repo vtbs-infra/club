@@ -15,8 +15,15 @@ Club 使用语义化版本，Git Tag 格式为 `vMAJOR.MINOR.PATCH`。`package.j
 - Changelog 中同版本的用户可见变更；
 - 镜像 Digest 和最新数据库迁移标识。
 
+当前流水线只发布经过验证的 `linux/amd64` 镜像。增加其他架构前，必须在对应架构上执行
+启动、迁移和核心流程验收。
+
 精确版本 Tag 是部署和回滚记录的依据。`latest` 只在精确版本镜像完成发布后更新，不能
 替代备份记录中的版本或 Digest。
+
+GHCR Package 必须设置为 Public，并关联 `vtbs-infra/club` 仓库。首次创建 Package 后需要
+在 GitHub Package 设置中确认公开可见性，并在未登录状态执行一次 `docker pull`；发布
+Token 不负责更改组织的 Package 可见性。
 
 ## 发布准备
 

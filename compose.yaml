@@ -17,6 +17,7 @@ x-app-environment: &app-environment
 
 services:
   app:
+    image: ${CLUB_IMAGE:-club-app}
     build: .
     init: true
     restart: unless-stopped

@@ -134,11 +134,15 @@ Provider 生成或用户输入的公开查询链接只接受 HTTP/HTTPS。
 ## Compose 专用变量
 
 ```dotenv
+CLUB_IMAGE=ghcr.io/vtbs-infra/club:MAJOR.MINOR.PATCH
 CLUB_PORT=3000
 POSTGRES_HOST_PORT=55432
 POSTGRES_PASSWORD=...
 COMPOSE_DATABASE_URL=postgres://club:...@postgres:5432/club
 ```
+
+`CLUB_IMAGE` 应使用精确版本 Tag 或 Digest。删除该变量后，开发者可以通过
+`docker compose build app` 构建当前检出的源码。
 
 应用容器固定使用 `NODE_ENV=production`、`HOST=0.0.0.0`、
 `STORAGE_DRIVER=local` 和 `/data/club`。

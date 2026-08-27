@@ -47,14 +47,17 @@ Requirements: Docker Engine and Docker Compose v2.
 
 ```powershell
 Copy-Item .env.example .env
-docker compose build app
+docker compose pull app
 docker compose up -d postgres
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
-docker compose up -d app
+docker compose up -d --no-build app
 ```
 
-Before starting, replace the secrets and database passwords in `.env`. Create the first platform
-administrator with:
+Before starting, replace the secrets and database passwords in `.env`. The template pins the current
+published image through `CLUB_IMAGE`. To build the checked-out source instead, remove `CLUB_IMAGE` and
+run `docker compose build app` before the migration.
+
+Create the first platform administrator with:
 
 ```powershell
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `

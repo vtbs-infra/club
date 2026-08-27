@@ -27,6 +27,12 @@ if (requestedTag && requestedTag !== expectedTag) {
   throw new Error(`Tag ${requestedTag} does not match package version ${version}.`);
 }
 
+const envExample = readFileSync(resolve('.env.example'), 'utf8');
+const expectedImage = `CLUB_IMAGE=ghcr.io/vtbs-infra/club:${version}`;
+if (!envExample.split(/\r?\n/).includes(expectedImage)) {
+  throw new Error(`.env.example must pin the release image as ${expectedImage}.`);
+}
+
 const changelog = readFileSync(resolve('CHANGELOG.md'), 'utf8');
 const escapedVersion = version.replaceAll('.', '\\.');
 const headingPattern = new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}\\r?$`, 'm');

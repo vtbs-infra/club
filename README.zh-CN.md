@@ -43,13 +43,17 @@ B站直播间消息
 
 ```powershell
 Copy-Item .env.example .env
-docker compose build app
+docker compose pull app
 docker compose up -d postgres
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
-docker compose up -d app
+docker compose up -d --no-build app
 ```
 
-启动前需要替换 `.env` 中的数据库密码和全部密钥。创建首个平台管理员：
+启动前需要替换 `.env` 中的数据库密码和全部密钥。模板通过 `CLUB_IMAGE` 固定当前发布
+镜像；如需构建当前检出的源码，删除 `CLUB_IMAGE`，并在迁移前运行
+`docker compose build app`。
+
+创建首个平台管理员：
 
 ```powershell
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `

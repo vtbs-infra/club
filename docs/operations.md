@@ -187,12 +187,12 @@ docker compose up -d app
 3. 记录当前镜像 Digest；
 4. 检查目标迁移文件。
 
-构建目标镜像并执行迁移：
+把 `.env` 中的 `CLUB_IMAGE` 更新为目标精确版本，拉取镜像并执行迁移：
 
 ```powershell
-docker compose build app
+docker compose pull app
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
-docker compose up -d app
+docker compose up -d --no-build --force-recreate app
 ```
 
 升级后验证：
@@ -203,8 +203,8 @@ Invoke-RestMethod http://localhost:3000/health/live
 Invoke-RestMethod http://localhost:3000/health/ready
 ```
 
-随后检查管理员、主播和普通用户入口，验证直播间连接、近期名单任务和物流运行时。
-发布维护流程见[发布手册](releasing.md)。
+随后记录实际镜像 Digest，并检查管理员、主播和普通用户入口，验证直播间连接、近期名单
+任务和物流运行时。发布维护流程见[发布手册](releasing.md)。
 
 回滚需要恢复与目标镜像 Schema 相匹配的 PostgreSQL 和对象存储备份。
 
