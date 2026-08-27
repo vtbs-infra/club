@@ -18,6 +18,7 @@ import { AuditService, type RequestAuditContext } from '../audit/audit-service.j
 const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const allowedFormats = new Set(['jpeg', 'png', 'webp']);
 const maximumUploadBytes = 5 * 1024 * 1024;
+type SharpMetadata = Awaited<ReturnType<ReturnType<typeof sharp>['metadata']>>;
 
 export class GiftMediaService {
   private readonly audit: AuditService;
@@ -44,7 +45,7 @@ export class GiftMediaService {
         400,
       );
     }
-    let metadata: Awaited<ReturnType<sharp.Sharp['metadata']>>;
+    let metadata: SharpMetadata;
     try {
       metadata = await sharp(input.bytes, {
         animated: false,

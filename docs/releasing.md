@@ -44,6 +44,7 @@ pnpm release:check
 
 ```powershell
 pnpm install --frozen-lockfile
+pnpm audit:prod
 pnpm check
 pnpm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
@@ -55,6 +56,7 @@ docker compose build --no-cache app
 必须确认：
 
 - 格式、ESLint 和三套 TypeScript 检查通过；
+- 生产依赖没有高危或严重级别的已知漏洞，其余报告项已经逐项评估；
 - 单元、PostgreSQL 集成和 Playwright 工作流全部通过；
 - 空数据库和已有数据库都能应用全部迁移；
 - OpenAPI 包含当前正式路由且版本正确；

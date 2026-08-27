@@ -2,3 +2,14 @@ allowBuilds:
   esbuild: true
   protobufjs: false
   sharp: true
+
+overrides:
+  '@better-auth/core': 1.6.23
+  brace-expansion@<1.1.18: 1.1.18
+  brace-expansion@>=2.0.0 <2.1.4: 2.1.4
+  brace-expansion@>=4.0.0 <5.0.9: 5.0.9
+  fast-uri@>=3.0.0 <3.1.5: 3.1.5
+  fast-uri@>=4.0.0 <4.1.2: 4.1.2
+  find-my-way@<=9.6.0: 9.7.0
+  nanoid@<3.3.18: 3.3.18
+  postcss@<8.5.23: 8.5.23
