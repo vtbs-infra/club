@@ -17,7 +17,8 @@ Club 是一个面向 B站 Vtuber、主播及其观众的自托管礼物领取与
 - 自动、幂等地生成礼物单
 - 地址簿、加密领取快照和自定义领取字段
 - 主播按礼物发布导出待发货信息、录入单次发货并维护物流记录
-- 平台公告与主播公告
+- 具有显式公开控制的礼物与公告首页
+- 平台公告、主播公告与四套全站主题
 - 面向普通用户、主播和平台管理员的独立界面
 - 基于 TypeScript、PostgreSQL 和本地对象存储的自托管部署
 
@@ -61,16 +62,14 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 
 ## 文档
 
-| 文档                                     | 适用对象                   |
-| ---------------------------------------- | -------------------------- |
-| [开始使用](docs/getting-started.md)      | 首次部署 Club 的维护者     |
-| [产品使用指南](docs/product-guide.md)    | 普通用户、主播和平台管理员 |
-| [配置参考](docs/configuration.md)        | 部署维护者                 |
-| [技术架构](docs/architecture.md)         | 开发者与代码审查者         |
-| [运维手册](docs/operations.md)           | 生产环境维护者             |
-| [开发指南](docs/development.md)          | 项目贡献者                 |
-| [实施计划](docs/implementation-plan.md)  | 稳定版实现基线与验收标准   |
-| [B站集成](docs/integrations/bilibili.md) | 外部接口维护者             |
+从[文档总览](docs/README.md)开始，或直接阅读：
+
+- [开始使用](docs/getting-started.md)
+- [产品使用指南](docs/product-guide.md)
+- [运维手册](docs/operations.md)
+- [技术架构](docs/architecture.md)
+- [参与开发](CONTRIBUTING.md)
+- [更新记录](CHANGELOG.md)
 
 运行中的实例通过 `/openapi.json` 提供 OpenAPI 3.1 文档。
 

@@ -1,6 +1,7 @@
 # 开发指南
 
-本指南说明本地开发、代码组织、数据库迁移、测试和发布流程。
+本指南说明本地开发、代码组织、数据库迁移和测试流程。版本发布见
+[发布手册](releasing.md)。
 
 ## 开发环境
 
@@ -45,7 +46,7 @@ Vite 会把 API 与健康检查请求代理到 Fastify。
 | `pnpm dev`              | 同时启动服务端和 Web 开发服务器 |
 | `pnpm dev:server`       | 启动 Fastify Watch              |
 | `pnpm dev:web`          | 启动 Vite                       |
-| `pnpm check`            | 格式、ESLint 和 TypeScript      |
+| `pnpm check`            | 文档链接、格式、Lint 和类型检查 |
 | `pnpm test`             | 单元测试                        |
 | `pnpm test:integration` | PostgreSQL 集成测试             |
 | `pnpm test:browser`     | 生产构建和浏览器工作流测试      |
@@ -246,20 +247,8 @@ docker compose build app
 提交前还应确认：
 
 - `git diff --check` 没有空白错误；
-- Markdown 本地链接有效；
 - OpenAPI 包含新增或修改的路由；
 - 迁移可以应用到空数据库；
 - 日志、Fixture 和截图不包含真实用户数据或密钥。
 
-## 发布
-
-1. 更新 `package.json` 版本与服务端 OpenAPI 版本。
-2. 在 `CHANGELOG.md` 中写入本次可见变更。
-3. 运行完整质量检查。
-4. 在 PostgreSQL 17 上完成迁移与恢复演练。
-5. 构建生产镜像并确认镜像内包含 `LICENSE`、迁移和 `dist`。
-6. 验证 `/health/live`、`/health/ready` 和 `/openapi.json`。
-7. 使用 `vMAJOR.MINOR.PATCH` 标记发布提交。
-8. 记录镜像 Digest、迁移标识和对应备份集。
-
-部署后的检查见[运维手册](operations.md#升级)。
+完整版本、Release Candidate、Tag、镜像和发布后检查见[发布手册](releasing.md)。

@@ -44,6 +44,8 @@ src/server/
     gifts/                      发布、资格、领取、查询和履约
     fulfillment/                物流 Provider 与刷新 Runtime
     announcements/              平台和主播公告
+    appearance/                 部署级主题读取、更新与审计
+    portal/                     匿名公开礼物与公告查询
     audit/                      变更与敏感读取审计
 
 src/shared/contracts/            TypeBox API 契约与静态类型
@@ -57,6 +59,15 @@ src/web/
 
 HTTP 路由只负责会话守卫、Schema、参数转换和状态码。跨表写入事务由对应工作流服务
 完整持有。
+
+## 公开门户
+
+匿名门户是当前 Club 部署的统一公开入口，不按主播创建独立站点。`PortalService` 只查询
+已经发布、明确公开且仍在有效时间内的礼物和平台公告。公开状态是礼物发布与公告上的
+独立字段，发布操作不会隐式将内容公开。
+
+门户返回适合匿名展示的最小 DTO，不返回名单、资格、账号或领取信息。所有资格检查和
+领取操作仍从登录后的角色工作台开始。
 
 ## 账号与权限
 
@@ -291,6 +302,10 @@ Escape、焦点返回和 Tab 循环；视觉样式仍由语义化 CSS 提供，�
 - `dist/` 编译产物；
 - SQL 迁移；
 - `LICENSE`。
+
+`package.json` 是应用版本的唯一来源。运行镜像保留该文件，健康接口、管理员系统页和
+OpenAPI 从同一版本值生成响应。正式镜像使用精确语义版本 Tag，并通过 OCI Revision 和
+Digest 关联到 Git 提交。
 
 迁移与管理员 CLI 都使用 `node dist/server/...` 编译入口。Docker 健康检查调用
 `/health/ready`，容器停止宽限期为 15 秒。

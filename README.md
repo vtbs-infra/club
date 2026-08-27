@@ -20,7 +20,8 @@ tracking.
 - Automatic and idempotent gift-order generation
 - Address book, encrypted claim snapshots, and configurable claim fields
 - Release-scoped fulfillment export, one shipment per order, and tracking history
-- Platform and creator announcements
+- Public gift and announcement portal with explicit visibility controls
+- Platform and creator announcements, plus four application-wide theme presets
 - Dedicated recipient, creator, and administrator interfaces
 - Self-hosted TypeScript application with PostgreSQL and local object storage
 
@@ -52,8 +53,8 @@ docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d app
 ```
 
-Before starting, replace the secrets and database passwords in `.env`. Create
-the first platform administrator with:
+Before starting, replace the secrets and database passwords in `.env`. Create the first platform
+administrator with:
 
 ```powershell
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
@@ -63,23 +64,19 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 Open <http://localhost:3000> and complete creator and verification-room setup
 from the administrator interface.
 
-The complete setup procedure is in
-[Getting started](docs/getting-started.md).
+The complete setup procedure is in [Getting started](docs/getting-started.md).
 
 ## Documentation
 
-The detailed guides are maintained in Simplified Chinese.
+The detailed guides are maintained in Simplified Chinese. Start from the
+[documentation index](docs/README.md), or go directly to:
 
-| Document                                              | Audience                                 |
-| ----------------------------------------------------- | ---------------------------------------- |
-| [Getting started](docs/getting-started.md)            | First-time self-hosters                  |
-| [Product guide](docs/product-guide.md)                | Recipients, creators, and administrators |
-| [Configuration](docs/configuration.md)                | Deployment maintainers                   |
-| [Architecture](docs/architecture.md)                  | Developers and reviewers                 |
-| [Operations](docs/operations.md)                      | Production operators                     |
-| [Development](docs/development.md)                    | Contributors                             |
-| [Implementation plan](docs/implementation-plan.md)    | Stable implementation and acceptance     |
-| [Bilibili integration](docs/integrations/bilibili.md) | Integration maintainers                  |
+- [Getting started](docs/getting-started.md)
+- [Product guide](docs/product-guide.md)
+- [Operations](docs/operations.md)
+- [Architecture](docs/architecture.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
 
 A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.
 

@@ -204,6 +204,7 @@ Invoke-RestMethod http://localhost:3000/health/ready
 ```
 
 随后检查管理员、主播和普通用户入口，验证直播间连接、近期名单任务和物流运行时。
+发布维护流程见[发布手册](releasing.md)。
 
 回滚需要恢复与目标镜像 Schema 相匹配的 PostgreSQL 和对象存储备份。
 
