@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import type {
   ReleaseInput,
@@ -8,10 +8,13 @@ import type {
   ReleaseUpdateInput,
 } from '../../../shared/contracts/gifts.js';
 import { AppError } from '../../../shared/errors/app-error.js';
+import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   giftPackageItems,
   giftPackages,
+  giftOrders,
+  giftOrderStatusHistory,
   giftReleases,
   giftTierRules,
 } from '../../infrastructure/db/schema/index.js';
@@ -138,7 +141,10 @@ export class GiftReleaseService {
   private readonly audit: AuditService;
   public readonly eligibility: GiftEligibilityService;
 
-  public constructor(private readonly database: DatabaseService) {
+  public constructor(
+    private readonly database: DatabaseService,
+    private readonly clock: Clock,
+  ) {
     this.audit = new AuditService(database);
     this.eligibility = new GiftEligibilityService(database);
   }
@@ -322,7 +328,7 @@ export class GiftReleaseService {
             fulfillmentMode: input.fulfillmentMode,
             publicVisible: input.publicVisible,
             title: validated.title,
-            updatedAt: new Date(),
+            updatedAt: this.clock.now(),
             version: before.version + 1,
           })
           .where(eq(giftReleases.id, before.id));
@@ -398,9 +404,16 @@ export class GiftReleaseService {
             409,
           );
         }
+        if (validated.claimDeadlineAt <= this.clock.now()) {
+          throw new AppError(
+            'GIFT_RELEASE_NOT_PUBLISHABLE',
+            'A gift release cannot be published after its claim deadline.',
+            409,
+          );
+        }
 
         await this.replaceConfiguration(transaction, release.id, input);
-        const now = new Date();
+        const now = this.clock.now();
         await transaction
           .update(giftReleases)
           .set({
@@ -458,30 +471,63 @@ export class GiftReleaseService {
   }
 
   public async close(creatorId: string, releaseId: string, context: RequestAuditContext) {
-    const [release] = await this.database.orm
-      .update(giftReleases)
-      .set({ closedAt: new Date(), status: 'CLOSED', updatedAt: new Date() })
-      .where(
-        and(
-          eq(giftReleases.id, releaseId),
-          eq(giftReleases.creatorId, creatorId),
-          eq(giftReleases.status, 'PUBLISHED'),
-        ),
-      )
-      .returning();
-    if (!release) {
-      throw new AppError('GIFT_RELEASE_NOT_CLOSABLE', 'Published gift release not found.', 409);
-    }
-    await this.audit.record({
-      action: 'gift-release.closed',
-      actorUserId: context.actorUserId,
-      creatorId,
-      ipAddress: context.ipAddress,
-      requestId: context.requestId,
-      targetId: release.id,
-      targetType: 'gift-release',
+    return this.database.orm.transaction(async (transaction) => {
+      const [before] = await transaction
+        .select()
+        .from(giftReleases)
+        .where(and(eq(giftReleases.id, releaseId), eq(giftReleases.creatorId, creatorId)))
+        .limit(1)
+        .for('update');
+      if (!before || before.status !== 'PUBLISHED') {
+        throw new AppError('GIFT_RELEASE_NOT_CLOSABLE', 'Published gift release not found.', 409);
+      }
+      const now = this.clock.now();
+      const [release] = await transaction
+        .update(giftReleases)
+        .set({
+          closedAt: now,
+          status: 'CLOSED',
+          updatedAt: now,
+          version: before.version + 1,
+        })
+        .where(eq(giftReleases.id, before.id))
+        .returning();
+      const expired = await transaction
+        .update(giftOrders)
+        .set({
+          expiredAt: now,
+          status: 'EXPIRED',
+          updatedAt: now,
+          version: sql`${giftOrders.version} + 1`,
+        })
+        .where(and(eq(giftOrders.giftReleaseId, before.id), eq(giftOrders.status, 'CLAIMABLE')))
+        .returning({ id: giftOrders.id });
+      if (expired.length > 0) {
+        await transaction.insert(giftOrderStatusHistory).values(
+          expired.map((order) => ({
+            actorUserId: context.actorUserId,
+            fromStatus: 'CLAIMABLE',
+            giftOrderId: order.id,
+            reason: 'Gift release closed by creator.',
+            toStatus: 'EXPIRED',
+          })),
+        );
+      }
+      await this.audit.record(
+        {
+          action: 'gift-release.closed',
+          actorUserId: context.actorUserId,
+          afterSummary: { expiredOrders: expired.length },
+          creatorId,
+          ipAddress: context.ipAddress,
+          requestId: context.requestId,
+          targetId: before.id,
+          targetType: 'gift-release',
+        },
+        transaction,
+      );
+      return release!;
     });
-    return release;
   }
 
   public async removeDraft(
@@ -489,25 +535,30 @@ export class GiftReleaseService {
     releaseId: string,
     context: RequestAuditContext,
   ): Promise<void> {
-    const [deleted] = await this.database.orm
-      .delete(giftReleases)
-      .where(
-        and(
-          eq(giftReleases.id, releaseId),
-          eq(giftReleases.creatorId, creatorId),
-          eq(giftReleases.status, 'DRAFT'),
-        ),
-      )
-      .returning({ id: giftReleases.id });
-    if (!deleted) throw new AppError('GIFT_RELEASE_NOT_DELETABLE', 'Draft not found.', 404);
-    await this.audit.record({
-      action: 'gift-release.deleted',
-      actorUserId: context.actorUserId,
-      creatorId,
-      ipAddress: context.ipAddress,
-      requestId: context.requestId,
-      targetId: releaseId,
-      targetType: 'gift-release',
+    await this.database.orm.transaction(async (transaction) => {
+      const [deleted] = await transaction
+        .delete(giftReleases)
+        .where(
+          and(
+            eq(giftReleases.id, releaseId),
+            eq(giftReleases.creatorId, creatorId),
+            eq(giftReleases.status, 'DRAFT'),
+          ),
+        )
+        .returning({ id: giftReleases.id });
+      if (!deleted) throw new AppError('GIFT_RELEASE_NOT_DELETABLE', 'Draft not found.', 404);
+      await this.audit.record(
+        {
+          action: 'gift-release.deleted',
+          actorUserId: context.actorUserId,
+          creatorId,
+          ipAddress: context.ipAddress,
+          requestId: context.requestId,
+          targetId: releaseId,
+          targetType: 'gift-release',
+        },
+        transaction,
+      );
     });
   }
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
@@ -145,6 +145,19 @@ export class AddressService {
           .set({ isDefault: false })
           .where(eq(addresses.userId, userId));
       }
+      let isDefault = input.isDefault;
+      let replacementId: string | null = null;
+      if (row.isDefault && input.isDefault === false) {
+        const [replacement] = await transaction
+          .select({ id: addresses.id })
+          .from(addresses)
+          .where(and(eq(addresses.userId, userId), ne(addresses.id, addressId)))
+          .orderBy(desc(addresses.updatedAt))
+          .limit(1)
+          .for('update');
+        if (replacement) replacementId = replacement.id;
+        else isDefault = true;
+      }
       const encrypted =
         input.payload === undefined
           ? {}
@@ -158,12 +171,18 @@ export class AddressService {
         .update(addresses)
         .set({
           ...encrypted,
-          ...(input.isDefault === undefined ? {} : { isDefault: input.isDefault }),
+          ...(isDefault === undefined ? {} : { isDefault }),
           ...(input.label === undefined ? {} : { label: input.label.trim() }),
           updatedAt: new Date(),
         })
         .where(and(eq(addresses.id, addressId), eq(addresses.userId, userId)))
         .returning();
+      if (replacementId) {
+        await transaction
+          .update(addresses)
+          .set({ isDefault: true })
+          .where(eq(addresses.id, replacementId));
+      }
       await this.audit.record(
         {
           action: 'address.updated',

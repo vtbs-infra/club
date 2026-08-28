@@ -115,7 +115,7 @@ integration('gift order lifecycle', () => {
       addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
     addressService = new AddressService(database, encryption);
-    releaseService = new GiftReleaseService(database);
+    releaseService = new GiftReleaseService(database, new SystemClock());
     orderService = new GiftOrderService(
       database,
       encryption,
@@ -246,6 +246,38 @@ integration('gift order lifecycle', () => {
       { isDefault: true, label: '家', payload: addressPayload },
       requestContext(userTwoId, 'create-address'),
     );
+    const alternateAddress = await addressService.create(
+      userTwoId,
+      {
+        isDefault: false,
+        label: '备用',
+        payload: { ...addressPayload, detailedAddress: '备用路 2 号' },
+      },
+      requestContext(userTwoId, 'create-alternate-address'),
+    );
+    await addressService.update(
+      userTwoId,
+      address.id,
+      { isDefault: false },
+      requestContext(userTwoId, 'demote-default-address'),
+    );
+    expect((await addressService.list(userTwoId)).find((item) => item.isDefault)?.id).toBe(
+      alternateAddress.id,
+    );
+    await addressService.delete(
+      userTwoId,
+      alternateAddress.id,
+      requestContext(userTwoId, 'delete-alternate-address'),
+    );
+    await addressService.update(
+      userTwoId,
+      address.id,
+      { isDefault: false },
+      requestContext(userTwoId, 'keep-only-address-default'),
+    );
+    expect(await addressService.list(userTwoId)).toMatchObject([
+      { id: address.id, isDefault: true },
+    ]);
     const visible = await orderService.getForUser(userTwoId, captainOrder.id);
     await orderService.submit(
       userTwoId,
@@ -464,9 +496,13 @@ integration('gift order lifecycle', () => {
       .update(shipments)
       .set({ nextTrackingRefreshAt: new Date(0) })
       .where(eq(shipments.giftOrderId, captainOrder.id));
-    const failingTrackingService = new TrackingRefreshService(database, {
-      query: () => Promise.reject(new Error('simulated provider outage')),
-    });
+    const failingTrackingService = new TrackingRefreshService(
+      database,
+      {
+        query: () => Promise.reject(new Error('simulated provider outage')),
+      },
+      new SystemClock(),
+    );
     await expect(failingTrackingService.refreshDue()).rejects.toMatchObject({
       code: 'TRACKING_REFRESH_FAILED',
     });
@@ -481,12 +517,71 @@ integration('gift order lifecycle', () => {
       lastTrackingError: 'simulated provider outage',
       trackingFailureCount: 1,
     });
-    await orderService.complete(
-      creatorId,
-      captainOrder.id,
-      requestContext(creatorUserId, 'complete-order'),
+    await database.orm
+      .update(shipments)
+      .set({ nextTrackingRefreshAt: new Date(0), status: 'OUT_FOR_DELIVERY' })
+      .where(eq(shipments.giftOrderId, captainOrder.id));
+    const regressingTrackingService = new TrackingRefreshService(
+      database,
+      {
+        query: () =>
+          Promise.resolve({
+            events: [],
+            nextRefreshAt: new Date(Date.now() + 60_000),
+            status: 'IN_TRANSIT',
+          }),
+      },
+      new SystemClock(),
     );
+    expect(await regressingTrackingService.refreshDue()).toBe(1);
+    expect(
+      (
+        await database.orm
+          .select({ status: shipments.status })
+          .from(shipments)
+          .where(eq(shipments.giftOrderId, captainOrder.id))
+      )[0]?.status,
+    ).toBe('OUT_FOR_DELIVERY');
+    await database.orm
+      .update(shipments)
+      .set({ nextTrackingRefreshAt: new Date(0) })
+      .where(eq(shipments.giftOrderId, captainOrder.id));
+    const deliveredAt = new Date();
+    const deliveredTrackingService = new TrackingRefreshService(
+      database,
+      {
+        query: () =>
+          Promise.resolve({
+            events: [
+              {
+                description: '包裹已签收',
+                id: 'delivered-event',
+                occurredAt: deliveredAt,
+                status: 'DELIVERED',
+              },
+            ],
+            nextRefreshAt: null,
+            status: 'DELIVERED',
+          }),
+      },
+      new SystemClock(),
+    );
+    expect(await deliveredTrackingService.refreshDue()).toBe(1);
     expect((await orderService.getForUser(userTwoId, captainOrder.id)).status).toBe('COMPLETED');
+    expect(await deliveredTrackingService.refreshDue()).toBe(0);
+    expect(
+      (
+        await database.orm
+          .select({ value: count() })
+          .from(auditLogs)
+          .where(
+            and(
+              eq(auditLogs.action, 'gift-order.completed'),
+              eq(auditLogs.targetId, captainOrder.id),
+            ),
+          )
+      )[0]?.value,
+    ).toBe(1);
 
     const july = await releaseService.create(
       creatorId,
@@ -519,6 +614,31 @@ integration('gift order lifecycle', () => {
       .from(giftOrderItems)
       .where(eq(giftOrderItems.giftOrderId, julyOrder!.id));
     expect(julyItems).toHaveLength(2);
+    const closed = await releaseService.close(
+      creatorId,
+      july.id,
+      requestContext(creatorUserId, 'close-july'),
+    );
+    expect(closed.status).toBe('CLOSED');
+    expect(
+      (
+        await database.orm
+          .select({ status: giftOrders.status })
+          .from(giftOrders)
+          .where(eq(giftOrders.id, julyOrder!.id))
+      )[0]?.status,
+    ).toBe('EXPIRED');
+    expect(
+      (
+        await database.orm
+          .select({
+            fromStatus: giftOrderStatusHistory.fromStatus,
+            toStatus: giftOrderStatusHistory.toStatus,
+          })
+          .from(giftOrderStatusHistory)
+          .where(eq(giftOrderStatusHistory.giftOrderId, julyOrder!.id))
+      ).map((transition) => `${transition.fromStatus}->${transition.toStatus}`),
+    ).toContain('CLAIMABLE->EXPIRED');
     await expect(
       releaseService.create(
         creatorId,

@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, inArray, isNull, lte, or } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
+import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   announcementReads,
@@ -36,7 +37,10 @@ function validate(input: AnnouncementInput) {
 export class AnnouncementService {
   private readonly audit: AuditService;
 
-  public constructor(private readonly database: DatabaseService) {
+  public constructor(
+    private readonly database: DatabaseService,
+    private readonly clock: Clock,
+  ) {
     this.audit = new AuditService(database);
   }
 
@@ -55,7 +59,7 @@ export class AnnouncementService {
           : eq(giftOrders.userId, userId),
       );
     const creatorIds = accessibleOrders.map((row) => row.creatorId);
-    const now = new Date();
+    const now = this.clock.now();
     const visibility =
       creatorIds.length === 0
         ? eq(announcements.scope, 'PLATFORM')
@@ -79,7 +83,10 @@ export class AnnouncementService {
       rows.length === 0
         ? []
         : await this.database.orm
-            .select({ announcementId: announcementReads.announcementId })
+            .select({
+              announcementId: announcementReads.announcementId,
+              announcementVersion: announcementReads.announcementVersion,
+            })
             .from(announcementReads)
             .where(
               and(
@@ -90,8 +97,13 @@ export class AnnouncementService {
                 ),
               ),
             );
-    const readIds = new Set(reads.map((read) => read.announcementId));
-    return rows.map((row) => ({ ...row, read: readIds.has(row.id) }));
+    const readVersions = new Set(
+      reads.map((read) => `${read.announcementId}:${read.announcementVersion}`),
+    );
+    return rows.map((row) => ({
+      ...row,
+      read: readVersions.has(`${row.id}:${row.version}`),
+    }));
   }
 
   public listManaged(scope: 'PLATFORM' | 'CREATOR', creatorId?: string) {
@@ -115,7 +127,7 @@ export class AnnouncementService {
     context: RequestAuditContext,
   ) {
     const normalized = validate(input);
-    const now = new Date();
+    const now = this.clock.now();
     if (normalized.expiresAt && input.publishNow && normalized.expiresAt <= now) {
       throw new AppError(
         'ANNOUNCEMENT_EXPIRY_INVALID',
@@ -123,39 +135,44 @@ export class AnnouncementService {
         400,
       );
     }
-    const [created] = await this.database.orm
-      .insert(announcements)
-      .values({
-        body: normalized.body,
-        createdByUserId: context.actorUserId,
-        creatorId: target.scope === 'CREATOR' ? target.creatorId : null,
-        expiresAt: normalized.expiresAt,
-        pinned: input.pinned,
-        publicVisible: target.scope === 'PLATFORM' && input.publicVisible,
-        publishedAt: input.publishNow ? now : null,
-        scope: target.scope,
-        severity: input.severity,
-        title: normalized.title,
-      })
-      .returning();
-    if (!created) throw new Error('Announcement insert returned no row.');
-    await this.audit.record({
-      action: 'announcement.created',
-      actorUserId: context.actorUserId,
-      afterSummary: {
-        published: Boolean(created.publishedAt),
-        publicVisible: created.publicVisible,
-        scope: created.scope,
-        severity: created.severity,
-        title: created.title,
-      },
-      creatorId: target.creatorId,
-      ipAddress: context.ipAddress,
-      requestId: context.requestId,
-      targetId: created.id,
-      targetType: 'announcement',
+    return this.database.orm.transaction(async (transaction) => {
+      const [created] = await transaction
+        .insert(announcements)
+        .values({
+          body: normalized.body,
+          createdByUserId: context.actorUserId,
+          creatorId: target.scope === 'CREATOR' ? target.creatorId : null,
+          expiresAt: normalized.expiresAt,
+          pinned: input.pinned,
+          publicVisible: target.scope === 'PLATFORM' && input.publicVisible,
+          publishedAt: input.publishNow ? now : null,
+          scope: target.scope,
+          severity: input.severity,
+          title: normalized.title,
+        })
+        .returning();
+      if (!created) throw new Error('Announcement insert returned no row.');
+      await this.audit.record(
+        {
+          action: 'announcement.created',
+          actorUserId: context.actorUserId,
+          afterSummary: {
+            published: Boolean(created.publishedAt),
+            publicVisible: created.publicVisible,
+            scope: created.scope,
+            severity: created.severity,
+            title: created.title,
+          },
+          creatorId: target.creatorId,
+          ipAddress: context.ipAddress,
+          requestId: context.requestId,
+          targetId: created.id,
+          targetType: 'announcement',
+        },
+        transaction,
+      );
+      return created;
     });
-    return created;
   }
 
   public async update(
@@ -188,7 +205,8 @@ export class AnnouncementService {
           409,
         );
       }
-      const publishedAt = input.publishNow ? (before.publishedAt ?? new Date()) : null;
+      const now = this.clock.now();
+      const publishedAt = input.publishNow ? (before.publishedAt ?? now) : null;
       if (normalized.expiresAt && publishedAt && normalized.expiresAt <= publishedAt) {
         throw new AppError(
           'ANNOUNCEMENT_EXPIRY_INVALID',
@@ -206,7 +224,7 @@ export class AnnouncementService {
           publishedAt,
           severity: input.severity,
           title: normalized.title,
-          updatedAt: new Date(),
+          updatedAt: now,
           version: before.version + 1,
         })
         .where(and(eq(announcements.id, before.id), eq(announcements.version, before.version)))
@@ -247,13 +265,19 @@ export class AnnouncementService {
   }
 
   public async markRead(userId: string, announcementId: string): Promise<void> {
-    const visible = await this.listVisible(userId);
-    if (!visible.some((announcement) => announcement.id === announcementId)) {
+    const [announcement] = (await this.listVisible(userId)).filter(
+      (announcement) => announcement.id === announcementId,
+    );
+    if (!announcement) {
       throw new AppError('ANNOUNCEMENT_NOT_FOUND', 'Announcement not found.', 404);
     }
     await this.database.orm
       .insert(announcementReads)
-      .values({ announcementId, userId })
+      .values({
+        announcementId,
+        announcementVersion: announcement.version,
+        userId,
+      })
       .onConflictDoNothing();
   }
 
@@ -262,34 +286,39 @@ export class AnnouncementService {
     announcementId: string,
     context: RequestAuditContext,
   ): Promise<void> {
-    const [deleted] = await this.database.orm
-      .delete(announcements)
-      .where(
-        and(
-          eq(announcements.id, announcementId),
-          eq(announcements.scope, target.scope),
-          isNull(announcements.publishedAt),
-          target.scope === 'CREATOR'
-            ? eq(announcements.creatorId, target.creatorId!)
-            : isNull(announcements.creatorId),
-        ),
-      )
-      .returning({ id: announcements.id });
-    if (!deleted) {
-      throw new AppError(
-        'ANNOUNCEMENT_NOT_DELETABLE',
-        'Only an unpublished announcement can be deleted.',
-        409,
+    await this.database.orm.transaction(async (transaction) => {
+      const [deleted] = await transaction
+        .delete(announcements)
+        .where(
+          and(
+            eq(announcements.id, announcementId),
+            eq(announcements.scope, target.scope),
+            isNull(announcements.publishedAt),
+            target.scope === 'CREATOR'
+              ? eq(announcements.creatorId, target.creatorId!)
+              : isNull(announcements.creatorId),
+          ),
+        )
+        .returning({ id: announcements.id });
+      if (!deleted) {
+        throw new AppError(
+          'ANNOUNCEMENT_NOT_DELETABLE',
+          'Only an unpublished announcement can be deleted.',
+          409,
+        );
+      }
+      await this.audit.record(
+        {
+          action: 'announcement.deleted',
+          actorUserId: context.actorUserId,
+          creatorId: target.creatorId,
+          ipAddress: context.ipAddress,
+          requestId: context.requestId,
+          targetId: deleted.id,
+          targetType: 'announcement',
+        },
+        transaction,
       );
-    }
-    await this.audit.record({
-      action: 'announcement.deleted',
-      actorUserId: context.actorUserId,
-      creatorId: target.creatorId,
-      ipAddress: context.ipAddress,
-      requestId: context.requestId,
-      targetId: deleted.id,
-      targetType: 'announcement',
     });
   }
 }

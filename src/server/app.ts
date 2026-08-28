@@ -108,8 +108,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
       : new PublicWebCreatorProfileSource());
   const addressService = new AddressService(database, encryption);
   const creatorService = new CreatorService(database, creatorProfileSource, clock);
-  const releaseService = new GiftReleaseService(database);
-  const announcementService = new AnnouncementService(database);
+  const releaseService = new GiftReleaseService(database, clock);
+  const announcementService = new AnnouncementService(database, clock);
   const appearanceService = new AppearanceService(database);
   const portalService = new PortalService(database, clock);
   const giftMediaService = new GiftMediaService(database, storage);

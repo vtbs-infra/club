@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, lte, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
+import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   bilibiliBindings,
@@ -37,12 +38,13 @@ export class GiftClaimService {
     private readonly database: DatabaseService,
     private readonly encryption: EncryptionKeyRing,
     private readonly addresses: AddressService,
+    private readonly clock: Clock,
   ) {
     this.audit = new AuditService(database);
   }
 
   public async expireClaimable(): Promise<number> {
-    const now = new Date();
+    const now = this.clock.now();
     return this.database.orm.transaction(async (transaction) => {
       const expired = await transaction
         .update(giftOrders)
@@ -166,12 +168,19 @@ export class GiftClaimService {
           claimDeadlineAt: giftReleases.claimDeadlineAt,
           claimStartAt: giftReleases.claimStartAt,
           formSchema: giftReleases.formSchema,
+          status: giftReleases.status,
         })
         .from(giftReleases)
         .where(eq(giftReleases.id, order.giftReleaseId))
         .limit(1);
-      const now = new Date();
-      if (!release || now < release.claimStartAt || now > release.claimDeadlineAt) {
+      const now = this.clock.now();
+      if (
+        !release ||
+        release.status !== 'PUBLISHED' ||
+        now < release.claimStartAt ||
+        now >= release.claimDeadlineAt ||
+        now >= order.expiresAt
+      ) {
         throw new AppError(
           'GIFT_ORDER_CLAIM_WINDOW_CLOSED',
           'This gift is outside its claim window.',

@@ -30,9 +30,9 @@ export class GiftOrderService {
     trackingProvider: TrackingProvider | null,
     clock: Clock,
   ) {
-    this.claims = new GiftClaimService(database, encryption, addresses);
+    this.claims = new GiftClaimService(database, encryption, addresses, clock);
     this.exporter = new GiftFulfillmentExportService(database, encryption, clock);
-    this.fulfillment = new GiftFulfillmentService(database, trackingProvider);
+    this.fulfillment = new GiftFulfillmentService(database, trackingProvider, clock);
     this.queries = new GiftOrderQueryService(database, encryption, () =>
       this.claims.expireClaimable(),
     );

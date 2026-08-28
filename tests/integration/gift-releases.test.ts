@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
+import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { users } from '../../src/server/infrastructure/db/schema/index.js';
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
@@ -34,7 +35,7 @@ integration('gift release lifecycle', () => {
         userId: creatorUserId,
       })
     ).id;
-    releaseService = new GiftReleaseService(database);
+    releaseService = new GiftReleaseService(database, new SystemClock());
   });
 
   afterAll(async () => {

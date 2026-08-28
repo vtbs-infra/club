@@ -47,7 +47,7 @@ export function createFulfillmentRuntime(input: {
     provider,
     input.clock,
   );
-  const tracking = new TrackingRefreshService(input.database, provider);
+  const tracking = new TrackingRefreshService(input.database, provider, input.clock);
   let interval: ReturnType<typeof setInterval> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let starting: Promise<void> | null = null;

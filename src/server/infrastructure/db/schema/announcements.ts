@@ -67,13 +67,16 @@ export const announcementReads = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    announcementVersion: integer('announcement_version').notNull(),
     readAt: timestamp('read_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('announcement_reads_announcement_user_unique').on(
+    uniqueIndex('announcement_reads_announcement_user_version_unique').on(
       table.announcementId,
       table.userId,
+      table.announcementVersion,
     ),
     index('announcement_reads_user_read_idx').on(table.userId, table.readAt),
+    check('announcement_reads_version_positive', sql`${table.announcementVersion} > 0`),
   ],
 );

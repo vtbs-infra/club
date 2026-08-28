@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
+import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   giftOrders,
@@ -26,6 +27,7 @@ export class GiftFulfillmentService {
   public constructor(
     private readonly database: DatabaseService,
     private readonly trackingProvider: TrackingProvider | null,
+    private readonly clock: Clock,
   ) {
     this.audit = new AuditService(database);
   }
@@ -52,7 +54,7 @@ export class GiftFulfillmentService {
           409,
         );
       }
-      const now = new Date();
+      const now = this.clock.now();
       const [updated] = await transaction
         .update(giftOrders)
         .set({
@@ -106,7 +108,7 @@ export class GiftFulfillmentService {
           409,
         );
       }
-      const now = new Date();
+      const now = this.clock.now();
       const [updated] = await transaction
         .update(giftOrders)
         .set({
@@ -180,7 +182,7 @@ export class GiftFulfillmentService {
           409,
         );
       }
-      const now = new Date();
+      const now = this.clock.now();
       const shipmentId = randomUUID();
       const [shipment] = await transaction
         .insert(shipments)
