@@ -21,7 +21,7 @@ import {
 } from '../../components/Ui';
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 import { formatDate } from '../../lib/format';
-import { activeStatusPresentation } from '../../lib/status-presentation';
+import { monthlySyncPresentation } from '../../lib/status-presentation';
 
 interface CreatorFormState {
   monthlySyncEnabled: boolean;
@@ -171,8 +171,8 @@ export function AdminCreatorsPage() {
                     <small>{creator.email}</small>
                   </span>
                   <StatusBadge
-                    {...activeStatusPresentation[
-                      creator.monthlySyncEnabled ? 'active' : 'inactive'
+                    {...monthlySyncPresentation[
+                      creator.monthlySyncEnabled ? 'enabled' : 'disabled'
                     ]}
                   />
                 </button>

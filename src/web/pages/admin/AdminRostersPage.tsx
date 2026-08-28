@@ -127,7 +127,7 @@ export function AdminRostersPage() {
     <div className="stack-lg">
       <PageHeader
         eyebrow="月度名单"
-        intro="每位启用主播都会按配置时区在月末 23:59 开始抓取；迟到名单必须由平台确认。"
+        intro="每位开启名单同步的主播都会按配置时区在月末 23:59 开始抓取；迟到名单必须由平台确认。"
         title="名单同步"
       />
       <div className="roster-workspace">
@@ -140,7 +140,7 @@ export function AdminRostersPage() {
           </div>
           {rosters.data.length === 0 ? (
             <EmptyState
-              description="启用主播后，系统会自动准备当前月和下月任务。"
+              description="为主播开启月末名单同步后，系统会自动准备当前月和下月任务。"
               title="暂无名单任务"
             />
           ) : (

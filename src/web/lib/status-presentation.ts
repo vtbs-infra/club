@@ -126,10 +126,10 @@ export const runtimeStatePresentation = {
   Record<SystemStatus['runtimes']['binding']['state'], StatusPresentation>
 >;
 
-export const activeStatusPresentation = {
-  active: { label: '已启用', tone: 'success' },
-  inactive: { label: '已停用', tone: 'neutral' },
-} as const satisfies Readonly<Record<'active' | 'inactive', StatusPresentation>>;
+export const monthlySyncPresentation = {
+  disabled: { label: '同步暂停', tone: 'neutral' },
+  enabled: { label: '同步开启', tone: 'success' },
+} as const satisfies Readonly<Record<'disabled' | 'enabled', StatusPresentation>>;
 
 export const bindingStatusPresentation = {
   pending: { label: '尚未绑定', tone: 'warning' },

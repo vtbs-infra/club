@@ -107,7 +107,7 @@ function CreatorSettingsForm({ creator }: { readonly creator: NonNullable<Identi
             </div>
             <div>
               <dt>名单同步</dt>
-              <dd>{creator.monthlySyncEnabled ? '已启用' : '已停用'}</dd>
+              <dd>{creator.monthlySyncEnabled ? '同步开启' : '同步暂停'}</dd>
             </div>
           </dl>
         </section>

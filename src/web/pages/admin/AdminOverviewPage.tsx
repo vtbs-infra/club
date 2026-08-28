@@ -15,7 +15,7 @@ import { getAdminOverview, getAdminRosters, getVerificationRooms } from '../../a
 import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
 import {
-  activeStatusPresentation,
+  monthlySyncPresentation,
   roomHealthPresentation,
   snapshotRunPresentation,
 } from '../../lib/status-presentation';
@@ -274,8 +274,8 @@ export function AdminOverviewPage() {
                   <span className="mini-avatar">{creator.displayName.slice(0, 1)}</span>
                   <strong>{creator.displayName}</strong>
                   <StatusBadge
-                    {...activeStatusPresentation[
-                      creator.monthlySyncEnabled ? 'active' : 'inactive'
+                    {...monthlySyncPresentation[
+                      creator.monthlySyncEnabled ? 'enabled' : 'disabled'
                     ]}
                   />
                 </div>
