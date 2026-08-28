@@ -60,7 +60,7 @@ docker compose logs --tail 100 postgres
 
 检查：
 
-- PostgreSQL 查询和当前迁移版本；
+- PostgreSQL 查询和与当前应用精确匹配的迁移集合；
 - 对象存储的隔离写入、读取和删除；
 - B站绑定、名单调度和物流刷新 Runtime 已完成初始化且未长期停止 Tick。
 
@@ -179,6 +179,10 @@ docker compose up -d app
 4. 检查应用日志中没有解密错误。
 
 ## 升级
+
+只有目标版本 Changelog 明确列出的来源版本才支持原地升级。v0.2 使用新的单一数据库基线，
+不提供从 v0.1 数据库原地升级的路径；部署 v0.2 时应创建空数据库和空存储卷，再按首次安装
+流程初始化。不要通过手工修改 `drizzle.__drizzle_migrations` 绕过 Readiness。
 
 升级前：
 

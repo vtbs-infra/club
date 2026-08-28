@@ -6,6 +6,49 @@ All notable Club changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-28
+
+### Added
+
+- Authoritative Bilibili creator-profile lookup resolves the verified UID to its current display
+  name and canonical live room, with explicit refresh actions for creators and administrators.
+- Monthly roster attempts record whether the scheduler or an administrator initiated them, retain
+  complete initial and recheck page evidence, and expose the accepted attempt provenance.
+- Stable audit pagination, version-aware announcement reads, and database-backed lifecycle
+  invariants cover the operational and historical boundaries introduced in this release.
+
+### Changed
+
+- Creator registration now promotes an ordinary user with an active verified Bilibili binding.
+  Bilibili UID, display name, and room are read-only profile facts; administrators only configure
+  the settlement timezone and whether future monthly roster synchronization runs.
+- Creator accounts retain recipient access, while a binding used as creator identity cannot be
+  removed or replaced.
+- Roster capture starts at most four tasks concurrently, tracks background work through shutdown,
+  and keeps retries within the same auditable attempt model.
+- Closing a gift release now expires every still-claimable order atomically. Submitted, shipped,
+  completed, cancelled, and already expired orders retain their historical state.
+- Tracking progress is monotonic outside explicit exception recovery, and confirmed delivery
+  completes the corresponding gift order in the same workflow.
+- Operational reads use bounded database aggregates and opaque cursors; gift and portal GET routes
+  no longer perform expiry writes, and authenticated web areas load lazily.
+- The public hero artwork and roster-sync wording were simplified to match the application-wide
+  visual and product language.
+
+### Fixed
+
+- Announcement content updates make the new version unread until a recipient opens it again.
+- Default-address changes preserve one deterministic default without transiently clearing it.
+- Published gift content, frozen order data, snapshot evidence, and announcement history now share
+  consistent transaction and immutability rules.
+
+### Breaking changes
+
+- Database history is replaced by a single v0.2 fresh-install baseline. v0.2 requires an empty
+  PostgreSQL database and does not provide an in-place upgrade from v0.1.
+- Readiness requires the database migration set to match the application exactly; a database from
+  another Club version is rejected instead of being treated as partially compatible.
+
 ## [0.1.0] - 2026-08-27
 
 ### Added

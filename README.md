@@ -15,6 +15,7 @@ tracking.
 ## Highlights
 
 - One-time-code UID verification in a platform-managed Bilibili live room
+- Creator identity and canonical live-room lookup from a verified Bilibili account
 - Immutable monthly captain, admiral, and governor roster snapshots
 - Optional monthly gift releases with tier-based packages
 - Automatic and idempotent gift-order generation
@@ -56,6 +57,9 @@ docker compose up -d --no-build app
 Before starting, replace the secrets and database passwords in `.env`. The template pins the current
 published image through `CLUB_IMAGE`. To build the checked-out source instead, remove `CLUB_IMAGE` and
 run `docker compose build app` before the migration.
+
+Club v0.2 uses a fresh-install database baseline and must be initialized against an empty PostgreSQL
+database.
 
 Create the first platform administrator with:
 

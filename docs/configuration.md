@@ -46,7 +46,8 @@ docker compose run --rm app `
   node dist/server/server/infrastructure/db/migrate.js
 ```
 
-应用 readiness 会检查 Drizzle 迁移记录数量。数据库可连接但迁移不足时不会就绪。
+应用 Readiness 会检查 Drizzle 迁移记录集合是否与当前应用精确匹配。数据库可连接但迁移
+缺失或多出记录时都不会就绪。
 
 ## 会话认证
 
@@ -103,6 +104,9 @@ openssl rand -base64 32
 | `BILIBILI_ROSTER_SOURCE` | `public-web`、`fake` | 大航海名单来源 |
 
 正常部署使用 `public-web`。`fake` 只用于自动测试和本地确定性场景。
+
+主播资料读取与名单来源使用同一模式：`public-web` 会根据已验证 UID 查询 B站显示名称和
+规范直播间，`fake` 提供测试资料。主播资料没有独立环境变量。
 
 验证直播间不通过环境变量配置。平台管理员在“验证直播间”页面添加一个或多个固定房间，
 并用优先级控制默认分配。
