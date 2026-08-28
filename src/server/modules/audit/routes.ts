@@ -13,7 +13,7 @@ interface AuditRoutesOptions {
 
 const Query = Type.Object(
   {
-    before: Type.Optional(Type.String({ format: 'date-time' })),
+    cursor: Type.Optional(Type.String({ maxLength: 512, minLength: 1 })),
     limit: Type.Optional(Type.Integer({ default: 50, maximum: 100, minimum: 1 })),
   },
   { additionalProperties: false },
@@ -21,7 +21,7 @@ const Query = Type.Object(
 
 const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = (app, options) => {
   const requirePlatformAdmin = createRequirePlatformAdmin(options.auth);
-  app.get<{ Querystring: { before?: string; limit?: number } }>(
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
     '/api/v1/admin/audit-logs',
     {
       preHandler: requirePlatformAdmin,
@@ -29,7 +29,7 @@ const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = (app, options) => {
     },
     (request) =>
       options.service.listPlatform({
-        ...(request.query.before ? { before: new Date(request.query.before) } : {}),
+        ...(request.query.cursor ? { cursor: request.query.cursor } : {}),
         limit: request.query.limit ?? 50,
       }),
   );

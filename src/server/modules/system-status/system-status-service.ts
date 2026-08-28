@@ -1,5 +1,6 @@
-import { desc, eq, isNotNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNotNull, lte, ne } from 'drizzle-orm';
 
+import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   shipments,
@@ -14,6 +15,7 @@ import type { FulfillmentRuntime } from '../fulfillment/fulfillment-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 
 interface SystemStatusServiceOptions {
+  readonly clock: Clock;
   readonly database: DatabaseService;
   readonly bindingRuntime: BindingRuntime;
   readonly fulfillmentRuntime: FulfillmentRuntime;
@@ -22,11 +24,8 @@ interface SystemStatusServiceOptions {
   readonly version: string;
 }
 
-function counts(values: readonly string[]): Record<string, number> {
-  return values.reduce<Record<string, number>>((result, value) => {
-    result[value] = (result[value] ?? 0) + 1;
-    return result;
-  }, {});
+function countRecord(rows: readonly { readonly status: string; readonly value: number }[]) {
+  return Object.fromEntries(rows.map((row) => [row.status, row.value]));
 }
 
 export class SystemStatusService {
@@ -64,11 +63,26 @@ export class SystemStatusService {
         version: this.options.version,
       };
     }
-    const [runRows, shipmentRows, failures, rooms, pageRows] = await Promise.all([
-      this.options.database.orm.select({ status: snapshotRuns.status }).from(snapshotRuns),
+    const now = this.options.clock.now();
+    const [runCounts, shipmentCounts, trackingDue, failures, rooms, pageRows] = await Promise.all([
       this.options.database.orm
-        .select({ nextRefreshAt: shipments.nextTrackingRefreshAt, status: shipments.status })
-        .from(shipments),
+        .select({ status: snapshotRuns.status, value: count() })
+        .from(snapshotRuns)
+        .groupBy(snapshotRuns.status),
+      this.options.database.orm
+        .select({ status: shipments.status, value: count() })
+        .from(shipments)
+        .groupBy(shipments.status),
+      this.options.database.orm
+        .select({ value: count() })
+        .from(shipments)
+        .where(
+          and(
+            isNotNull(shipments.nextTrackingRefreshAt),
+            lte(shipments.nextTrackingRefreshAt, now),
+            ne(shipments.status, 'DELIVERED'),
+          ),
+        ),
       this.options.database.orm
         .select({
           createdAt: snapshotAttempts.createdAt,
@@ -120,7 +134,6 @@ export class SystemStatusService {
         }),
       )
     ).filter((warning) => warning !== null);
-    const now = new Date();
     return {
       checks,
       integrityWarnings,
@@ -131,8 +144,8 @@ export class SystemStatusService {
         roster: snapshotRuntime,
         tracking: fulfillmentRuntime,
       },
-      shipmentCounts: counts(shipmentRows.map((shipment) => shipment.status)),
-      snapshotRunCounts: counts(runRows.map((run) => run.status)),
+      shipmentCounts: countRecord(shipmentCounts),
+      snapshotRunCounts: countRecord(runCounts),
       status:
         checks.schema === 'down' ||
         checks.storage === 'down' ||
@@ -145,12 +158,7 @@ export class SystemStatusService {
           : rooms.every((room) => !room.enabled)
             ? ('needs_setup' as const)
             : ('ok' as const),
-      trackingDueCount: shipmentRows.filter(
-        (shipment) =>
-          shipment.nextRefreshAt !== null &&
-          shipment.nextRefreshAt <= now &&
-          shipment.status !== 'DELIVERED',
-      ).length,
+      trackingDueCount: trackingDue[0]?.value ?? 0,
       version: this.options.version,
     };
   }

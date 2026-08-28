@@ -29,7 +29,6 @@ export class GiftOrderQueryService {
   public constructor(
     private readonly database: DatabaseService,
     private readonly encryption: EncryptionKeyRing,
-    private readonly expireClaimable: () => Promise<number>,
   ) {
     this.audit = new AuditService(database);
   }
@@ -127,7 +126,6 @@ export class GiftOrderQueryService {
   }
 
   public async listForUser(userId: string, limit?: number) {
-    await this.expireClaimable();
     const binding = await this.activeBinding(userId);
     const condition = binding
       ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
@@ -136,7 +134,6 @@ export class GiftOrderQueryService {
   }
 
   public async getForUser(userId: string, orderId: string) {
-    await this.expireClaimable();
     const binding = await this.activeBinding(userId);
     const access = binding
       ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
@@ -148,7 +145,6 @@ export class GiftOrderQueryService {
   }
 
   public async listForCreator(creatorId: string, status?: GiftOrderStatus) {
-    await this.expireClaimable();
     return this.serializeRows(
       await this.loadRows(
         and(

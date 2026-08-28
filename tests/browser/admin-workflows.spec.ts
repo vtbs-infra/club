@@ -24,7 +24,7 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
     if (pathname === '/api/v1/admin/announcements') return [];
     if (pathname === '/api/v1/admin/system') return systemStatus();
-    if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextBefore: null };
+    if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
     return undefined;
   });
 

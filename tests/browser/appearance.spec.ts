@@ -17,7 +17,7 @@ test('loads a server-selected theme across public, shell, dropdown, and dialog s
     if (pathname === '/api/v1/portal/home') return portalHome();
     if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
     if (pathname === '/api/v1/admin/system') return systemStatus();
-    if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextBefore: null };
+    if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
     return undefined;
   });
 
@@ -56,7 +56,7 @@ test('previews locally, cancels, and restores the applied theme when leaving at 
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return adminIdentity();
     if (pathname === '/api/v1/admin/system') return systemStatus();
-    if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextBefore: null };
+    if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
     return undefined;
   });
 

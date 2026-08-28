@@ -92,6 +92,13 @@
       "when": 1787912661346,
       "tag": "0012_lifecycle_consistency",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787913433287,
+      "tag": "0013_read_models",
+      "breakpoints": true
     }
   ]
 }

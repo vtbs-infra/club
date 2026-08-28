@@ -2,11 +2,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { lazy, Suspense } from 'react';
 import { Link, Outlet, RouterProvider, createBrowserRouter, useRouteError } from 'react-router-dom';
 
-import { ProtectedLayout, RoleLanding } from '../components/AppShell';
 import { ErrorState, LoadingState } from '../components/Ui';
-import { AuthPage } from '../pages/AuthPage';
 import { HomePage } from '../pages/HomePage';
 import { AppearanceProvider } from '../theme/AppearanceProvider';
+
+const ProtectedLayout = lazy(() =>
+  import('../components/AppShell').then((module) => ({ default: module.ProtectedLayout })),
+);
+const RoleLanding = lazy(() =>
+  import('../components/AppShell').then((module) => ({ default: module.RoleLanding })),
+);
+const AuthPage = lazy(() =>
+  import('../pages/AuthPage').then((module) => ({ default: module.AuthPage })),
+);
 
 const AccountPage = lazy(() =>
   import('../pages/AccountPages').then((module) => ({ default: module.AccountPage })),

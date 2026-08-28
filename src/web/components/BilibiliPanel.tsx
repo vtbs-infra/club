@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CircleCheck, ExternalLink, ShieldCheck } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   createChallenge,
@@ -11,17 +11,11 @@ import {
   type BilibiliChallenge,
   type IssuedBilibiliChallenge,
 } from '../api/client';
+import { useNow } from '../hooks/useNow';
 import { connectionStatePresentation } from '../lib/status-presentation';
 import { ConfirmDialog, ErrorNotice, ErrorState, InlineNotice, LoadingState } from './Ui';
 
-const pageLoadedAt = Date.now();
-
-function useCountdown(expiresAt?: string): number {
-  const [now, setNow] = useState(pageLoadedAt);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
+function remainingSeconds(expiresAt: string | undefined, now: number): number {
   return expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1_000)) : 0;
 }
 
@@ -31,19 +25,31 @@ function timerLabel(seconds: number): string {
 
 export function BilibiliPanel() {
   const queryClient = useQueryClient();
+  const now = useNow(1_000);
   const [issued, setIssued] = useState<IssuedBilibiliChallenge | null>(null);
   const [confirmUnbind, setConfirmUnbind] = useState(false);
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
   const binding = useQuery({
     queryFn: getBinding,
     queryKey: ['me', 'bilibili-binding'],
-    refetchInterval: 2_000,
+    refetchInterval: (query) => {
+      if (query.state.data !== null) return false;
+      const current = queryClient.getQueryData<BilibiliChallenge>(['me', 'bilibili-challenge']);
+      return current?.status === 'ACTIVE' && new Date(current.expiresAt).getTime() > Date.now()
+        ? 2_000
+        : false;
+    },
   });
   const challenge = useQuery({
     enabled: binding.data === null,
     queryFn: getChallenge,
     queryKey: ['me', 'bilibili-challenge'],
-    refetchInterval: 2_000,
+    refetchInterval: (query) => {
+      const current = query.state.data;
+      return current?.status === 'ACTIVE' && new Date(current.expiresAt).getTime() > Date.now()
+        ? 2_000
+        : false;
+    },
   });
   const create = useMutation({
     mutationFn: createChallenge,
@@ -68,7 +74,7 @@ export function BilibiliPanel() {
       await queryClient.invalidateQueries({ queryKey: ['gifts'] });
     },
   });
-  const remaining = useCountdown(issued?.expiresAt ?? challenge.data?.expiresAt);
+  const remaining = remainingSeconds(issued?.expiresAt ?? challenge.data?.expiresAt, now);
 
   if (binding.isPending) return <LoadingState label="正在读取 B站绑定…" />;
   if (binding.isError && binding.data === undefined) {

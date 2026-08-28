@@ -211,7 +211,7 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
 }
 
 function AuditLogPanel({
-  auditBefore,
+  auditCursor,
   data,
   error,
   isFetching,
@@ -220,13 +220,13 @@ function AuditLogPanel({
   onNextPage,
   onRetry,
 }: {
-  readonly auditBefore: string | undefined;
+  readonly auditCursor: string | undefined;
   readonly data: AuditLogPage | undefined;
   readonly error: unknown;
   readonly isFetching: boolean;
   readonly isPending: boolean;
   readonly onFirstPage: () => void;
-  readonly onNextPage: (before: string) => void;
+  readonly onNextPage: (cursor: string) => void;
   readonly onRetry: () => void;
 }) {
   return (
@@ -282,16 +282,16 @@ function AuditLogPanel({
             </details>
           ))}
           <div className="form-actions">
-            {auditBefore ? (
+            {auditCursor ? (
               <button className="button ghost" onClick={onFirstPage} type="button">
                 返回最新记录
               </button>
             ) : null}
-            {data.nextBefore ? (
+            {data.nextCursor ? (
               <button
                 className="button secondary"
                 disabled={isFetching}
-                onClick={() => onNextPage(data.nextBefore!)}
+                onClick={() => onNextPage(data.nextCursor!)}
                 type="button"
               >
                 {isFetching ? '正在加载…' : '查看更早记录'}
@@ -305,11 +305,11 @@ function AuditLogPanel({
 }
 
 export function AdminSystemPage() {
-  const [auditBefore, setAuditBefore] = useState<string | undefined>();
+  const [auditCursor, setAuditCursor] = useState<string | undefined>();
   const system = useQuery({ queryFn: getAdminSystem, queryKey: ['admin', 'system'] });
   const audit = useQuery({
-    queryFn: () => getAdminAuditLogs(auditBefore),
-    queryKey: ['admin', 'audit', auditBefore],
+    queryFn: () => getAdminAuditLogs(auditCursor),
+    queryKey: ['admin', 'audit', auditCursor],
   });
   return (
     <div className="stack-lg">
@@ -340,13 +340,13 @@ export function AdminSystemPage() {
         <SystemStatusContent data={system.data} />
       )}
       <AuditLogPanel
-        auditBefore={auditBefore}
+        auditCursor={auditCursor}
         data={audit.data}
         error={audit.error}
         isFetching={audit.isFetching}
         isPending={audit.isPending}
-        onFirstPage={() => setAuditBefore(undefined)}
-        onNextPage={setAuditBefore}
+        onFirstPage={() => setAuditCursor(undefined)}
+        onNextPage={setAuditCursor}
         onRetry={() => void audit.refetch()}
       />
     </div>

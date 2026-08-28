@@ -22,6 +22,6 @@ export const AuditLogSchema = Type.Object({
 
 export const AuditLogPageSchema = Type.Object({
   items: Type.Array(AuditLogSchema),
-  nextBefore: Nullable(DateTimeSchema),
+  nextCursor: Nullable(Type.String()),
 });
 export type AuditLogPage = Static<typeof AuditLogPageSchema>;
