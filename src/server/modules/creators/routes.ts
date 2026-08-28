@@ -7,7 +7,7 @@ import {
   CreatorOverviewSchema,
   CreatorProfileSchema,
   CreatorRecordSchema,
-  CreatorUpdateSchema,
+  CreatorSettingsSchema,
   IdentitySchema,
   UserRecordSchema,
 } from '../../../shared/contracts/creators.js';
@@ -25,13 +25,6 @@ interface CreatorRoutesOptions {
   readonly database: DatabaseService;
   readonly service: CreatorService;
 }
-
-const OwnUpdateBody = Type.Object(
-  {
-    displayName: Type.Optional(Type.String({ maxLength: 120, minLength: 1 })),
-  },
-  { additionalProperties: false, minProperties: 1 },
-);
 
 function session(request: { readonly authSession: AuthSession | null }) {
   if (!request.authSession) throw new Error('Authenticated route is missing its session.');
@@ -108,24 +101,42 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     async (request, reply) =>
       reply
         .status(201)
-        .send(await options.service.create({ ...context(request), ...request.body })),
+        .send(await options.service.register({ ...context(request), ...request.body })),
   );
 
-  app.patch<{ Body: typeof CreatorUpdateSchema.static; Params: { creatorId: string } }>(
+  app.patch<{ Body: typeof CreatorSettingsSchema.static; Params: { creatorId: string } }>(
     '/api/v1/admin/creators/:creatorId',
     {
       preHandler: requireAdmin,
       schema: {
-        body: CreatorUpdateSchema,
+        body: CreatorSettingsSchema,
         params: Type.Object({ creatorId: IdSchema }),
         response: { 200: CreatorRecordSchema },
         tags: ['admin-creators'],
       },
     },
     (request) =>
-      options.service.update({
+      options.service.updateSettings({
         ...context(request),
         ...request.body,
+        creatorId: request.params.creatorId,
+      }),
+  );
+
+  app.post<{ Body: Record<string, never>; Params: { creatorId: string } }>(
+    '/api/v1/admin/creators/:creatorId/refresh-profile',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        body: Type.Object({}, { additionalProperties: false }),
+        params: Type.Object({ creatorId: IdSchema }),
+        response: { 200: CreatorRecordSchema },
+        tags: ['admin-creators'],
+      },
+    },
+    (request) =>
+      options.service.refreshProfile({
+        ...context(request),
         creatorId: request.params.creatorId,
       }),
   );
@@ -139,20 +150,20 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     (request) => request.creatorProfile,
   );
 
-  app.patch<{ Body: typeof OwnUpdateBody.static }>(
-    '/api/v1/creator/profile',
+  app.post<{ Body: Record<string, never> }>(
+    '/api/v1/creator/profile/refresh',
     {
       preHandler: requireCreator,
       schema: {
-        body: OwnUpdateBody,
+        body: Type.Object({}, { additionalProperties: false }),
         response: { 200: CreatorProfileSchema },
         tags: ['creator'],
       },
     },
     (request) =>
-      options.service.updateOwn(request.creatorProfile!.id, {
+      options.service.refreshProfile({
         ...context(request),
-        ...request.body,
+        creatorId: request.creatorProfile!.id,
       }),
   );
 

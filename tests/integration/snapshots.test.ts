@@ -5,7 +5,6 @@ import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
   auditLogs,
-  creators,
   snapshotAttemptMembers,
   snapshotAttempts,
   snapshotMembers,
@@ -22,6 +21,10 @@ import {
   type FakeRosterScenario,
 } from '../../src/server/modules/bilibili/fake-guard-roster-source.js';
 import type {
+  BilibiliCreatorProfile,
+  CreatorProfileSource,
+} from '../../src/server/modules/bilibili/creator-profile-source.js';
+import type {
   FetchGuardRosterPageInput,
   GuardRosterMember,
   GuardRosterPage,
@@ -29,6 +32,7 @@ import type {
 } from '../../src/server/modules/bilibili/guard-roster-source.js';
 import { CreatorService } from '../../src/server/modules/creators/creator-service.js';
 import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import {
   createIntegrationDatabase,
   integration,
@@ -39,6 +43,19 @@ class MutableClock implements Clock {
   public constructor(public current: Date) {}
   public now(): Date {
     return new Date(this.current);
+  }
+}
+
+class MutableCreatorProfileSource implements CreatorProfileSource {
+  public readonly name = 'mutable-test';
+  public readonly version = 'v1';
+  public profile: BilibiliCreatorProfile | null = null;
+
+  public fetchByUid(biliUid: string): Promise<BilibiliCreatorProfile> {
+    if (!this.profile || this.profile.biliUid !== biliUid) {
+      return Promise.reject(new Error(`Missing creator profile fixture for ${biliUid}.`));
+    }
+    return Promise.resolve(this.profile);
   }
 }
 
@@ -167,17 +184,14 @@ integration('month-end snapshot capture', () => {
           role: 'CREATOR',
         })
         .returning({ id: users.id });
-      const [creator] = await database.orm
-        .insert(creators)
-        .values({
-          bilibiliUid: `9000${index}`,
-          displayName: `Creator ${index}`,
-          roomId: `8000${index}`,
-          timezone: 'Asia/Shanghai',
-          userId: account!.id,
-        })
-        .returning({ id: creators.id });
-      creatorIds.push(creator!.id);
+      const creator = await insertTestCreator(database, {
+        bilibiliUid: `9000${index}`,
+        displayName: `Creator ${index}`,
+        roomId: `8000${index}`,
+        timezone: 'Asia/Shanghai',
+        userId: account!.id,
+      });
+      creatorIds.push(creator.id);
     }
   });
 
@@ -411,15 +425,27 @@ integration('month-end snapshot capture', () => {
     expect(source.maximumConcurrentRequests).toBeGreaterThan(1);
   });
 
-  it('updates pending task identity and removes pending tasks when a creator is disabled', async () => {
-    const creatorService = new CreatorService(database);
+  it('updates future task identity and cancels tasks when monthly sync is disabled', async () => {
+    const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));
+    const profiles = new MutableCreatorProfileSource();
+    const creatorService = new CreatorService(database, profiles, clock);
     const creatorId = creatorIds[8]!;
-    await creatorService.update({
+    profiles.profile = {
+      biliUid: '90009',
+      displayName: 'Refreshed Creator 9',
+      roomId: '880009',
+    };
+    await creatorService.refreshProfile({
       actorUserId: ownerId,
       creatorId,
       ipAddress: '127.0.0.1',
-      requestId: 'update-scheduled-snapshot',
-      roomId: '880009',
+      requestId: 'refresh-scheduled-snapshot',
+    });
+    await creatorService.updateSettings({
+      actorUserId: ownerId,
+      creatorId,
+      ipAddress: '127.0.0.1',
+      requestId: 'update-scheduled-snapshot-timezone',
       timezone: 'UTC',
     });
     const [updatedRun] = await database.orm
@@ -435,11 +461,11 @@ integration('month-end snapshot capture', () => {
       status: 'SCHEDULED',
     });
 
-    await creatorService.update({
-      active: false,
+    await creatorService.updateSettings({
       actorUserId: ownerId,
       creatorId,
       ipAddress: '127.0.0.1',
+      monthlySyncEnabled: false,
       requestId: 'disable-scheduled-snapshot',
     });
     const pending = await database.orm
@@ -538,16 +564,13 @@ integration('month-end snapshot capture', () => {
         role: 'CREATOR',
       })
       .returning({ id: users.id });
-    const [creator] = await database.orm
-      .insert(creators)
-      .values({
-        bilibiliUid: 'termination-creator',
-        displayName: 'Termination Creator',
-        roomId: 'termination-room',
-        timezone: 'Asia/Shanghai',
-        userId: account!.id,
-      })
-      .returning({ id: creators.id });
+    const creator = await insertTestCreator(database, {
+      bilibiliUid: '99001',
+      displayName: 'Termination Creator',
+      roomId: '89001',
+      timezone: 'Asia/Shanghai',
+      userId: account!.id,
+    });
     const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));
     const source = new FakeGuardRosterSource();
     source.setScenario(buildFakeRosterScenario([member('termination-member', 1)]));
@@ -556,7 +579,7 @@ integration('month-end snapshot capture', () => {
     );
     await service.precreateRuns();
     clock.current = new Date('2026-07-31T15:59:00.000Z');
-    const run = await julyRun(creator!.id);
+    const run = await julyRun(creator.id);
     await service.capture(run.id);
     const detail = await service.queries.getDetail(run.id);
     expect(detail.run.status).toBe('FAILED');

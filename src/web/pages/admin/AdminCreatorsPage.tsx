@@ -5,6 +5,7 @@ import {
   createAdminCreator,
   getAdminCreators,
   getAdminUsers,
+  refreshAdminCreatorProfile,
   updateAdminCreator,
   type CreatorRecord,
 } from '../../api/client';
@@ -13,37 +14,30 @@ import {
   EmptyState,
   ErrorNotice,
   ErrorState,
+  InlineNotice,
   LoadingState,
   PageHeader,
   StatusBadge,
 } from '../../components/Ui';
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
+import { formatDate } from '../../lib/format';
 import { activeStatusPresentation } from '../../lib/status-presentation';
 
 interface CreatorFormState {
-  active: boolean;
-  bilibiliUid: string;
-  displayName: string;
-  roomId: string;
+  monthlySyncEnabled: boolean;
   timezone: string;
   userId: string;
 }
 
 const emptyForm: CreatorFormState = {
-  active: true,
-  bilibiliUid: '',
-  displayName: '',
-  roomId: '',
+  monthlySyncEnabled: true,
   timezone: 'Asia/Shanghai',
   userId: '',
 };
 
 function creatorForm(creator: CreatorRecord): CreatorFormState {
   return {
-    active: creator.active,
-    bilibiliUid: creator.bilibiliUid,
-    displayName: creator.displayName,
-    roomId: creator.roomId,
+    monthlySyncEnabled: creator.monthlySyncEnabled,
     timezone: creator.timezone,
     userId: creator.userId,
   };
@@ -51,10 +45,7 @@ function creatorForm(creator: CreatorRecord): CreatorFormState {
 
 function sameForm(left: CreatorFormState, right: CreatorFormState): boolean {
   return (
-    left.active === right.active &&
-    left.bilibiliUid === right.bilibiliUid &&
-    left.displayName === right.displayName &&
-    left.roomId === right.roomId &&
+    left.monthlySyncEnabled === right.monthlySyncEnabled &&
     left.timezone === right.timezone &&
     left.userId === right.userId
   );
@@ -62,9 +53,9 @@ function sameForm(left: CreatorFormState, right: CreatorFormState): boolean {
 
 export function AdminCreatorsPage() {
   const queryClient = useQueryClient();
-  const displayNameInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLFormElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const timezoneInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CreatorRecord | null>(null);
   const [form, setForm] = useState<CreatorFormState>(emptyForm);
@@ -75,10 +66,10 @@ export function AdminCreatorsPage() {
     queryFn: () => getAdminUsers(search),
     queryKey: ['admin', 'users', search],
   });
-  const focusEditor = () => {
+  const focusEditor = (mode: 'create' | 'edit') => {
     requestAnimationFrame(() => {
       editorRef.current?.scrollIntoView({ block: 'start' });
-      (searchInputRef.current ?? displayNameInputRef.current)?.focus();
+      (mode === 'edit' ? timezoneInputRef.current : searchInputRef.current)?.focus();
     });
   };
   const startEditing = (creator: CreatorRecord) => {
@@ -87,7 +78,7 @@ export function AdminCreatorsPage() {
       setEditing(creator);
       setForm(nextForm);
       setBaselineForm(nextForm);
-      focusEditor();
+      focusEditor('edit');
     });
   };
   const reset = () => {
@@ -98,39 +89,49 @@ export function AdminCreatorsPage() {
   const startNew = () => {
     unsavedChanges.requestDiscard(() => {
       reset();
-      focusEditor();
+      focusEditor('create');
     });
+  };
+  const refreshQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin', 'creators'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] }),
+    ]);
   };
   const save = useMutation({
     mutationFn: () =>
       editing
         ? updateAdminCreator(editing.id, {
-            active: form.active,
-            bilibiliUid: form.bilibiliUid,
-            displayName: form.displayName,
-            roomId: form.roomId,
+            monthlySyncEnabled: form.monthlySyncEnabled,
             timezone: form.timezone,
           })
         : createAdminCreator({
-            bilibiliUid: form.bilibiliUid,
-            displayName: form.displayName,
-            roomId: form.roomId,
+            monthlySyncEnabled: form.monthlySyncEnabled,
             timezone: form.timezone,
             userId: form.userId,
           }),
     onSuccess: async () => {
       reset();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'creators'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] }),
-      ]);
+      await refreshQueries();
+    },
+  });
+  const refreshProfile = useMutation({
+    mutationFn: () => refreshAdminCreatorProfile(editing!.id),
+    onSuccess: async (updated) => {
+      const nextForm = creatorForm(updated);
+      setEditing(updated);
+      setForm(nextForm);
+      setBaselineForm(nextForm);
+      await refreshQueries();
     },
   });
 
   if (creators.isPending) return <LoadingState label="正在读取主播…" />;
   if (creators.isError) return <ErrorState error={creators.error} />;
-  const eligibleUsers = users.data?.filter((user) => user.role === 'USER') ?? [];
+  const eligibleUsers =
+    users.data?.filter((user) => user.role === 'USER' && user.bilibiliBinding !== null) ?? [];
+  const selectedUser = eligibleUsers.find((user) => user.id === form.userId) ?? null;
   return (
     <div className="stack-lg">
       <PageHeader
@@ -140,7 +141,7 @@ export function AdminCreatorsPage() {
           </button>
         }
         eyebrow="主播账号"
-        intro="选择一个已有普通用户账号，将其提升为主播并绑定唯一主播档案。"
+        intro="从已完成 B站验证的普通用户中注册主播；身份资料由平台从 B站读取。"
         title="主播"
       />
       <div className="split-workspace creator-admin-workspace">
@@ -152,7 +153,7 @@ export function AdminCreatorsPage() {
             </div>
           </div>
           {creators.data.length === 0 ? (
-            <EmptyState description="从右侧选择一个普通用户账号开始注册。" title="还没有主播" />
+            <EmptyState description="从右侧选择一个已验证用户开始注册。" title="还没有主播" />
           ) : (
             <div className="creator-admin-list">
               {creators.data.map((creator) => (
@@ -170,7 +171,9 @@ export function AdminCreatorsPage() {
                     <small>{creator.email}</small>
                   </span>
                   <StatusBadge
-                    {...activeStatusPresentation[creator.active ? 'active' : 'inactive']}
+                    {...activeStatusPresentation[
+                      creator.monthlySyncEnabled ? 'active' : 'inactive'
+                    ]}
                   />
                 </button>
               ))}
@@ -187,8 +190,8 @@ export function AdminCreatorsPage() {
         >
           <div className="section-heading compact">
             <div>
-              <p className="eyebrow">{editing ? '编辑主播' : '注册主播'}</p>
-              <h2>{editing?.displayName ?? '关联用户账号'}</h2>
+              <p className="eyebrow">{editing ? '主播设置' : '注册主播'}</p>
+              <h2>{editing?.displayName ?? '选择已验证账号'}</h2>
             </div>
             {editing ? (
               <button className="text-button" onClick={startNew} type="button">
@@ -199,10 +202,10 @@ export function AdminCreatorsPage() {
           {!editing ? (
             <>
               <label>
-                搜索用户
+                搜索已验证用户
                 <input
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="输入昵称或邮箱"
+                  placeholder="输入昵称、邮箱、B站昵称或 UID"
                   ref={searchInputRef}
                   value={search}
                 />
@@ -219,90 +222,76 @@ export function AdminCreatorsPage() {
                   <option value="">请选择</option>
                   {eligibleUsers.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.name} · {user.email}
+                      {user.name} · UID {user.bilibiliBinding!.biliUid}
                     </option>
                   ))}
                 </select>
-                <small>注册后该账号将直接进入主播工作台。</small>
+                <small>这里只显示已完成 B站验证的普通用户。</small>
               </label>
+              {users.isSuccess && eligibleUsers.length === 0 ? (
+                <InlineNotice tone="info">没有找到可注册的已验证普通用户。</InlineNotice>
+              ) : null}
+              {selectedUser ? (
+                <div className="readonly-account">
+                  <span>B站身份</span>
+                  <strong>
+                    {selectedUser.bilibiliBinding!.biliDisplayName ??
+                      `UID ${selectedUser.bilibiliBinding!.biliUid}`}
+                  </strong>
+                  <small>
+                    UID {selectedUser.bilibiliBinding!.biliUid} · {selectedUser.email}
+                  </small>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="readonly-account">
-              <span>登录账号</span>
-              <strong>{editing.userName}</strong>
-              <small>{editing.email}</small>
+              <span>B站身份</span>
+              <strong>{editing.displayName}</strong>
+              <small>
+                UID {editing.bilibiliUid} · 直播间 {editing.roomId}
+              </small>
+              <small>最近同步：{formatDate(editing.profileSyncedAt, true)}</small>
+              <button
+                className="button secondary"
+                disabled={refreshProfile.isPending}
+                onClick={() => refreshProfile.mutate()}
+                type="button"
+              >
+                {refreshProfile.isPending ? '正在刷新…' : '刷新 B站资料'}
+              </button>
             </div>
           )}
-          <div className="form-grid">
-            <label>
-              主播显示名称
-              <input
-                maxLength={120}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, displayName: event.target.value }))
-                }
-                required
-                ref={displayNameInputRef}
-                value={form.displayName}
-              />
-            </label>
-            <label>
-              B站 UID
-              <input
-                inputMode="numeric"
-                maxLength={32}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, bilibiliUid: event.target.value }))
-                }
-                pattern="[0-9]+"
-                required
-                value={form.bilibiliUid}
-              />
-            </label>
-            <label>
-              直播间 ID
-              <input
-                inputMode="numeric"
-                maxLength={32}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, roomId: event.target.value }))
-                }
-                pattern="[0-9]+"
-                required
-                value={form.roomId}
-              />
-            </label>
-            <label>
-              名单结算时区
-              <input
-                maxLength={100}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, timezone: event.target.value }))
-                }
-                required
-                value={form.timezone}
-              />
-              <small>使用 IANA 时区，例如 Asia/Shanghai。</small>
-            </label>
-          </div>
-          {editing ? (
-            <label className="switch-field">
-              <input
-                checked={form.active}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, active: event.target.checked }))
-                }
-                type="checkbox"
-              />
-              <span>
-                <strong>启用月末名单同步</strong>
-                <small>停用后不再为未来月份创建任务。</small>
-              </span>
-            </label>
-          ) : null}
+          <label>
+            名单结算时区
+            <input
+              maxLength={100}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, timezone: event.target.value }))
+              }
+              ref={timezoneInputRef}
+              required
+              value={form.timezone}
+            />
+            <small>使用 IANA 时区，例如 Asia/Shanghai。</small>
+          </label>
+          <label className="switch-field">
+            <input
+              checked={form.monthlySyncEnabled}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, monthlySyncEnabled: event.target.checked }))
+              }
+              type="checkbox"
+            />
+            <span>
+              <strong>参与月末名单同步</strong>
+              <small>关闭后只停止未来任务，不影响主播账号、历史数据和公开礼物。</small>
+            </span>
+          </label>
           {save.isError ? <ErrorNotice error={save.error} /> : null}
+          {refreshProfile.isError ? <ErrorNotice error={refreshProfile.error} /> : null}
           <button className="button primary" disabled={save.isPending} type="submit">
-            {save.isPending ? '正在保存…' : editing ? '保存主播设置' : '注册为主播'}
+            {save.isPending ? '正在保存…' : editing ? '保存名单设置' : '注册为主播'}
           </button>
         </form>
       </div>

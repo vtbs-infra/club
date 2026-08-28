@@ -8,12 +8,10 @@ import { apiRequest } from './http';
 
 export type { CreatorRecord, UserRecord };
 
-export function updateCreatorProfile(input: {
-  readonly displayName?: string;
-}): Promise<Identity['creator']> {
-  return apiRequest('/api/v1/creator/profile', {
-    body: JSON.stringify(input),
-    method: 'PATCH',
+export function refreshCreatorProfile(): Promise<Identity['creator']> {
+  return apiRequest('/api/v1/creator/profile/refresh', {
+    body: JSON.stringify({}),
+    method: 'POST',
   });
 }
 
@@ -30,9 +28,7 @@ export function getAdminCreators(): Promise<readonly CreatorRecord[]> {
 }
 
 export function createAdminCreator(input: {
-  readonly bilibiliUid: string;
-  readonly displayName: string;
-  readonly roomId: string;
+  readonly monthlySyncEnabled?: boolean;
   readonly timezone: string;
   readonly userId: string;
 }): Promise<CreatorRecord> {
@@ -45,15 +41,19 @@ export function createAdminCreator(input: {
 export function updateAdminCreator(
   creatorId: string,
   input: {
-    readonly active?: boolean;
-    readonly bilibiliUid?: string;
-    readonly displayName?: string;
-    readonly roomId?: string;
+    readonly monthlySyncEnabled?: boolean;
     readonly timezone?: string;
   },
 ): Promise<CreatorRecord> {
   return apiRequest(`/api/v1/admin/creators/${creatorId}`, {
     body: JSON.stringify(input),
     method: 'PATCH',
+  });
+}
+
+export function refreshAdminCreatorProfile(creatorId: string): Promise<CreatorRecord> {
+  return apiRequest(`/api/v1/admin/creators/${creatorId}/refresh-profile`, {
+    body: JSON.stringify({}),
+    method: 'POST',
   });
 }

@@ -52,7 +52,7 @@ export function AdminOverviewPage() {
               ? '正在读取主播数据'
               : overview.isError
                 ? '主播数据暂时不可用'
-                : `${overview.data.activeCreators} 位启用中`
+                : `${overview.data.monthlySyncCreators} 位参与同步`
           }
           icon={UsersRound}
           label="注册主播"
@@ -274,7 +274,9 @@ export function AdminOverviewPage() {
                   <span className="mini-avatar">{creator.displayName.slice(0, 1)}</span>
                   <strong>{creator.displayName}</strong>
                   <StatusBadge
-                    {...activeStatusPresentation[creator.active ? 'active' : 'inactive']}
+                    {...activeStatusPresentation[
+                      creator.monthlySyncEnabled ? 'active' : 'inactive'
+                    ]}
                   />
                 </div>
               ))}

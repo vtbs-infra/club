@@ -82,6 +82,17 @@ integration('exclusive platform roles and creator ownership', () => {
     const recipientCookie = await signInTestUser({ app, email: 'recipient@example.com' });
     const adminCookie = await signInTestUser({ app, email: 'admin@example.com' });
 
+    const unboundPromotion = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'POST',
+      payload: { timezone: 'Asia/Shanghai', userId: recipientId },
+      url: '/api/v1/admin/creators',
+    });
+    expect(unboundPromotion.statusCode).toBe(409);
+    expect(unboundPromotion.json()).toMatchObject({
+      error: { code: 'CREATOR_BILIBILI_BINDING_REQUIRED' },
+    });
+
     const identity = await app.inject({
       headers: { cookie: recipientCookie },
       method: 'GET',
@@ -113,12 +124,14 @@ integration('exclusive platform roles and creator ownership', () => {
     const creatorOne = await promoteTestCreator({
       adminCookie,
       app,
+      database,
       suffix: '001',
       userId: creatorOneUserId,
     });
     await promoteTestCreator({
       adminCookie,
       app,
+      database,
       suffix: '002',
       userId: creatorTwoUserId,
     });
@@ -145,9 +158,6 @@ integration('exclusive platform roles and creator ownership', () => {
       headers: { cookie: adminCookie, origin: TEST_ORIGIN },
       method: 'POST',
       payload: {
-        bilibiliUid: '91999',
-        displayName: 'Duplicate',
-        roomId: '81999',
         timezone: 'Asia/Shanghai',
         userId: creatorOneUserId,
       },
@@ -163,9 +173,37 @@ integration('exclusive platform roles and creator ownership', () => {
       url: '/api/v1/me',
     });
     expect(creatorIdentity.json<Identity>()).toMatchObject({
-      creator: { displayName: 'Creator 001', id: creatorOne.id },
+      creator: {
+        displayName: 'Creator 91001',
+        id: creatorOne.id,
+        monthlySyncEnabled: true,
+      },
       user: { role: 'CREATOR' },
     });
+    expect(
+      (
+        await app.inject({
+          headers: { cookie: creatorOneCookie },
+          method: 'GET',
+          url: '/api/v1/me/gifts',
+        })
+      ).statusCode,
+    ).toBe(200);
+    const creatorBinding = await app.inject({
+      headers: { cookie: creatorOneCookie },
+      method: 'GET',
+      url: '/api/v1/me/bilibili-binding',
+    });
+    const immutableUnbind = await app.inject({
+      headers: { cookie: creatorOneCookie, origin: TEST_ORIGIN },
+      method: 'DELETE',
+      url: '/api/v1/me/bilibili-binding',
+    });
+    expect(immutableUnbind.statusCode).toBe(409);
+    expect(immutableUnbind.json()).toMatchObject({
+      error: { code: 'CREATOR_BILIBILI_BINDING_IMMUTABLE' },
+    });
+    expect(creatorBinding.json()).toMatchObject({ biliUid: '91001' });
     expect(
       (
         await app.inject({

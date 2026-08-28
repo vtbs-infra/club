@@ -32,6 +32,9 @@ import { AppearanceService } from './modules/appearance/appearance-service.js';
 import appearanceRoutes from './modules/appearance/routes.js';
 import { AuditQueryService } from './modules/audit/audit-query-service.js';
 import auditRoutes from './modules/audit/routes.js';
+import type { CreatorProfileSource } from './modules/bilibili/creator-profile-source.js';
+import { FakeCreatorProfileSource } from './modules/bilibili/fake-creator-profile-source.js';
+import { PublicWebCreatorProfileSource } from './modules/bilibili/public-web-creator-profile-source.js';
 import { CreatorService } from './modules/creators/creator-service.js';
 import creatorRoutes from './modules/creators/routes.js';
 import {
@@ -59,6 +62,7 @@ export interface BuildAppOptions {
   readonly challengeLimiter?: InMemoryRateLimiter;
   readonly clock?: Clock;
   readonly config?: AppConfig;
+  readonly creatorProfileSource?: CreatorProfileSource;
   readonly database?: DatabaseService;
   readonly fulfillmentRuntime?: FulfillmentRuntime;
   readonly loggerStream?: DestinationStream;
@@ -97,8 +101,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const bindingRuntime =
     options.bindingRuntime ??
     createBindingRuntime({ clock, config, database, reportError: reportRuntimeError });
+  const creatorProfileSource =
+    options.creatorProfileSource ??
+    (config.bilibiliRosterSource === 'fake'
+      ? new FakeCreatorProfileSource()
+      : new PublicWebCreatorProfileSource());
   const addressService = new AddressService(database, encryption);
-  const creatorService = new CreatorService(database);
+  const creatorService = new CreatorService(database, creatorProfileSource, clock);
   const releaseService = new GiftReleaseService(database);
   const announcementService = new AnnouncementService(database);
   const appearanceService = new AppearanceService(database);

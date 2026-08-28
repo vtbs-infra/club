@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest, preHandlerHookHandler } from 'fastify';
 
@@ -51,23 +51,20 @@ export function createRequireCreator(
     }
     const [creator] = await database.orm
       .select({
-        active: creators.active,
         bilibiliUid: creators.bilibiliUid,
         displayName: creators.displayName,
         id: creators.id,
+        monthlySyncEnabled: creators.monthlySyncEnabled,
+        profileSyncedAt: creators.profileSyncedAt,
         roomId: creators.roomId,
         timezone: creators.timezone,
         userId: creators.userId,
       })
       .from(creators)
-      .where(and(eq(creators.userId, session.user.id), eq(creators.active, true)))
+      .where(eq(creators.userId, session.user.id))
       .limit(1);
     if (!creator) {
-      throw new AppError(
-        'CREATOR_PROFILE_UNAVAILABLE',
-        'The creator profile is inactive or missing.',
-        403,
-      );
+      throw new AppError('CREATOR_PROFILE_UNAVAILABLE', 'The creator profile is missing.', 403);
     }
     request.creatorProfile = creator;
   };

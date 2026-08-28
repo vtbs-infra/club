@@ -41,10 +41,11 @@ export function creatorIdentity(
 ): Identity {
   return {
     creator: {
-      active: true,
       bilibiliUid: '90001',
       displayName: '测试主播',
       id: testId(32),
+      monthlySyncEnabled: true,
+      profileSyncedAt: testTime(-1),
       roomId: '80001',
       timezone: 'Asia/Shanghai',
       ...overrides.creator,
@@ -221,6 +222,7 @@ export function bilibiliBinding(overrides: Partial<BilibiliBinding> = {}): Bilib
 
 export function userRecord(overrides: Partial<UserRecord> = {}): UserRecord {
   return {
+    bilibiliBinding: null,
     email: 'candidate@example.com',
     id: testId(41),
     name: '候选主播',

@@ -167,7 +167,6 @@ export class GiftMediaService {
       .select({
         claimDeadlineAt: giftReleases.claimDeadlineAt,
         claimStartAt: giftReleases.claimStartAt,
-        creatorActive: creators.active,
         creatorUserId: creators.userId,
         objectKey: giftReleases.coverObjectKey,
         publicVisible: giftReleases.publicVisible,
@@ -181,7 +180,6 @@ export class GiftMediaService {
       throw new AppError('GIFT_COVER_NOT_FOUND', 'Gift cover not found.', 404);
     const now = new Date();
     const publiclyAccessible =
-      release.creatorActive &&
       release.publicVisible &&
       release.status === 'PUBLISHED' &&
       release.claimStartAt <= now &&

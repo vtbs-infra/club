@@ -27,6 +27,7 @@ import { createTestConfig } from '../helpers/test-config.js';
 integration('public portal visibility', () => {
   let adminCookie: string;
   let app: Awaited<ReturnType<typeof buildApp>>;
+  let creatorOneId: string;
   let creatorOneCookie: string;
   let creatorTwoCookie: string;
   let database: DatabaseService;
@@ -67,15 +68,18 @@ integration('public portal visibility', () => {
       name: 'Creator Account Two',
     });
     adminCookie = await signInTestUser({ app, email: 'admin@example.com' });
-    await promoteTestCreator({
+    const creatorOne = await promoteTestCreator({
       adminCookie,
       app,
+      database,
       suffix: '001',
       userId: creatorOneUserId,
     });
+    creatorOneId = creatorOne.id;
     await promoteTestCreator({
       adminCookie,
       app,
+      database,
       suffix: '002',
       userId: creatorTwoUserId,
     });
@@ -207,6 +211,21 @@ integration('public portal visibility', () => {
     });
     expect(updatedAnnouncement.statusCode, updatedAnnouncement.body).toBe(200);
 
+    const disableMonthlySync = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'PATCH',
+      payload: { monthlySyncEnabled: false },
+      url: `/api/v1/admin/creators/${creatorOneId}`,
+    });
+    expect(disableMonthlySync.statusCode, disableMonthlySync.body).toBe(200);
+
+    const creatorWorkspace = await app.inject({
+      headers: { cookie: creatorOneCookie },
+      method: 'GET',
+      url: '/api/v1/creator/releases',
+    });
+    expect(creatorWorkspace.statusCode, creatorWorkspace.body).toBe(200);
+
     const publicPortal = await app.inject({ method: 'GET', url: '/api/v1/portal/home' });
     expect(publicPortal.statusCode, publicPortal.body).toBe(200);
     const portal = publicPortal.json<PortalHome>();
@@ -223,7 +242,7 @@ integration('public portal visibility', () => {
       releases: [
         {
           coverImageUrl: null,
-          creatorName: 'Creator 001',
+          creatorName: 'Creator 91001',
           description: '本月舰长纪念礼物。',
           id: draft.id,
           title: '八月舰长礼物',

@@ -8,6 +8,7 @@ import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   bilibiliBindings,
   bindingChallenges,
+  creators,
   verificationRooms,
 } from '../../infrastructure/db/schema/index.js';
 import { AuditService } from '../audit/audit-service.js';
@@ -370,6 +371,18 @@ export class BindingService {
       if (!binding) {
         throw new AppError('BILIBILI_BINDING_NOT_FOUND', 'No active Bilibili binding exists.', 404);
       }
+      const [creator] = await transaction
+        .select({ id: creators.id })
+        .from(creators)
+        .where(eq(creators.bindingId, binding.id))
+        .limit(1);
+      if (creator) {
+        throw new AppError(
+          'CREATOR_BILIBILI_BINDING_IMMUTABLE',
+          'A creator account cannot replace its verified Bilibili identity.',
+          409,
+        );
+      }
       await transaction
         .update(bilibiliBindings)
         .set({ unboundAt: this.clock.now(), updatedAt: this.clock.now() })
@@ -401,6 +414,18 @@ export class BindingService {
         .for('update');
       if (!binding) {
         throw new AppError('BILIBILI_BINDING_NOT_FOUND', 'No active Bilibili binding exists.', 404);
+      }
+      const [creator] = await transaction
+        .select({ id: creators.id })
+        .from(creators)
+        .where(eq(creators.bindingId, binding.id))
+        .limit(1);
+      if (creator) {
+        throw new AppError(
+          'CREATOR_BILIBILI_BINDING_IMMUTABLE',
+          'A creator account cannot replace its verified Bilibili identity.',
+          409,
+        );
       }
       await transaction
         .update(bilibiliBindings)

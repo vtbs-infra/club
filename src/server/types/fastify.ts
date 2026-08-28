@@ -9,7 +9,8 @@ interface CreatorProfile {
   readonly roomId: string;
   readonly displayName: string;
   readonly timezone: string;
-  readonly active: boolean;
+  readonly monthlySyncEnabled: boolean;
+  readonly profileSyncedAt: Date;
 }
 
 declare module 'fastify' {

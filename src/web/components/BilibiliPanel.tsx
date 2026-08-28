@@ -6,6 +6,7 @@ import {
   createChallenge,
   getBinding,
   getChallenge,
+  getIdentity,
   unbindBilibili,
   type BilibiliChallenge,
   type IssuedBilibiliChallenge,
@@ -32,6 +33,7 @@ export function BilibiliPanel() {
   const queryClient = useQueryClient();
   const [issued, setIssued] = useState<IssuedBilibiliChallenge | null>(null);
   const [confirmUnbind, setConfirmUnbind] = useState(false);
+  const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
   const binding = useQuery({
     queryFn: getBinding,
     queryKey: ['me', 'bilibili-binding'],
@@ -84,27 +86,36 @@ export function BilibiliPanel() {
             <h2>{binding.data.biliDisplayName ?? `UID ${binding.data.biliUid}`}</h2>
             <p>UID {binding.data.biliUid} · 礼物资格会通过这个 UID 自动匹配。</p>
           </div>
-          <button
-            className="button ghost danger"
-            disabled={remove.isPending}
-            onClick={() => setConfirmUnbind(true)}
-            type="button"
-          >
-            解除绑定
-          </button>
+          {identity.data?.user.role === 'USER' ? (
+            <button
+              className="button ghost danger"
+              disabled={remove.isPending}
+              onClick={() => setConfirmUnbind(true)}
+              type="button"
+            >
+              解除绑定
+            </button>
+          ) : null}
         </section>
+        {identity.data?.user.role === 'CREATOR' ? (
+          <InlineNotice tone="info">
+            该 UID 已作为主播身份使用，不能替换；主播资料可在主播设置中刷新。
+          </InlineNotice>
+        ) : null}
         {binding.isError ? <ErrorNotice error={binding.error} /> : null}
         {remove.isError ? <ErrorNotice error={remove.error} /> : null}
-        <ConfirmDialog
-          busy={remove.isPending}
-          confirmLabel="解除绑定"
-          description="解绑后，尚未领取的礼物会暂时隐藏；已经提交的礼物单和冻结资料不受影响。"
-          onCancel={() => setConfirmUnbind(false)}
-          onConfirm={() => remove.mutate()}
-          open={confirmUnbind}
-          title="确认解除 B站绑定？"
-          tone="danger"
-        />
+        {identity.data?.user.role === 'USER' ? (
+          <ConfirmDialog
+            busy={remove.isPending}
+            confirmLabel="解除绑定"
+            description="解绑后，尚未领取的礼物会暂时隐藏；已经提交的礼物单和冻结资料不受影响。"
+            onCancel={() => setConfirmUnbind(false)}
+            onConfirm={() => remove.mutate()}
+            open={confirmUnbind}
+            title="确认解除 B站绑定？"
+            tone="danger"
+          />
+        ) : null}
       </>
     );
   }

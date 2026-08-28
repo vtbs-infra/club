@@ -8,7 +8,6 @@ import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
 import {
   bilibiliBindings,
   bindingChallenges,
-  creators,
   auditLogs,
   giftOrderItems,
   giftOrderStatusHistory,
@@ -28,6 +27,7 @@ import { GiftOrderService } from '../../src/server/modules/gifts/order-service.j
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
 import { createTestConfig } from '../helpers/test-config.js';
 import { createReleaseDraft } from '../helpers/gift-release.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import {
   createIntegrationDatabase,
   integration,
@@ -85,25 +85,22 @@ integration('gift order lifecycle', () => {
     creatorUserId = accountId('creator-one@example.com');
     userOneId = accountId('recipient-one@example.com');
     userTwoId = accountId('recipient-two@example.com');
-    const creatorRows = await database.orm
-      .insert(creators)
-      .values([
-        {
-          bilibiliUid: '90001',
-          displayName: 'Creator One',
-          roomId: '80001',
-          userId: creatorUserId,
-        },
-        {
-          bilibiliUid: '90002',
-          displayName: 'Creator Two',
-          roomId: '80002',
-          userId: accountId('creator-two@example.com'),
-        },
-      ])
-      .returning({ displayName: creators.displayName, id: creators.id });
-    creatorId = creatorRows.find((row) => row.displayName === 'Creator One')!.id;
-    otherCreatorId = creatorRows.find((row) => row.displayName === 'Creator Two')!.id;
+    creatorId = (
+      await insertTestCreator(database, {
+        bilibiliUid: '90001',
+        displayName: 'Creator One',
+        roomId: '80001',
+        userId: creatorUserId,
+      })
+    ).id;
+    otherCreatorId = (
+      await insertTestCreator(database, {
+        bilibiliUid: '90002',
+        displayName: 'Creator Two',
+        roomId: '80002',
+        userId: accountId('creator-two@example.com'),
+      })
+    ).id;
     const [room] = await database.orm
       .insert(verificationRooms)
       .values({

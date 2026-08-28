@@ -88,7 +88,7 @@ export class SnapshotService {
     const enabled = await this.database.orm
       .select()
       .from(creators)
-      .where(eq(creators.active, true));
+      .where(eq(creators.monthlySyncEnabled, true));
     let created = 0;
     for (const row of enabled) {
       for (const periodStart of relevantMonthlyPeriods(this.clock.now(), row.timezone)) {
@@ -151,7 +151,7 @@ export class SnapshotService {
         and(
           inArray(snapshotRuns.status, ['SCHEDULED', 'FAILED']),
           lte(snapshotRuns.scheduledCutoffAt, this.clock.now()),
-          eq(creators.active, true),
+          eq(creators.monthlySyncEnabled, true),
         ),
       )
       .orderBy(asc(snapshotRuns.scheduledCutoffAt));
@@ -162,7 +162,7 @@ export class SnapshotService {
   private async beginAttempt(runId: string): Promise<{ attemptId: string; run: CaptureRun }> {
     return this.database.orm.transaction(async (transaction) => {
       const [selection] = await transaction
-        .select({ active: creators.active, run: snapshotRuns })
+        .select({ monthlySyncEnabled: creators.monthlySyncEnabled, run: snapshotRuns })
         .from(snapshotRuns)
         .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
         .where(eq(snapshotRuns.id, runId))
@@ -170,10 +170,10 @@ export class SnapshotService {
         .for('update');
       const run = selection?.run;
       if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
-      if (!selection.active) {
+      if (!selection.monthlySyncEnabled) {
         throw new AppError(
-          'SNAPSHOT_CREATOR_INACTIVE',
-          'An inactive creator cannot start a snapshot capture.',
+          'SNAPSHOT_MONTHLY_SYNC_DISABLED',
+          'A creator with monthly synchronization disabled cannot start a snapshot capture.',
           409,
         );
       }

@@ -5,6 +5,7 @@ import type { buildApp } from '../../src/server/app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { users } from '../../src/server/infrastructure/db/schema/index.js';
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';
+import { insertTestBilibiliBinding } from './creator-fixture.js';
 
 export const TEST_ORIGIN = 'http://localhost:3000';
 export const TEST_PASSWORD = 'correct-horse-battery-staple';
@@ -71,16 +72,19 @@ export async function signInTestUser(input: {
 export async function promoteTestCreator(input: {
   readonly adminCookie: string;
   readonly app: InjectableApp;
+  readonly database: DatabaseService;
   readonly suffix: string;
   readonly userId: string;
 }): Promise<CreatorRecord> {
+  await insertTestBilibiliBinding(input.database, {
+    biliDisplayName: `Creator 91${input.suffix}`,
+    biliUid: `91${input.suffix}`,
+    userId: input.userId,
+  });
   const response = await input.app.inject({
     headers: { cookie: input.adminCookie, origin: TEST_ORIGIN },
     method: 'POST',
     payload: {
-      bilibiliUid: `91${input.suffix}`,
-      displayName: `Creator ${input.suffix}`,
-      roomId: `81${input.suffix}`,
       timezone: 'Asia/Shanghai',
       userId: input.userId,
     },

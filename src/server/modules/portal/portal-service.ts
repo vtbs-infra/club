@@ -65,7 +65,6 @@ export class PortalService {
           and(
             eq(giftReleases.status, 'PUBLISHED'),
             eq(giftReleases.publicVisible, true),
-            eq(creators.active, true),
             lte(giftReleases.claimStartAt, now),
             gt(giftReleases.claimDeadlineAt, now),
             lte(giftReleases.publishedAt, now),

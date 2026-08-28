@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
-import { creators, users } from '../../src/server/infrastructure/db/schema/index.js';
+import { users } from '../../src/server/infrastructure/db/schema/index.js';
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
 import { createReleaseDraft } from '../helpers/gift-release.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import {
   createIntegrationDatabase,
   integration,
@@ -25,16 +26,14 @@ integration('gift release lifecycle', () => {
       .values({ email: 'creator@example.com', name: 'Creator', role: 'CREATOR' })
       .returning({ id: users.id });
     creatorUserId = account!.id;
-    const [creator] = await database.orm
-      .insert(creators)
-      .values({
+    creatorId = (
+      await insertTestCreator(database, {
         bilibiliUid: '90001',
         displayName: 'Creator',
         roomId: '80001',
         userId: creatorUserId,
       })
-      .returning({ id: creators.id });
-    creatorId = creator!.id;
+    ).id;
     releaseService = new GiftReleaseService(database);
   });
 

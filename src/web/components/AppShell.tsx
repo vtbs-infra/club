@@ -105,9 +105,13 @@ export function ProtectedLayout({ area }: { readonly area: 'admin' | 'creator' |
       </main>
     );
   }
-  const expectedRole: AccountRole =
-    area === 'admin' ? 'PLATFORM_ADMIN' : area === 'creator' ? 'CREATOR' : 'USER';
-  if (identity.data.user.role !== expectedRole) {
+  const allowed =
+    area === 'admin'
+      ? identity.data.user.role === 'PLATFORM_ADMIN'
+      : area === 'creator'
+        ? identity.data.user.role === 'CREATOR'
+        : ['USER', 'CREATOR'].includes(identity.data.user.role);
+  if (!allowed) {
     return <Navigate replace to={roleHome(identity.data.user.role)} />;
   }
   return <Shell area={area} identity={identity.data} />;
@@ -189,6 +193,18 @@ function Shell({
                     <strong>{identity.user.name}</strong>
                     <small>{identity.user.email}</small>
                   </DropdownMenu.Label>
+                  {identity.user.role === 'CREATOR' ? (
+                    <DropdownMenu.Item asChild>
+                      <Link to={area === 'creator' ? '/dashboard' : '/creator'}>
+                        {area === 'creator' ? (
+                          <Gift aria-hidden="true" size={16} />
+                        ) : (
+                          <LayoutDashboard aria-hidden="true" size={16} />
+                        )}
+                        <span>{area === 'creator' ? '我的礼物' : '主播工作台'}</span>
+                      </Link>
+                    </DropdownMenu.Item>
+                  ) : null}
                   {area === 'user' ? (
                     <>
                       <DropdownMenu.Item asChild>

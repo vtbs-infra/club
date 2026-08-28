@@ -74,6 +74,7 @@ integration('platform appearance', () => {
     await promoteTestCreator({
       adminCookie,
       app,
+      database,
       suffix: '003',
       userId: creatorUserId,
     });

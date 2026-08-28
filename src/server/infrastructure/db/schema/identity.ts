@@ -22,18 +22,25 @@ export const creators = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
+    bindingId: uuid('binding_id')
+      .notNull()
+      .references(() => bilibiliBindings.id, { onDelete: 'restrict' }),
     bilibiliUid: text('bilibili_uid').notNull(),
     roomId: text('room_id').notNull(),
     displayName: text('display_name').notNull(),
     timezone: text('timezone').default('Asia/Shanghai').notNull(),
-    active: boolean('active').default(true).notNull(),
+    monthlySyncEnabled: boolean('monthly_sync_enabled').default(true).notNull(),
+    profileSyncedAt: timestamp('profile_synced_at', { mode: 'date', withTimezone: true })
+      .defaultNow()
+      .notNull(),
     ...timestamps,
   },
   (table) => [
     uniqueIndex('creators_user_unique').on(table.userId),
+    uniqueIndex('creators_binding_unique').on(table.bindingId),
     uniqueIndex('creators_bilibili_uid_unique').on(table.bilibiliUid),
     uniqueIndex('creators_room_id_unique').on(table.roomId),
-    index('creators_active_idx').on(table.active),
+    index('creators_monthly_sync_enabled_idx').on(table.monthlySyncEnabled),
   ],
 );
 

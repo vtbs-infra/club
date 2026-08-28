@@ -3,10 +3,11 @@ import { Type, type Static } from '@sinclair/typebox';
 import { AccountRoleSchema, DateTimeSchema, IdSchema, Nullable } from './common.js';
 
 export const CreatorProfileSchema = Type.Object({
-  active: Type.Boolean(),
   bilibiliUid: Type.String(),
   displayName: Type.String(),
   id: IdSchema,
+  monthlySyncEnabled: Type.Boolean(),
+  profileSyncedAt: DateTimeSchema,
   roomId: Type.String(),
   timezone: Type.String(),
 });
@@ -24,6 +25,13 @@ export const IdentitySchema = Type.Object({
 export type Identity = Static<typeof IdentitySchema>;
 
 export const UserRecordSchema = Type.Object({
+  bilibiliBinding: Nullable(
+    Type.Object({
+      biliDisplayName: Nullable(Type.String()),
+      biliUid: Type.String(),
+      id: IdSchema,
+    }),
+  ),
   email: Type.String({ format: 'email' }),
   id: IdSchema,
   name: Type.String(),
@@ -32,12 +40,13 @@ export const UserRecordSchema = Type.Object({
 export type UserRecord = Static<typeof UserRecordSchema>;
 
 export const CreatorRecordSchema = Type.Object({
-  active: Type.Boolean(),
   bilibiliUid: Type.String(),
   createdAt: DateTimeSchema,
   displayName: Type.String(),
   email: Type.String({ format: 'email' }),
   id: IdSchema,
+  monthlySyncEnabled: Type.Boolean(),
+  profileSyncedAt: DateTimeSchema,
   roomId: Type.String(),
   timezone: Type.String(),
   userId: IdSchema,
@@ -47,34 +56,29 @@ export type CreatorRecord = Static<typeof CreatorRecordSchema>;
 
 export const CreatorInputSchema = Type.Object(
   {
-    bilibiliUid: Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' }),
-    displayName: Type.String({ maxLength: 120, minLength: 1 }),
-    roomId: Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' }),
+    monthlySyncEnabled: Type.Optional(Type.Boolean()),
     timezone: Type.String({ maxLength: 100, minLength: 1 }),
     userId: IdSchema,
   },
   { additionalProperties: false },
 );
 
-export const CreatorUpdateSchema = Type.Object(
+export const CreatorSettingsSchema = Type.Object(
   {
-    active: Type.Optional(Type.Boolean()),
-    bilibiliUid: Type.Optional(Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' })),
-    displayName: Type.Optional(Type.String({ maxLength: 120, minLength: 1 })),
-    roomId: Type.Optional(Type.String({ maxLength: 32, minLength: 1, pattern: '^[0-9]+$' })),
+    monthlySyncEnabled: Type.Optional(Type.Boolean()),
     timezone: Type.Optional(Type.String({ maxLength: 100, minLength: 1 })),
   },
   { additionalProperties: false, minProperties: 1 },
 );
 
 export const CreatorOverviewSchema = Type.Object({
-  activeCreators: Type.Integer({ minimum: 0 }),
   creators: Type.Integer({ minimum: 0 }),
+  monthlySyncCreators: Type.Integer({ minimum: 0 }),
   recent: Type.Array(
     Type.Object({
-      active: Type.Boolean(),
       displayName: Type.String(),
       id: IdSchema,
+      monthlySyncEnabled: Type.Boolean(),
       updatedAt: DateTimeSchema,
     }),
   ),

@@ -1,5 +1,11 @@
 import { mockApi, requestPath } from './support/api.js';
-import { adminIdentity, systemStatus, userRecord, verificationRoom } from './support/fixtures.js';
+import {
+  adminIdentity,
+  bilibiliBinding,
+  systemStatus,
+  userRecord,
+  verificationRoom,
+} from './support/fixtures.js';
 import { expect, freezeBrowserTime, test } from './support/test.js';
 
 test.beforeEach(async ({ page }) => {
@@ -12,7 +18,9 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return adminIdentity();
     if (pathname === '/api/v1/admin/creators') return [];
-    if (pathname === '/api/v1/admin/users') return [userRecord()];
+    if (pathname === '/api/v1/admin/users') {
+      return [userRecord({ bilibiliBinding: bilibiliBinding() })];
+    }
     if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
     if (pathname === '/api/v1/admin/announcements') return [];
     if (pathname === '/api/v1/admin/system') return systemStatus();
@@ -22,8 +30,8 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
 
   await page.goto(`${appUrl}/admin/creators`);
   await page.getByRole('button', { name: '注册主播' }).click();
-  await expect(page.getByLabel('搜索用户')).toBeFocused();
-  await expect(page.getByLabel('搜索用户')).toBeInViewport();
+  await expect(page.getByLabel('搜索已验证用户')).toBeFocused();
+  await expect(page.getByLabel('搜索已验证用户')).toBeInViewport();
 
   await page.goto(`${appUrl}/admin/verification`);
   const verificationHealth = page.locator('.room-row .status-badge').filter({ hasText: '健康' });
