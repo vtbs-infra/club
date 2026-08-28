@@ -76,6 +76,10 @@ export const snapshotAttempts = pgTable(
     normalizedTotal: integer('normalized_total'),
     sourceName: text('source_name').notNull(),
     sourceVersion: text('source_version').notNull(),
+    initiatedBy: text('initiated_by').default('SCHEDULER').notNull(),
+    requestedByUserId: uuid('requested_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     failureCode: text('failure_code'),
     failureMessage: text('failure_message'),
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
@@ -91,6 +95,10 @@ export const snapshotAttempts = pgTable(
       'snapshot_attempts_consistency_check',
       sql`${table.consistencyStatus} in ('PENDING', 'CONSISTENT', 'INCONSISTENT')`,
     ),
+    check(
+      'snapshot_attempts_initiated_by_check',
+      sql`${table.initiatedBy} in ('SCHEDULER', 'ADMIN')`,
+    ),
   ],
 );
 
@@ -101,7 +109,10 @@ export const snapshotPages = pgTable(
     snapshotAttemptId: uuid('snapshot_attempt_id')
       .notNull()
       .references(() => snapshotAttempts.id, { onDelete: 'restrict' }),
+    captureKind: text('capture_kind').notNull(),
     pageNumber: integer('page_number').notNull(),
+    declaredPageCount: integer('declared_page_count').notNull(),
+    declaredTotal: integer('declared_total').notNull(),
     objectKey: text('object_key').notNull(),
     contentHashSha256: text('content_hash_sha256').notNull(),
     contentEncoding: text('content_encoding').default('gzip').notNull(),
@@ -112,9 +123,18 @@ export const snapshotPages = pgTable(
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex('snapshot_pages_attempt_page_unique').on(table.snapshotAttemptId, table.pageNumber),
+    uniqueIndex('snapshot_pages_attempt_kind_page_unique').on(
+      table.snapshotAttemptId,
+      table.captureKind,
+      table.pageNumber,
+    ),
     uniqueIndex('snapshot_pages_object_key_unique').on(table.objectKey),
     check('snapshot_pages_page_positive', sql`${table.pageNumber} > 0`),
+    check('snapshot_pages_capture_kind_check', sql`${table.captureKind} in ('PAGE', 'RECHECK')`),
+    check(
+      'snapshot_pages_declared_counts_check',
+      sql`${table.declaredPageCount} > 0 and ${table.declaredTotal} >= 0`,
+    ),
     check('snapshot_pages_hash_check', sql`${table.contentHashSha256} ~ '^[0-9a-f]{64}$'`),
     check(
       'snapshot_pages_sizes_non_negative',

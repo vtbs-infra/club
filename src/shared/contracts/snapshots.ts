@@ -45,8 +45,10 @@ export const SnapshotAttemptSchema = Type.Object({
   failureCode: Nullable(Type.String()),
   failureMessage: Nullable(Type.String()),
   id: IdSchema,
+  initiatedBy: Type.Union([Type.Literal('SCHEDULER'), Type.Literal('ADMIN')]),
   normalizedTotal: Nullable(Type.Integer({ minimum: 0 })),
   punctuality: Nullable(Type.Union([Type.Literal('ON_TIME'), Type.Literal('LATE')])),
+  requestedByUserId: Nullable(IdSchema),
   schedulerStartedAt: DateTimeSchema,
   snapshotRunId: IdSchema,
   sourceName: Type.String(),
@@ -54,10 +56,13 @@ export const SnapshotAttemptSchema = Type.Object({
 });
 
 export const SnapshotPageSchema = Type.Object({
+  captureKind: Type.Union([Type.Literal('PAGE'), Type.Literal('RECHECK')]),
   compressedSize: Type.Integer({ minimum: 0 }),
   contentEncoding: Type.String(),
   contentHashSha256: Type.String(),
   createdAt: DateTimeSchema,
+  declaredPageCount: Type.Integer({ minimum: 1 }),
+  declaredTotal: Type.Integer({ minimum: 0 }),
   fetchedAt: DateTimeSchema,
   id: IdSchema,
   itemCount: Type.Integer({ minimum: 0 }),
@@ -114,5 +119,6 @@ export const SnapshotIntegrityResultSchema = Type.Object({
   ok: Type.Boolean(),
   pageNumber: Type.Integer({ minimum: 1 }),
   snapshotAttemptId: IdSchema,
+  snapshotPageId: IdSchema,
 });
 export type SnapshotIntegrityResult = Static<typeof SnapshotIntegrityResultSchema>;

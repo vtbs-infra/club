@@ -90,7 +90,7 @@ export class SnapshotQueryService {
                 attempts.map((attempt) => attempt.id),
               ),
             )
-            .orderBy(asc(snapshotPages.pageNumber));
+            .orderBy(asc(snapshotPages.createdAt), asc(snapshotPages.pageNumber));
     const members = await this.database.orm
       .select()
       .from(snapshotMembers)
@@ -142,6 +142,7 @@ export class SnapshotQueryService {
           ok: createHash('sha256').update(raw).digest('hex') === page.contentHashSha256,
           pageNumber: page.pageNumber,
           snapshotAttemptId: page.snapshotAttemptId,
+          snapshotPageId: page.id,
         });
       } catch {
         results.push({
@@ -149,6 +150,7 @@ export class SnapshotQueryService {
           ok: false,
           pageNumber: page.pageNumber,
           snapshotAttemptId: page.snapshotAttemptId,
+          snapshotPageId: page.id,
         });
       }
     }

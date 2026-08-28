@@ -28,12 +28,17 @@ import {
 } from '../../lib/status-presentation';
 
 const failureLabel: Readonly<Record<string, string>> = {
-  CAPTURE_ATTEMPT_LIMIT_REACHED: '已达到最大同步次数',
-  DUPLICATE_MEMBER: '名单中存在重复 UID',
-  INVALID_TIER: '名单包含无法识别的舰队等级',
+  CAPTURE_TIMEOUT: '名单抓取超过时间限制',
+  COUNT_DRIFT: '分页期间名单总数发生变化',
+  COUNT_MISMATCH: '分页汇总人数与来源声明不一致',
+  DUPLICATE_UID: '名单中存在重复 UID',
+  FIRST_PAGE_DRIFT: '抓取期间首页名单发生变化',
+  INVALID_FIRST_PAGE: '来源返回了无效的首页分页信息',
+  MISSING_PAGE: '来源返回的分页缺失或顺序异常',
   PAGE_LIMIT_EXCEEDED: '来源返回的分页数量异常',
-  PROVIDER_ERROR: 'B站名单来源请求失败',
-  TOTAL_MISMATCH: '分页汇总人数与来源声明不一致',
+  PROCESS_INTERRUPTED: '应用在抓取完成前停止',
+  SOURCE_FAILURE: 'B站名单来源请求失败',
+  UNKNOWN_TIER: '名单包含无法识别的大航海等级',
 };
 
 export function AdminRostersPage() {
@@ -45,11 +50,17 @@ export function AdminRostersPage() {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
-  const rosters = useQuery({ queryFn: getAdminRosters, queryKey: ['admin', 'rosters'] });
+  const rosters = useQuery({
+    queryFn: getAdminRosters,
+    queryKey: ['admin', 'rosters'],
+    refetchInterval: (query) =>
+      query.state.data?.some(({ run }) => run.status === 'RUNNING') ? 2_000 : false,
+  });
   const detail = useQuery({
     enabled: Boolean(runId),
     queryFn: () => getAdminRoster(runId!),
     queryKey: ['admin', 'rosters', runId],
+    refetchInterval: (query) => (query.state.data?.run.status === 'RUNNING' ? 2_000 : false),
   });
   const integrity = useQuery({
     enabled: false,
@@ -229,10 +240,12 @@ export function AdminRostersPage() {
                     </button>
                   </div>
                 </div>
-              ) : detail.data.run.status === 'FAILED' ? (
+              ) : ['FAILED', 'REJECTED'].includes(detail.data.run.status) ? (
                 <div className="decision-card danger">
                   <div>
-                    <strong>名单同步失败</strong>
+                    <strong>
+                      {detail.data.run.status === 'FAILED' ? '名单同步失败' : '上次抓取已被拒绝'}
+                    </strong>
                     <p>检查最近一次错误后，可重新执行。每个任务最多保留三次尝试。</p>
                   </div>
                   <button
@@ -260,6 +273,10 @@ export function AdminRostersPage() {
                           />
                         </header>
                         <dl>
+                          <div>
+                            <dt>发起方式</dt>
+                            <dd>{attempt.initiatedBy === 'ADMIN' ? '管理员重试' : '自动任务'}</dd>
+                          </div>
                           <div>
                             <dt>时效</dt>
                             <dd>
@@ -357,7 +374,7 @@ export function AdminRostersPage() {
               ) : null}
               {detail.data.pages.length > 0 ? (
                 <details className="evidence-details">
-                  <summary>原始分页证据（{detail.data.pages.length} 页）</summary>
+                  <summary>原始抓取证据（{detail.data.pages.length} 条）</summary>
                   <div className="form-actions evidence-actions">
                     <button
                       className="button secondary"
@@ -380,6 +397,7 @@ export function AdminRostersPage() {
                       <thead>
                         <tr>
                           <th>执行</th>
+                          <th>类型</th>
                           <th>页码</th>
                           <th>成员数</th>
                           <th>内容哈希</th>
@@ -388,7 +406,7 @@ export function AdminRostersPage() {
                       </thead>
                       <tbody>
                         {detail.data.pages.map((page) => (
-                          <tr key={`${page.snapshotAttemptId}-${page.pageNumber}`}>
+                          <tr key={page.id}>
                             <td>
                               第{' '}
                               {detail.data.attempts.find(
@@ -396,6 +414,7 @@ export function AdminRostersPage() {
                               )?.attemptNumber ?? '—'}{' '}
                               次
                             </td>
+                            <td>{page.captureKind === 'RECHECK' ? '首页复核' : '名单分页'}</td>
                             <td>{page.pageNumber}</td>
                             <td>{page.itemCount}</td>
                             <td>
@@ -403,11 +422,8 @@ export function AdminRostersPage() {
                             </td>
                             <td>
                               {integrity.data
-                                ? integrity.data.find(
-                                    (result) =>
-                                      result.snapshotAttemptId === page.snapshotAttemptId &&
-                                      result.pageNumber === page.pageNumber,
-                                  )?.ok
+                                ? integrity.data.find((result) => result.snapshotPageId === page.id)
+                                    ?.ok
                                   ? '一致'
                                   : '不一致'
                                 : '未校验'}

@@ -34,6 +34,7 @@ const gzipAsync = promisify(gzip);
 const PAGE_SIZE = 30;
 const MAX_PAGES = 1_000;
 const MAX_ATTEMPTS = 3;
+const SCHEDULER_CONCURRENCY = 4;
 
 class CaptureFailure extends Error {
   public constructor(
@@ -53,6 +54,11 @@ interface CaptureRun {
   readonly scheduledCutoffAt: Date;
 }
 
+interface AttemptRequest {
+  readonly context?: RequestAuditContext;
+  readonly initiatedBy: 'ADMIN' | 'SCHEDULER';
+}
+
 function fingerprint(page: GuardRosterPage): string {
   return page.members
     .map((member) => `${member.biliUid}:${member.rawTier}:${member.sourcePosition}`)
@@ -69,6 +75,7 @@ function failure(error: unknown): CaptureFailure {
 }
 
 export class SnapshotService {
+  private readonly backgroundCaptures = new Set<Promise<void>>();
   private readonly audit: AuditService;
   public readonly queries: SnapshotQueryService;
 
@@ -79,6 +86,7 @@ export class SnapshotService {
     private readonly clock: Clock,
     private readonly maxDurationMs = 120_000,
     private readonly onFinalized?: (runId: string, executor: AppDatabase) => Promise<unknown>,
+    private readonly onBackgroundError?: (error: unknown) => void,
   ) {
     this.audit = new AuditService(database);
     this.queries = new SnapshotQueryService(database, storage);
@@ -155,11 +163,36 @@ export class SnapshotService {
         ),
       )
       .orderBy(asc(snapshotRuns.scheduledCutoffAt));
-    const results = await Promise.allSettled(due.map((run) => this.capture(run.id)));
-    return results.filter((result) => result.status === 'fulfilled').length;
+    let nextIndex = 0;
+    let started = 0;
+    const unexpectedErrors: unknown[] = [];
+    const workers = Array.from(
+      { length: Math.min(SCHEDULER_CONCURRENCY, due.length) },
+      async () => {
+        while (nextIndex < due.length) {
+          const run = due[nextIndex];
+          nextIndex += 1;
+          if (!run) continue;
+          try {
+            await this.capture(run.id);
+            started += 1;
+          } catch (error) {
+            if (!(error instanceof AppError)) unexpectedErrors.push(error);
+          }
+        }
+      },
+    );
+    await Promise.all(workers);
+    if (unexpectedErrors.length > 0) {
+      throw new AggregateError(unexpectedErrors, 'One or more snapshot tasks could not start.');
+    }
+    return started;
   }
 
-  private async beginAttempt(runId: string): Promise<{ attemptId: string; run: CaptureRun }> {
+  private async beginAttempt(
+    runId: string,
+    request: AttemptRequest,
+  ): Promise<{ attemptId: string; run: CaptureRun }> {
     return this.database.orm.transaction(async (transaction) => {
       const [selection] = await transaction
         .select({ monthlySyncEnabled: creators.monthlySyncEnabled, run: snapshotRuns })
@@ -200,6 +233,8 @@ export class SnapshotService {
         .insert(snapshotAttempts)
         .values({
           attemptNumber: (latest?.attemptNumber ?? 0) + 1,
+          initiatedBy: request.initiatedBy,
+          requestedByUserId: request.context?.actorUserId ?? null,
           schedulerStartedAt: this.clock.now(),
           snapshotRunId: run.id,
           sourceName: this.source.name,
@@ -211,6 +246,24 @@ export class SnapshotService {
         .update(snapshotRuns)
         .set({ status: 'RUNNING', updatedAt: this.clock.now() })
         .where(eq(snapshotRuns.id, run.id));
+      if (request.context) {
+        await this.audit.record(
+          {
+            action: 'snapshot.retry-started',
+            actorUserId: request.context.actorUserId,
+            afterSummary: {
+              attemptId: attempt.id,
+              attemptNumber: (latest?.attemptNumber ?? 0) + 1,
+            },
+            creatorId: run.creatorId,
+            ipAddress: request.context.ipAddress,
+            requestId: request.context.requestId,
+            targetId: run.id,
+            targetType: 'snapshot-run',
+          },
+          transaction,
+        );
+      }
       return { attemptId: attempt.id, run };
     });
   }
@@ -219,15 +272,20 @@ export class SnapshotService {
     runId: string,
     attemptId: string,
     page: GuardRosterPage,
+    captureKind: 'PAGE' | 'RECHECK',
   ): Promise<void> {
     const hash = createHash('sha256').update(page.rawBytes).digest('hex');
     const compressed = await gzipAsync(page.rawBytes);
-    const objectKey = `private/snapshots/${runId}/${attemptId}/page-${page.pageNumber}.json.gz`;
+    const suffix = captureKind === 'PAGE' ? `page-${page.pageNumber}` : 'page-1-recheck';
+    const objectKey = `private/snapshots/${runId}/${attemptId}/${suffix}.json.gz`;
     await this.storage.put({ data: compressed, key: objectKey });
     try {
       await this.database.orm.insert(snapshotPages).values({
+        captureKind,
         compressedSize: compressed.length,
         contentHashSha256: hash,
+        declaredPageCount: page.declaredPageCount,
+        declaredTotal: page.declaredTotal,
         fetchedAt: page.fetchedAt,
         itemCount: page.members.length,
         objectKey,
@@ -306,7 +364,7 @@ export class SnapshotService {
       if (first.pageNumber !== 1 || first.declaredPageCount < 1) {
         throw new CaptureFailure('INVALID_FIRST_PAGE', 'The provider returned invalid pagination.');
       }
-      await this.persistPage(run.id, attemptId, first);
+      await this.persistPage(run.id, attemptId, first, 'PAGE');
       const pages: GuardRosterPage[] = [first];
       for (let start = 2; start <= first.declaredPageCount; start += 4) {
         const numbers = Array.from(
@@ -314,10 +372,11 @@ export class SnapshotService {
           (_, offset) => start + offset,
         );
         const chunk = await Promise.all(numbers.map(fetch));
-        for (const page of chunk) await this.persistPage(run.id, attemptId, page);
+        for (const page of chunk) await this.persistPage(run.id, attemptId, page, 'PAGE');
         pages.push(...chunk);
       }
       const recheck = await fetch(1);
+      await this.persistPage(run.id, attemptId, recheck, 'RECHECK');
       const members = this.validatePages(pages, recheck);
       const completedAt = this.clock.now();
       await this.database.orm.transaction(async (transaction) => {
@@ -405,14 +464,28 @@ export class SnapshotService {
   }
 
   public async capture(runId: string): Promise<void> {
-    const { attemptId, run } = await this.beginAttempt(runId);
+    const { attemptId, run } = await this.beginAttempt(runId, { initiatedBy: 'SCHEDULER' });
     await this.executeCapture(attemptId, run);
   }
 
-  public async queueCapture(runId: string): Promise<{ attemptId: string }> {
-    const { attemptId, run } = await this.beginAttempt(runId);
-    void this.executeCapture(attemptId, run);
+  public async queueCapture(
+    runId: string,
+    context: RequestAuditContext,
+  ): Promise<{ attemptId: string }> {
+    const { attemptId, run } = await this.beginAttempt(runId, {
+      context,
+      initiatedBy: 'ADMIN',
+    });
+    const execution = this.executeCapture(attemptId, run);
+    this.backgroundCaptures.add(execution);
+    void execution
+      .catch((error: unknown) => this.onBackgroundError?.(error))
+      .finally(() => this.backgroundCaptures.delete(execution));
     return { attemptId };
+  }
+
+  public async waitForIdle(): Promise<void> {
+    await Promise.allSettled([...this.backgroundCaptures]);
   }
 
   public async approveLate(runId: string, context: RequestAuditContext): Promise<void> {

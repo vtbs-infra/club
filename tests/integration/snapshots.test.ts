@@ -248,7 +248,13 @@ integration('month-end snapshot capture', () => {
       normalizedTotal: 35,
       punctuality: 'ON_TIME',
     });
-    expect(detail.pages).toHaveLength(2);
+    expect(detail.pages).toHaveLength(3);
+    expect(detail.pages.map((page) => page.captureKind).sort()).toEqual([
+      'PAGE',
+      'PAGE',
+      'RECHECK',
+    ]);
+    expect(detail.pages.every((page) => page.declaredTotal === 35)).toBe(true);
     expect((await service.queries.checkEvidenceIntegrity(run.id)).every((page) => page.ok)).toBe(
       true,
     );
@@ -404,7 +410,7 @@ integration('month-end snapshot capture', () => {
     });
   });
 
-  it('starts every due creator without a fixed batch or whole-capture serialization', async () => {
+  it('starts due creators concurrently without exceeding the scheduler limit', async () => {
     const clock = new MutableClock(new Date('2026-07-31T15:59:40.000Z'));
     const source = new ConcurrentEmptySource();
     const service = new SnapshotService(database, storage.driver, source, clock);
@@ -423,6 +429,43 @@ integration('month-end snapshot capture', () => {
     expect(newCreatorRuns).toHaveLength(12);
     expect(newCreatorRuns.every((run) => run.status === 'FINALIZED')).toBe(true);
     expect(source.maximumConcurrentRequests).toBeGreaterThan(1);
+    expect(source.maximumConcurrentRequests).toBeLessThanOrEqual(4);
+  });
+
+  it('records administrator retries and waits for queued captures during shutdown', async () => {
+    const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
+    const [run] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(
+          eq(snapshotRuns.creatorId, creatorIds[11]!),
+          eq(snapshotRuns.periodStart, '2026-08-01'),
+        ),
+      );
+    const source = new BlockingEmptySource();
+    const service = new SnapshotService(database, storage.driver, source, clock);
+    const queued = await service.queueCapture(run!.id, {
+      actorUserId: ownerId,
+      ipAddress: '127.0.0.1',
+      requestId: 'administrator-snapshot-retry',
+    });
+    await source.entered;
+    source.release();
+    await service.waitForIdle();
+
+    const detail = await service.queries.getDetail(run!.id);
+    expect(detail.run.status).toBe('FINALIZED');
+    expect(detail.attempts[0]).toMatchObject({
+      id: queued.attemptId,
+      initiatedBy: 'ADMIN',
+      requestedByUserId: ownerId,
+    });
+    const [audit] = await database.orm
+      .select({ action: auditLogs.action })
+      .from(auditLogs)
+      .where(eq(auditLogs.action, 'snapshot.retry-started'));
+    expect(audit?.action).toBe('snapshot.retry-started');
   });
 
   it('updates future task identity and cancels tasks when monthly sync is disabled', async () => {

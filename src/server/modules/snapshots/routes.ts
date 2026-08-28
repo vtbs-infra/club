@@ -138,7 +138,10 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
       },
     },
     async (request, reply) => {
-      const queued = await options.service.queueCapture(request.params.snapshotRunId);
+      const queued = await options.service.queueCapture(
+        request.params.snapshotRunId,
+        auditContext(request),
+      );
       return reply.status(202).send(queued);
     },
   );

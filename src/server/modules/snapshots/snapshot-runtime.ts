@@ -43,6 +43,7 @@ export function createSnapshotRuntime(input: {
     input.clock,
     input.maxDurationMs,
     input.onFinalized,
+    (error) => input.reportError?.(error, 'snapshot.manual-capture'),
   );
   let interval: ReturnType<typeof setInterval> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -115,6 +116,7 @@ export function createSnapshotRuntime(input: {
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = null;
       await Promise.allSettled([starting, activeTick].filter((task) => task !== null));
+      await service.waitForIdle();
       status.markStopped();
     },
     getStatus: () => status.get(),
