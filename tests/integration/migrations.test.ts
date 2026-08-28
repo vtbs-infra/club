@@ -142,6 +142,27 @@ integration('database migration baseline', () => {
       expect(migrations[0]?.value).toBe(1);
       await expect(database.checkSchema()).resolves.toBeUndefined();
 
+      const [appliedMigration] = await database.orm.execute<{ createdAt: string; id: number }>(sql`
+        select id, created_at::text as "createdAt"
+        from drizzle.__drizzle_migrations
+        order by id
+        limit 1
+      `);
+      expect(appliedMigration).toBeDefined();
+      await database.orm.execute(sql`
+        update drizzle.__drizzle_migrations
+        set created_at = 9999999999998
+        where id = ${appliedMigration!.id}
+      `);
+      await expect(database.checkSchema()).rejects.toThrow(
+        'Database schema migration version does not match this application.',
+      );
+      await database.orm.execute(sql`
+        update drizzle.__drizzle_migrations
+        set created_at = ${appliedMigration!.createdAt}
+        where id = ${appliedMigration!.id}
+      `);
+
       await database.orm.execute(sql`
         insert into drizzle.__drizzle_migrations (hash, created_at)
         values ('unexpected-migration', 9999999999999)

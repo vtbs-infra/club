@@ -2,7 +2,7 @@ import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import { schema, type AppSchema } from './schema/index.js';
-import { EXPECTED_SCHEMA_MIGRATION_COUNT } from './schema-version.js';
+import { EXPECTED_SCHEMA_MIGRATION_TIMESTAMPS } from './schema-version.js';
 
 export type AppDatabase = PostgresJsDatabase<AppSchema>;
 
@@ -24,11 +24,17 @@ export function createDatabase(databaseUrl: string): DatabaseService {
   return {
     orm,
     async checkSchema() {
-      const [result] = await client<{ applied: number }[]>`
-        select count(*)::int as applied
+      const applied = await client<{ createdAt: string }[]>`
+        select created_at::text as "createdAt"
         from drizzle.__drizzle_migrations
+        order by id
       `;
-      if ((result?.applied ?? 0) !== EXPECTED_SCHEMA_MIGRATION_COUNT) {
+      if (
+        applied.length !== EXPECTED_SCHEMA_MIGRATION_TIMESTAMPS.length ||
+        applied.some(
+          (migration, index) => migration.createdAt !== EXPECTED_SCHEMA_MIGRATION_TIMESTAMPS[index],
+        )
+      ) {
         throw new Error('Database schema migration version does not match this application.');
       }
     },
