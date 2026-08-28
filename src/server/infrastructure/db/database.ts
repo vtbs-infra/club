@@ -28,8 +28,8 @@ export function createDatabase(databaseUrl: string): DatabaseService {
         select count(*)::int as applied
         from drizzle.__drizzle_migrations
       `;
-      if ((result?.applied ?? 0) < EXPECTED_SCHEMA_MIGRATION_COUNT) {
-        throw new Error('Database schema migrations are incomplete.');
+      if ((result?.applied ?? 0) !== EXPECTED_SCHEMA_MIGRATION_COUNT) {
+        throw new Error('Database schema migration version does not match this application.');
       }
     },
     async ping() {

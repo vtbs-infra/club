@@ -1,2 +1,0 @@
-ALTER TABLE "gift_releases" ADD COLUMN "version" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
-ALTER TABLE "gift_releases" ADD CONSTRAINT "gift_releases_version_positive" CHECK ("gift_releases"."version" > 0);
