@@ -1,13 +1,15 @@
-import { and, count, desc, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, or } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
+import type { BindingConflictPage } from '../../src/shared/contracts/binding.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
+  bindingConflicts,
   users,
   verificationRooms,
 } from '../../src/server/infrastructure/db/schema/index.js';
@@ -273,7 +275,8 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       url: '/api/v1/me/bilibili-binding',
     });
     expect(bindingResponse.statusCode).toBe(200);
-    expect(bindingResponse.json<BindingResponse>()).toMatchObject({ biliUid: '123456789' });
+    const aliceBinding = bindingResponse.json<BindingResponse>();
+    expect(aliceBinding).toMatchObject({ biliUid: '123456789' });
     const [active] = await database.orm
       .select({ value: count() })
       .from(bilibiliBindings)
@@ -295,13 +298,36 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       method: 'GET',
       url: '/api/v1/me/bilibili-challenges/current',
     });
-    expect(conflictState.json()).toMatchObject({ status: 'CONFLICT' });
+    expect(conflictState.json()).toMatchObject({
+      conflictStatus: 'OPEN',
+      status: 'CONFLICT',
+    });
+    const conflictsResponse = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: '/api/v1/admin/bilibili-binding-conflicts',
+    });
+    expect(conflictsResponse.statusCode, conflictsResponse.body).toBe(200);
+    const [conflict] = conflictsResponse.json<BindingConflictPage>().items;
+    expect(conflict).toMatchObject({
+      biliUid: '123456789',
+      observedBinding: { id: aliceBinding.id },
+      requestingUser: { name: 'Bob' },
+      status: 'OPEN',
+    });
+    if (!conflict) throw new Error('Expected an open binding conflict.');
+    await expect(
+      database.orm
+        .update(bindingConflicts)
+        .set({ biliUid: '999999999' })
+        .where(eq(bindingConflicts.id, conflict.id)),
+    ).rejects.toThrow();
     const [record] = await database.orm
       .select({ action: auditLogs.action })
       .from(auditLogs)
-      .where(eq(auditLogs.action, 'bilibili-binding.conflict'))
+      .where(eq(auditLogs.action, 'bilibili-binding.conflict-opened'))
       .limit(1);
-    expect(record?.action).toBe('bilibili-binding.conflict');
+    expect(record?.action).toBe('bilibili-binding.conflict-opened');
     const unbound = await app.inject({
       headers: { cookie: aliceCookie, origin: TEST_ORIGIN },
       method: 'DELETE',
@@ -315,6 +341,97 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       .orderBy(desc(bilibiliBindings.boundAt))
       .limit(1);
     expect(history?.unboundAt).toBeInstanceOf(Date);
+
+    const reboundChallengeResponse = await issue(aliceCookie, '192.0.2.12');
+    expect(reboundChallengeResponse.statusCode, reboundChallengeResponse.body).toBe(201);
+    const reboundChallenge = reboundChallengeResponse.json<ChallengeResponse>();
+    await source.emitMessage({
+      biliDisplayName: 'Alice rebound on Bilibili',
+      biliUid: '123456789',
+      eventId: 'alice-rebound-event',
+      message: reboundChallenge.code,
+      roomId: reboundChallenge.room.link.split('/').at(-1)!,
+    });
+    const reboundResponse = await app.inject({
+      headers: { cookie: aliceCookie },
+      method: 'GET',
+      url: '/api/v1/me/bilibili-binding',
+    });
+    const reboundBinding = reboundResponse.json<BindingResponse>();
+    expect(reboundBinding.id).not.toBe(aliceBinding.id);
+
+    const resolved = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'POST',
+      payload: { reason: 'The originally observed binding was independently removed.' },
+      url: `/api/v1/admin/bilibili-binding-conflicts/${conflict.id}/resolve`,
+    });
+    expect(resolved.statusCode, resolved.body).toBe(204);
+    const [stillActive] = await database.orm
+      .select({ id: bilibiliBindings.id })
+      .from(bilibiliBindings)
+      .where(and(eq(bilibiliBindings.id, reboundBinding.id), isNull(bilibiliBindings.unboundAt)));
+    expect(stillActive?.id).toBe(reboundBinding.id);
+    const resolvedState = await app.inject({
+      headers: { cookie: bobCookie },
+      method: 'GET',
+      url: '/api/v1/me/bilibili-challenges/current',
+    });
+    expect(resolvedState.json()).toMatchObject({
+      conflictStatus: 'RESOLVED',
+      status: 'CONFLICT',
+    });
+    const closedAgain = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'POST',
+      payload: { reason: 'Duplicate administrative action.' },
+      url: `/api/v1/admin/bilibili-binding-conflicts/${conflict.id}/resolve`,
+    });
+    expect(closedAgain.statusCode).toBe(409);
+    expect(closedAgain.json<ErrorResponse>().error.code).toBe('BILIBILI_BINDING_CONFLICT_CLOSED');
+  });
+
+  it('dismisses a conflict without changing its observed binding', async () => {
+    await registerTestUser({ app, database, email: 'gina@example.com', name: 'Gina' });
+    const ginaCookie = await signInTestUser({ app, email: 'gina@example.com' });
+    const issued = await issue(ginaCookie, '192.0.2.42');
+    expect(issued.statusCode, issued.body).toBe(201);
+    const challenge = issued.json<ChallengeResponse>();
+    await source.emitMessage({
+      biliDisplayName: 'Conflicting UID claimant',
+      biliUid: '123456789',
+      eventId: 'dismissed-conflict-event',
+      message: challenge.code,
+      roomId: challenge.room.link.split('/').at(-1)!,
+    });
+    const listed = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: '/api/v1/admin/bilibili-binding-conflicts?limit=20',
+    });
+    const conflict = listed
+      .json<BindingConflictPage>()
+      .items.find((item) => item.requestingUser.name === 'Gina');
+    if (!conflict) throw new Error('Expected Gina binding conflict.');
+
+    const dismissed = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'POST',
+      payload: { reason: 'The existing account ownership was confirmed.' },
+      url: `/api/v1/admin/bilibili-binding-conflicts/${conflict.id}/dismiss`,
+    });
+    expect(dismissed.statusCode, dismissed.body).toBe(204);
+    const [activeBinding] = await database.orm
+      .select({ id: bilibiliBindings.id })
+      .from(bilibiliBindings)
+      .where(and(eq(bilibiliBindings.biliUid, '123456789'), isNull(bilibiliBindings.unboundAt)));
+    expect(activeBinding?.id).toBe(conflict.observedBinding.id);
+    const state = await app.inject({
+      headers: { cookie: ginaCookie },
+      method: 'GET',
+      url: '/api/v1/me/bilibili-challenges/current',
+    });
+    expect(state.json()).toMatchObject({ conflictStatus: 'DISMISSED', status: 'CONFLICT' });
   });
 
   it('projects expiry without a read-side write and lets the runtime persist it', async () => {
@@ -409,9 +526,11 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     expect(binding).toBeUndefined();
   });
 
-  it('lets a platform administrator remove a binding with an audited reason', async () => {
+  it('resolves an active observed binding and records both effects', async () => {
     await registerTestUser({ app, database, email: 'frank@example.com', name: 'Frank' });
+    await registerTestUser({ app, database, email: 'grace@example.com', name: 'Grace' });
     const frankCookie = await signInTestUser({ app, email: 'frank@example.com' });
+    const graceCookie = await signInTestUser({ app, email: 'grace@example.com' });
     const issued = await issue(frankCookie, '192.0.2.50');
     expect(issued.statusCode, issued.body).toBe(201);
     const challenge = issued.json<ChallengeResponse>();
@@ -430,23 +549,59 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     const binding = bindingResponse.json<BindingResponse>();
     expect(binding.biliUid).toBe('666666666');
 
-    const removed = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'DELETE',
-      payload: { reason: 'Resolved a verified account ownership request.' },
-      url: `/api/v1/admin/bilibili-bindings/${binding.id}`,
+    const graceIssued = await issue(graceCookie, '192.0.2.51');
+    expect(graceIssued.statusCode, graceIssued.body).toBe(201);
+    const graceChallenge = graceIssued.json<ChallengeResponse>();
+    await source.emitMessage({
+      biliDisplayName: 'Grace on Bilibili',
+      biliUid: '666666666',
+      eventId: 'active-binding-conflict-event',
+      message: graceChallenge.code,
+      roomId: graceChallenge.room.link.split('/').at(-1)!,
     });
-    expect(removed.statusCode, removed.body).toBe(204);
-    const [record] = await database.orm
+    const listed = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: '/api/v1/admin/bilibili-binding-conflicts',
+    });
+    const conflict = listed
+      .json<BindingConflictPage>()
+      .items.find((item) => item.requestingUser.name === 'Grace');
+    if (!conflict) throw new Error('Expected Grace binding conflict.');
+
+    const resolved = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'POST',
+      payload: { reason: 'Resolved the verified UID ownership request.' },
+      url: `/api/v1/admin/bilibili-binding-conflicts/${conflict.id}/resolve`,
+    });
+    expect(resolved.statusCode, resolved.body).toBe(204);
+    const [removedBinding] = await database.orm
+      .select({ unboundAt: bilibiliBindings.unboundAt })
+      .from(bilibiliBindings)
+      .where(eq(bilibiliBindings.id, binding.id));
+    expect(removedBinding?.unboundAt).toBeInstanceOf(Date);
+    const records = await database.orm
       .select({ action: auditLogs.action, reason: auditLogs.reason })
       .from(auditLogs)
-      .where(eq(auditLogs.action, 'bilibili-binding.administrator-removed'))
-      .orderBy(desc(auditLogs.createdAt))
-      .limit(1);
-    expect(record).toMatchObject({
-      action: 'bilibili-binding.administrator-removed',
-      reason: 'Resolved a verified account ownership request.',
-    });
+      .where(
+        or(
+          eq(auditLogs.action, 'bilibili-binding.conflict-binding-removed'),
+          eq(auditLogs.action, 'bilibili-binding.conflict-resolved'),
+        ),
+      );
+    expect(records).toEqual(
+      expect.arrayContaining([
+        {
+          action: 'bilibili-binding.conflict-binding-removed',
+          reason: 'Resolved the verified UID ownership request.',
+        },
+        {
+          action: 'bilibili-binding.conflict-resolved',
+          reason: 'Resolved the verified UID ownership request.',
+        },
+      ]),
+    );
   });
 
   it('throttles challenge creation independently by account and IP', async () => {

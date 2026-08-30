@@ -549,6 +549,27 @@
   margin-top: 0.2rem;
 }
 
+.binding-conflict-table {
+  min-width: 860px;
+}
+
+.conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 190px;
+}
+
+.conflict-actions .button {
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
+  white-space: nowrap;
+}
+
+.conflict-pagination {
+  margin-top: 1rem;
+}
+
 .order-detail-grid {
   display: grid;
   gap: 1.25rem;

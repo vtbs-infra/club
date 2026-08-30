@@ -99,6 +99,12 @@ Better Auth 管理邮箱密码凭据和会话。`createRequireSession`、
 挑战投影为 `EXPIRED`，持久状态由 Runtime 的维护周期统一收口。请求验证码和配置直播间
 不会同步等待外部直播连接；周期协调也不会反复延长已经进入空闲宽限期的房间连接。
 
+如果消息证明的 UID 已有有效绑定，服务会在消费挑战的同一事务中创建独立的
+`binding_conflicts` 记录。记录冻结冲突发生时的挑战、UID 和原 Binding ID，并遵循
+`OPEN → RESOLVED | DISMISSED`。管理员解决冲突时按顺序锁定冲突、记录中的原绑定和挑战；
+只允许解除该原绑定，绝不按 UID 重新查找并操作后来的绑定。原绑定已经独立解除时，可以
+安全地把冲突标记为已解决；驳回只关闭请求，不修改绑定。关闭后的冲突事实不可再次变更。
+
 ## 主播身份
 
 主播不是一组手填的 B站字段。平台管理员只能从拥有有效 B站绑定的普通用户中注册主播；
@@ -313,7 +319,7 @@ Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请�
 | 领域       | 主要表                                                                                                 |
 | ---------- | ------------------------------------------------------------------------------------------------------ |
 | 认证       | `users`, `sessions`, `accounts`, `verifications`                                                       |
-| 主播与绑定 | `creators`, `verification_rooms`, `binding_challenges`, `bilibili_bindings`                            |
+| 主播与绑定 | `creators`, `verification_rooms`, `binding_challenges`, `bilibili_bindings`, `binding_conflicts`       |
 | 名单       | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`, `snapshot_members` |
 | 礼物       | `gift_releases`, `gift_packages`, `gift_package_items`, `gift_tier_rules`, `gift_orders`               |
 | 领取       | `gift_order_items`, `addresses`, `gift_order_addresses`, `gift_order_option_values`                    |

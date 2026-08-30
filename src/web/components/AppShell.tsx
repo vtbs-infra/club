@@ -54,7 +54,7 @@ const adminNavigation: readonly NavigationItem[] = [
   { end: true, icon: LayoutDashboard, label: '概览', to: '/admin' },
   { icon: UsersRound, label: '主播', to: '/admin/creators' },
   { icon: CalendarSync, label: '名单同步', to: '/admin/rosters' },
-  { icon: RadioTower, label: '验证直播间', to: '/admin/verification' },
+  { icon: RadioTower, label: 'B站验证', to: '/admin/verification' },
   { icon: Megaphone, label: '平台公告', to: '/admin/announcements' },
   { icon: Palette, label: '主题', to: '/admin/appearance' },
   { icon: Activity, label: '系统', to: '/admin/system' },

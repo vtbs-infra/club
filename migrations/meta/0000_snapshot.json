@@ -1,5 +1,5 @@
 {
-  "id": "9d182378-6af4-4b71-aa89-4b0318a0bb7d",
+  "id": "e808f3a5-8816-49ab-9ce6-9cb5ab6eaac1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3062,6 +3062,163 @@
         "binding_challenges_status_check": {
           "name": "binding_challenges_status_check",
           "value": "\"binding_challenges\".\"status\" in ('ACTIVE', 'CONSUMED', 'EXPIRED', 'CANCELLED', 'CONFLICT')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.binding_conflicts": {
+      "name": "binding_conflicts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "challenge_id": {
+          "name": "challenge_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_binding_id": {
+          "name": "observed_binding_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bili_uid": {
+          "name": "bili_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OPEN'"
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_by_user_id": {
+          "name": "closed_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_reason": {
+          "name": "resolution_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "binding_conflicts_challenge_unique": {
+          "name": "binding_conflicts_challenge_unique",
+          "columns": [
+            {
+              "expression": "challenge_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "binding_conflicts_open_created_idx": {
+          "name": "binding_conflicts_open_created_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "binding_conflicts_challenge_id_binding_challenges_id_fk": {
+          "name": "binding_conflicts_challenge_id_binding_challenges_id_fk",
+          "tableFrom": "binding_conflicts",
+          "tableTo": "binding_challenges",
+          "columnsFrom": ["challenge_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "binding_conflicts_observed_binding_id_bilibili_bindings_id_fk": {
+          "name": "binding_conflicts_observed_binding_id_bilibili_bindings_id_fk",
+          "tableFrom": "binding_conflicts",
+          "tableTo": "bilibili_bindings",
+          "columnsFrom": ["observed_binding_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "binding_conflicts_closed_by_user_id_users_id_fk": {
+          "name": "binding_conflicts_closed_by_user_id_users_id_fk",
+          "tableFrom": "binding_conflicts",
+          "tableTo": "users",
+          "columnsFrom": ["closed_by_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "binding_conflicts_status_check": {
+          "name": "binding_conflicts_status_check",
+          "value": "\"binding_conflicts\".\"status\" in ('OPEN', 'RESOLVED', 'DISMISSED')"
+        },
+        "binding_conflicts_lifecycle_check": {
+          "name": "binding_conflicts_lifecycle_check",
+          "value": "(\n        (\"binding_conflicts\".\"status\" = 'OPEN' and \"binding_conflicts\".\"closed_at\" is null and \"binding_conflicts\".\"closed_by_user_id\" is null and \"binding_conflicts\".\"resolution_reason\" is null)\n        or (\"binding_conflicts\".\"status\" in ('RESOLVED', 'DISMISSED') and \"binding_conflicts\".\"closed_at\" is not null and \"binding_conflicts\".\"closed_by_user_id\" is not null and \"binding_conflicts\".\"resolution_reason\" is not null)\n      )"
         }
       },
       "isRLSEnabled": false

@@ -8,6 +8,7 @@ import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   bilibiliBindings,
   bindingChallenges,
+  bindingConflicts,
   creators,
   verificationRooms,
 } from '../../infrastructure/db/schema/index.js';
@@ -15,6 +16,7 @@ import { AuditService } from '../audit/audit-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
 import type { LiveMessageEvent } from '../bilibili/live-message-source.js';
 import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
+import type { BindingConflictService } from './binding-conflict-service.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CHALLENGE_LIFETIME_MS = 10 * 60 * 1000;
@@ -50,6 +52,7 @@ export class BindingService {
     private readonly clock: Clock,
     private readonly codeSecret: string,
     private readonly connections: RoomConnectionManager,
+    private readonly conflicts: BindingConflictService,
     private readonly onConnectionDemandChanged: () => void,
   ) {
     this.audit = new AuditService(database);
@@ -171,6 +174,7 @@ export class BindingService {
     const [challenge] = await this.database.orm
       .select({
         expiresAt: bindingChallenges.expiresAt,
+        conflictStatus: bindingConflicts.status,
         id: bindingChallenges.id,
         roomDisplayName: verificationRooms.displayName,
         roomId: verificationRooms.biliRoomId,
@@ -178,6 +182,7 @@ export class BindingService {
       })
       .from(bindingChallenges)
       .innerJoin(verificationRooms, eq(verificationRooms.id, bindingChallenges.verificationRoomId))
+      .leftJoin(bindingConflicts, eq(bindingConflicts.challengeId, bindingChallenges.id))
       .where(eq(bindingChallenges.userId, userId))
       .orderBy(desc(bindingChallenges.createdAt))
       .limit(1);
@@ -189,6 +194,7 @@ export class BindingService {
             challenge.status === 'ACTIVE' && !challengeIsExpired
               ? this.connections.getState(challenge.roomId)
               : null,
+          conflictStatus: challenge.conflictStatus,
           expiresAt: challenge.expiresAt,
           id: challenge.id,
           room: {
@@ -204,33 +210,43 @@ export class BindingService {
     };
   }
 
-  private async recordConflict(
+  private async recordConflictAfterUniqueViolation(
     challengeId: string,
     event: LiveMessageEvent,
     userId: string,
-  ): Promise<void> {
-    await this.database.orm.transaction(async (transaction) => {
-      const [updated] = await transaction
-        .update(bindingChallenges)
-        .set({
-          consumedAt: this.clock.now(),
-          consumedEventId: event.eventId,
-          status: 'CONFLICT',
-          updatedAt: this.clock.now(),
-        })
-        .where(and(eq(bindingChallenges.id, challengeId), eq(bindingChallenges.status, 'ACTIVE')))
-        .returning({ id: bindingChallenges.id });
-      if (!updated) return;
-      await this.audit.record(
-        {
-          action: 'bilibili-binding.conflict',
-          actorUserId: userId,
-          afterSummary: { biliUid: event.biliUid, eventId: event.eventId },
-          targetId: challengeId,
-          targetType: 'binding-challenge',
-        },
-        transaction,
-      );
+  ): Promise<boolean> {
+    return this.database.orm.transaction(async (transaction) => {
+      const [challenge] = await transaction
+        .select({ id: bindingChallenges.id })
+        .from(bindingChallenges)
+        .where(
+          and(
+            eq(bindingChallenges.id, challengeId),
+            eq(bindingChallenges.userId, userId),
+            eq(bindingChallenges.status, 'ACTIVE'),
+          ),
+        )
+        .limit(1)
+        .for('update');
+      if (!challenge) return false;
+      const [binding] = await transaction
+        .select({ id: bilibiliBindings.id })
+        .from(bilibiliBindings)
+        .where(
+          and(
+            isNull(bilibiliBindings.unboundAt),
+            or(eq(bilibiliBindings.userId, userId), eq(bilibiliBindings.biliUid, event.biliUid)),
+          ),
+        )
+        .limit(1)
+        .for('update');
+      if (!binding) return false;
+      return this.conflicts.record(transaction, {
+        challengeId,
+        event,
+        observedBindingId: binding.id,
+        userId,
+      });
     });
   }
 
@@ -284,28 +300,16 @@ export class BindingService {
               ),
             ),
           )
-          .limit(1);
+          .limit(1)
+          .for('update');
         if (conflicting) {
-          await transaction
-            .update(bindingChallenges)
-            .set({
-              consumedAt: this.clock.now(),
-              consumedEventId: event.eventId,
-              status: 'CONFLICT',
-              updatedAt: this.clock.now(),
-            })
-            .where(eq(bindingChallenges.id, challenge.id));
-          await this.audit.record(
-            {
-              action: 'bilibili-binding.conflict',
-              actorUserId: challenge.userId,
-              afterSummary: { biliUid: event.biliUid, eventId: event.eventId },
-              targetId: challenge.id,
-              targetType: 'binding-challenge',
-            },
-            transaction,
-          );
-          return 'CONFLICT' as const;
+          const recorded = await this.conflicts.record(transaction, {
+            challengeId: challenge.id,
+            event,
+            observedBindingId: conflicting.id,
+            userId: challenge.userId,
+          });
+          return recorded ? ('CONFLICT' as const) : ('IGNORED' as const);
         }
 
         const [binding] = await transaction
@@ -355,7 +359,12 @@ export class BindingService {
         .where(eq(bindingChallenges.consumedEventId, event.eventId))
         .limit(1);
       if (duplicate) return 'DUPLICATE';
-      await this.recordConflict(matchedChallengeId, event, matchedUserId);
+      const recorded = await this.recordConflictAfterUniqueViolation(
+        matchedChallengeId,
+        event,
+        matchedUserId,
+      );
+      if (!recorded) throw error;
       this.onConnectionDemandChanged();
       return 'CONFLICT';
     }
@@ -394,51 +403,6 @@ export class BindingService {
           actorUserId: input.actorUserId,
           beforeSummary: { biliUid: binding.biliUid },
           ipAddress: input.ipAddress,
-          requestId: input.requestId,
-          targetId: binding.id,
-          targetType: 'bilibili-binding',
-        },
-        transaction,
-      );
-    });
-  }
-
-  public async administrativeUnbind(
-    input: RequestAuditContext & { readonly bindingId: string; readonly reason: string },
-  ): Promise<void> {
-    await this.database.orm.transaction(async (transaction) => {
-      const [binding] = await transaction
-        .select()
-        .from(bilibiliBindings)
-        .where(and(eq(bilibiliBindings.id, input.bindingId), isNull(bilibiliBindings.unboundAt)))
-        .limit(1)
-        .for('update');
-      if (!binding) {
-        throw new AppError('BILIBILI_BINDING_NOT_FOUND', 'No active Bilibili binding exists.', 404);
-      }
-      const [creator] = await transaction
-        .select({ id: creators.id })
-        .from(creators)
-        .where(eq(creators.bindingId, binding.id))
-        .limit(1);
-      if (creator) {
-        throw new AppError(
-          'CREATOR_BILIBILI_BINDING_IMMUTABLE',
-          'A creator account cannot replace its verified Bilibili identity.',
-          409,
-        );
-      }
-      await transaction
-        .update(bilibiliBindings)
-        .set({ unboundAt: this.clock.now(), updatedAt: this.clock.now() })
-        .where(eq(bilibiliBindings.id, binding.id));
-      await this.audit.record(
-        {
-          action: 'bilibili-binding.administrator-removed',
-          actorUserId: input.actorUserId,
-          beforeSummary: { biliUid: binding.biliUid, userId: binding.userId },
-          ipAddress: input.ipAddress,
-          reason: input.reason,
           requestId: input.requestId,
           targetId: binding.id,
           targetType: 'bilibili-binding',

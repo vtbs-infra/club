@@ -13,10 +13,12 @@ import type { LiveMessageSource } from '../bilibili/live-message-source.js';
 import { PublicWebLiveMessageSource } from '../bilibili/public-web-live-message-source.js';
 import { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
 import { VerificationRoomService } from '../verification-rooms/verification-room-service.js';
+import { BindingConflictService } from './binding-conflict-service.js';
 import { BindingService } from './binding-service.js';
 
 export interface BindingRuntime {
   readonly bindings: BindingService;
+  readonly conflicts: BindingConflictService;
   readonly connections: RoomConnectionManager;
   readonly rooms: VerificationRoomService;
   readonly source: LiveMessageSource;
@@ -66,11 +68,13 @@ export function createBindingRuntime(options: CreateBindingRuntimeOptions): Bind
       : { reconnectDelaysMs: options.reconnectDelaysMs }),
     source,
   });
+  const conflicts = new BindingConflictService(options.database, options.clock);
   const bindings = new BindingService(
     options.database,
     options.clock,
     options.config.authSecret,
     connections,
+    conflicts,
     () => requestConnectionReconcile(),
   );
   serviceReference.bindings = bindings;
@@ -150,6 +154,7 @@ export function createBindingRuntime(options: CreateBindingRuntimeOptions): Bind
 
   return {
     bindings,
+    conflicts,
     connections,
     rooms,
     source,

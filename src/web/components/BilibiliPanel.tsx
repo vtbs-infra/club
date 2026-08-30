@@ -46,9 +46,10 @@ export function BilibiliPanel() {
     queryKey: ['me', 'bilibili-challenge'],
     refetchInterval: (query) => {
       const current = query.state.data;
-      return current?.status === 'ACTIVE' && new Date(current.expiresAt).getTime() > Date.now()
-        ? 2_000
-        : false;
+      if (current?.status === 'ACTIVE' && new Date(current.expiresAt).getTime() > Date.now()) {
+        return 2_000;
+      }
+      return current?.conflictStatus === 'OPEN' ? 5_000 : false;
     },
   });
   const create = useMutation({
@@ -56,6 +57,7 @@ export function BilibiliPanel() {
     onSuccess: async (result) => {
       setIssued(result);
       queryClient.setQueryData<BilibiliChallenge>(['me', 'bilibili-challenge'], {
+        conflictStatus: null,
         connectionState: null,
         expiresAt: result.expiresAt,
         id: result.id,
@@ -133,6 +135,7 @@ export function BilibiliPanel() {
 
   const current = challenge.data;
   const active = current?.status === 'ACTIVE' && remaining > 0;
+  const conflictOpen = current?.conflictStatus === 'OPEN';
   return (
     <section className="binding-flow">
       <div className="section-heading">
@@ -168,9 +171,17 @@ export function BilibiliPanel() {
         </div>
       ) : (
         <div className="start-binding">
-          {current?.status === 'CONFLICT' ? (
+          {current?.conflictStatus === 'OPEN' ? (
+            <InlineNotice tone="warning">
+              这个 B站 UID 已与另一账号关联。请求已经交给平台管理员处理，处理完成前无需重复验证。
+            </InlineNotice>
+          ) : current?.conflictStatus === 'RESOLVED' ? (
+            <InlineNotice tone="success">
+              原有绑定冲突已经解除。请重新生成验证码完成绑定。
+            </InlineNotice>
+          ) : current?.conflictStatus === 'DISMISSED' ? (
             <InlineNotice tone="danger">
-              这个 B站 UID 已绑定其他账号，请联系平台管理员处理。
+              此次 UID 归属请求未通过。如仍需绑定，请先联系平台管理员确认后再重试。
             </InlineNotice>
           ) : null}
           {active && !issued ? (
@@ -180,12 +191,22 @@ export function BilibiliPanel() {
           ) : null}
           <button
             className="button primary"
-            disabled={create.isPending}
+            disabled={create.isPending || conflictOpen}
             onClick={() => create.mutate()}
             type="button"
           >
-            {create.isPending ? '正在准备验证…' : active ? '生成新验证码' : '开始验证'}
-            {!create.isPending ? <ShieldCheck aria-hidden="true" size={16} /> : null}
+            {create.isPending
+              ? '正在准备验证…'
+              : conflictOpen
+                ? '等待管理员处理'
+                : active
+                  ? '生成新验证码'
+                  : current?.status === 'CONFLICT'
+                    ? '重新验证'
+                    : '开始验证'}
+            {!create.isPending && !conflictOpen ? (
+              <ShieldCheck aria-hidden="true" size={16} />
+            ) : null}
           </button>
           {create.isError ? <ErrorNotice error={create.error} /> : null}
         </div>

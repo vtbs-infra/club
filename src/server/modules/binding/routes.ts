@@ -4,6 +4,8 @@ import type { FastifyPluginAsync, preHandlerHookHandler } from 'fastify';
 import {
   BilibiliBindingSchema,
   BilibiliChallengeSchema,
+  BindingConflictPageSchema,
+  BindingConflictResolutionInputSchema,
   IssuedBilibiliChallengeSchema,
 } from '../../../shared/contracts/binding.js';
 import { IdSchema, Nullable } from '../../../shared/contracts/common.js';
@@ -17,19 +19,21 @@ import {
   resolveSession,
 } from '../auth/guards.js';
 import type { BindingService } from './binding-service.js';
+import type { BindingConflictService } from './binding-conflict-service.js';
 
 interface BindingRoutesOptions {
   readonly auth: AppAuth;
   readonly challengeLimiter: InMemoryRateLimiter;
   readonly clock: Clock;
+  readonly conflicts: BindingConflictService;
   readonly service: BindingService;
 }
 
-interface BindingParameters {
-  bindingId: string;
+interface ConflictParameters {
+  conflictId: string;
 }
 
-interface InterventionBody {
+interface ConflictResolutionBody {
   reason: string;
 }
 
@@ -122,21 +126,65 @@ const bindingRoutes: FastifyPluginAsync<BindingRoutesOptions> = (app, options) =
     },
   );
 
-  app.delete<{ Body: InterventionBody; Params: BindingParameters }>(
-    '/api/v1/admin/bilibili-bindings/:bindingId',
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
+    '/api/v1/admin/bilibili-binding-conflicts',
     {
       preHandler: requirePlatformAdmin,
       schema: {
-        body: Type.Object({ reason: Type.String({ maxLength: 500, minLength: 3 }) }),
-        params: Type.Object({ bindingId: IdSchema }),
+        querystring: Type.Object(
+          {
+            cursor: Type.Optional(Type.String({ maxLength: 512, minLength: 1 })),
+            limit: Type.Optional(Type.Integer({ default: 50, maximum: 100, minimum: 1 })),
+          },
+          { additionalProperties: false },
+        ),
+        response: { 200: BindingConflictPageSchema },
+        tags: ['bilibili-binding'],
+      },
+    },
+    (request) =>
+      options.conflicts.listOpen({
+        ...(request.query.cursor ? { cursor: request.query.cursor } : {}),
+        limit: request.query.limit ?? 50,
+      }),
+  );
+
+  app.post<{ Body: ConflictResolutionBody; Params: ConflictParameters }>(
+    '/api/v1/admin/bilibili-binding-conflicts/:conflictId/resolve',
+    {
+      preHandler: requirePlatformAdmin,
+      schema: {
+        body: BindingConflictResolutionInputSchema,
+        params: Type.Object({ conflictId: IdSchema }),
         response: { 204: Type.Null() },
         tags: ['bilibili-binding'],
       },
     },
     async (request, reply) => {
-      await options.service.administrativeUnbind({
+      await options.conflicts.resolve({
         ...auditContext(request),
-        bindingId: request.params.bindingId,
+        conflictId: request.params.conflictId,
+        reason: request.body.reason,
+      });
+      return reply.status(204).send();
+    },
+  );
+
+  app.post<{ Body: ConflictResolutionBody; Params: ConflictParameters }>(
+    '/api/v1/admin/bilibili-binding-conflicts/:conflictId/dismiss',
+    {
+      preHandler: requirePlatformAdmin,
+      schema: {
+        body: BindingConflictResolutionInputSchema,
+        params: Type.Object({ conflictId: IdSchema }),
+        response: { 204: Type.Null() },
+        tags: ['bilibili-binding'],
+      },
+    },
+    async (request, reply) => {
+      await options.conflicts.dismiss({
+        ...auditContext(request),
+        conflictId: request.params.conflictId,
         reason: request.body.reason,
       });
       return reply.status(204).send();

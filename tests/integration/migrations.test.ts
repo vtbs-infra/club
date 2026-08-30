@@ -84,6 +84,7 @@ integration('database migration baseline', () => {
       for (const table of [
         'users',
         'bilibili_bindings',
+        'binding_conflicts',
         'creators',
         'snapshot_runs',
         'snapshot_pages',
@@ -114,6 +115,7 @@ integration('database migration baseline', () => {
         'announcement_reads_append_only',
         'announcements_lifecycle',
         'audit_logs_append_only',
+        'binding_conflicts_lifecycle',
         'gift_order_addresses_append_only',
         'gift_order_items_append_only',
         'gift_order_option_values_append_only',

@@ -249,6 +249,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     auth,
     challengeLimiter,
     clock,
+    conflicts: bindingRuntime.conflicts,
     service: bindingRuntime.bindings,
   });
   await app.register(giftReleaseRoutes, { auth, database, service: releaseService });

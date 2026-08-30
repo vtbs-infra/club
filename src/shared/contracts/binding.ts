@@ -10,6 +10,12 @@ export const BilibiliBindingSchema = Type.Object({
 });
 export type BilibiliBinding = Static<typeof BilibiliBindingSchema>;
 
+export const BindingConflictStatusSchema = Type.Union([
+  Type.Literal('OPEN'),
+  Type.Literal('RESOLVED'),
+  Type.Literal('DISMISSED'),
+]);
+
 export const BilibiliChallengeStatusSchema = Type.Union([
   Type.Literal('ACTIVE'),
   Type.Literal('CONSUMED'),
@@ -25,6 +31,7 @@ export const RoomConnectionStateSchema = Type.Union([
 ]);
 
 export const BilibiliChallengeSchema = Type.Object({
+  conflictStatus: Nullable(BindingConflictStatusSchema),
   connectionState: Nullable(RoomConnectionStateSchema),
   expiresAt: DateTimeSchema,
   id: IdSchema,
@@ -47,3 +54,39 @@ export const IssuedBilibiliChallengeSchema = Type.Object({
   }),
 });
 export type IssuedBilibiliChallenge = Static<typeof IssuedBilibiliChallengeSchema>;
+
+const ConflictUserSchema = Type.Object({
+  email: Type.String({ format: 'email' }),
+  id: IdSchema,
+  name: Type.String(),
+});
+
+export const BindingConflictSchema = Type.Object({
+  biliUid: Type.String(),
+  challengeId: IdSchema,
+  createdAt: DateTimeSchema,
+  id: IdSchema,
+  observedBinding: Type.Object({
+    biliDisplayName: Nullable(Type.String()),
+    biliUid: Type.String(),
+    boundAt: DateTimeSchema,
+    id: IdSchema,
+    unboundAt: Nullable(DateTimeSchema),
+    user: ConflictUserSchema,
+  }),
+  requestingUser: ConflictUserSchema,
+  status: BindingConflictStatusSchema,
+});
+export type BindingConflict = Static<typeof BindingConflictSchema>;
+
+export const BindingConflictPageSchema = Type.Object({
+  items: Type.Array(BindingConflictSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type BindingConflictPage = Static<typeof BindingConflictPageSchema>;
+
+export const BindingConflictResolutionInputSchema = Type.Object(
+  { reason: Type.String({ maxLength: 500, minLength: 3 }) },
+  { additionalProperties: false },
+);
+export type BindingConflictResolutionInput = Static<typeof BindingConflictResolutionInputSchema>;

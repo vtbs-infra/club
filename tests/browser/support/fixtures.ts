@@ -1,7 +1,7 @@
 import { APPLICATION_VERSION } from '../../../src/server/application-version.js';
 import type { AddressRecord } from '../../../src/shared/contracts/addresses.js';
 import type { Announcement } from '../../../src/shared/contracts/announcements.js';
-import type { BilibiliBinding } from '../../../src/shared/contracts/binding.js';
+import type { BilibiliBinding, BindingConflict } from '../../../src/shared/contracts/binding.js';
 import type { Identity, UserRecord } from '../../../src/shared/contracts/creators.js';
 import type { GiftOrder, GiftRelease } from '../../../src/shared/contracts/gifts.js';
 import type { PortalHome } from '../../../src/shared/contracts/portal.js';
@@ -218,6 +218,34 @@ export function bilibiliBinding(overrides: Partial<BilibiliBinding> = {}): Bilib
     biliUid: '10001',
     boundAt: testTime(-1),
     id: testId(7),
+    ...overrides,
+  };
+}
+
+export function bindingConflict(overrides: Partial<BindingConflict> = {}): BindingConflict {
+  return {
+    biliUid: '10001',
+    challengeId: testId(45),
+    createdAt: testTime(-1),
+    id: testId(46),
+    observedBinding: {
+      biliDisplayName: '原绑定账号',
+      biliUid: '10001',
+      boundAt: testTime(-10),
+      id: testId(47),
+      unboundAt: null,
+      user: {
+        email: 'owner@example.com',
+        id: testId(48),
+        name: '原账号用户',
+      },
+    },
+    requestingUser: {
+      email: 'requester@example.com',
+      id: testId(49),
+      name: '申请用户',
+    },
+    status: 'OPEN',
     ...overrides,
   };
 }

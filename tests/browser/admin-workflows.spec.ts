@@ -4,6 +4,7 @@ import { mockApi, requestJsonObject, requestPath } from './support/api.js';
 import {
   adminIdentity,
   bilibiliBinding,
+  bindingConflict,
   systemStatus,
   testId,
   testTime,
@@ -26,6 +27,9 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
       return [userRecord({ bilibiliBinding: bilibiliBinding() })];
     }
     if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
+    if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
+      return { items: [], nextCursor: null };
+    }
     if (pathname === '/api/v1/admin/announcements') return [];
     if (pathname === '/api/v1/admin/system') return systemStatus();
     if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
@@ -56,6 +60,39 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     .filter({ hasText: '健康' });
   await expect(systemHealth).toBeVisible();
   expect((await systemHealth.boundingBox())?.width).toBeLessThan(90);
+});
+
+test('resolves the exact binding recorded by a UID conflict', async ({ appUrl, page }) => {
+  const conflict = bindingConflict();
+  let openConflicts = [conflict];
+  let resolutionPayload: Record<string, unknown> | null = null;
+  await mockApi(page, (request) => {
+    const pathname = requestPath(request);
+    if (pathname === '/api/v1/me') return adminIdentity();
+    if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
+    if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
+      return { items: openConflicts, nextCursor: null };
+    }
+    if (
+      pathname === `/api/v1/admin/bilibili-binding-conflicts/${conflict.id}/resolve` &&
+      request.method() === 'POST'
+    ) {
+      resolutionPayload = requestJsonObject(request);
+      openConflicts = [];
+      return null;
+    }
+    return undefined;
+  });
+
+  await page.goto(`${appUrl}/admin/verification`);
+  await expect(page.getByText('申请用户', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '解除原绑定' }).click();
+  const dialog = page.getByRole('dialog', { name: '解决这项 UID 冲突？' });
+  await dialog.getByLabel('处理原因').fill('已核对 UID 归属证明');
+  await dialog.getByRole('button', { name: '确认解决' }).click();
+
+  await expect.poll(() => resolutionPayload).toEqual({ reason: '已核对 UID 归属证明' });
+  await expect(page.getByText('当前没有待处理的绑定冲突。')).toBeVisible();
 });
 
 test('registers a creator from verified identity without editable Bilibili fields', async ({

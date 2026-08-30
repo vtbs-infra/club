@@ -19,6 +19,7 @@ import {
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
+  bindingConflicts,
   creators,
   verificationRooms,
 } from './identity.js';
@@ -47,6 +48,7 @@ export const schema = {
   auditLogs,
   bilibiliBindings,
   bindingChallenges,
+  bindingConflicts,
   creators,
   giftOrderAddresses,
   giftOrderItems,

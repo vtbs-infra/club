@@ -5,13 +5,19 @@ import {
   CircleAlert,
   CircleCheck,
   CircleDotDashed,
+  Link2,
   RadioTower,
   UsersRound,
   XCircle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { getAdminOverview, getAdminRosters, getVerificationRooms } from '../../api/client';
+import {
+  getAdminBindingConflicts,
+  getAdminOverview,
+  getAdminRosters,
+  getVerificationRooms,
+} from '../../api/client';
 import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
 import {
@@ -22,6 +28,10 @@ import {
 
 export function AdminOverviewPage() {
   const overview = useQuery({ queryFn: getAdminOverview, queryKey: ['admin', 'overview'] });
+  const bindingConflicts = useQuery({
+    queryFn: () => getAdminBindingConflicts(),
+    queryKey: ['admin', 'binding-conflicts', undefined],
+  });
   const rosters = useQuery({ queryFn: getAdminRosters, queryKey: ['admin', 'rosters'] });
   const rooms = useQuery({ queryFn: getVerificationRooms, queryKey: ['admin', 'verification'] });
   const pendingApproval =
@@ -32,8 +42,14 @@ export function AdminOverviewPage() {
   );
   const verificationNeedsSetup = rooms.data ? !rooms.data.some((room) => room.enabled) : false;
   const attentionUnresolved =
-    rosters.isPending || rooms.isPending || rosters.isError || rooms.isError;
+    rosters.isPending ||
+    rooms.isPending ||
+    bindingConflicts.isPending ||
+    rosters.isError ||
+    rooms.isError ||
+    bindingConflicts.isError;
   const hasAttention =
+    (bindingConflicts.data?.items.length ?? 0) > 0 ||
     pendingApproval.length > 0 ||
     failures.length > 0 ||
     unhealthyRooms.length > 0 ||
@@ -42,7 +58,7 @@ export function AdminOverviewPage() {
     <div className="stack-xl">
       <PageHeader
         eyebrow="平台管理"
-        intro="只关注平台级配置、名单异常和验证直播间健康状态。"
+        intro="只关注平台级配置、绑定冲突、名单异常和验证直播间健康状态。"
         title="平台概览"
       />
       <section className="metric-grid">
@@ -173,7 +189,38 @@ export function AdminOverviewPage() {
               title="直播间状态暂时无法加载"
             />
           ) : null}
+          {bindingConflicts.isPending ? (
+            <p className="quiet-line" role="status">
+              正在读取绑定冲突…
+            </p>
+          ) : null}
+          {bindingConflicts.isError ? (
+            <ErrorState
+              error={bindingConflicts.error}
+              onRetry={() => void bindingConflicts.refetch()}
+              retryLabel="重试绑定冲突"
+              title="绑定冲突暂时无法加载"
+            />
+          ) : null}
           <div className="attention-list">
+            {bindingConflicts.data && bindingConflicts.data.items.length > 0 ? (
+              <Link to="/admin/verification">
+                <span className="attention-icon warning">
+                  <Link2 aria-hidden="true" size={19} />
+                </span>
+                <div>
+                  <strong>
+                    {bindingConflicts.data.nextCursor ? '至少 ' : ''}
+                    {bindingConflicts.data.items.length} 项 UID 绑定冲突待处理
+                  </strong>
+                  <p>核对申请账号与冲突发生时的原绑定。</p>
+                </div>
+                <b>
+                  去处理
+                  <ArrowRight aria-hidden="true" size={15} />
+                </b>
+              </Link>
+            ) : null}
             {verificationNeedsSetup ? (
               <Link to="/admin/verification">
                 <span className="attention-icon warning">

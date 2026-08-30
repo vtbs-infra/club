@@ -307,6 +307,24 @@ CREATE TABLE "bilibili_bindings" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "binding_conflicts" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"challenge_id" uuid NOT NULL,
+	"observed_binding_id" uuid NOT NULL,
+	"bili_uid" text NOT NULL,
+	"status" text DEFAULT 'OPEN' NOT NULL,
+	"closed_at" timestamp with time zone,
+	"closed_by_user_id" uuid,
+	"resolution_reason" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "binding_conflicts_status_check" CHECK ("binding_conflicts"."status" in ('OPEN', 'RESOLVED', 'DISMISSED')),
+	CONSTRAINT "binding_conflicts_lifecycle_check" CHECK ((
+        ("binding_conflicts"."status" = 'OPEN' and "binding_conflicts"."closed_at" is null and "binding_conflicts"."closed_by_user_id" is null and "binding_conflicts"."resolution_reason" is null)
+        or ("binding_conflicts"."status" in ('RESOLVED', 'DISMISSED') and "binding_conflicts"."closed_at" is not null and "binding_conflicts"."closed_by_user_id" is not null and "binding_conflicts"."resolution_reason" is not null)
+      ))
+);
+--> statement-breakpoint
 CREATE TABLE "binding_challenges" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -468,6 +486,9 @@ ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_actor_user_id_users_id_fk" F
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_creator_id_creators_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."creators"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bilibili_bindings" ADD CONSTRAINT "bilibili_bindings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "bilibili_bindings" ADD CONSTRAINT "bilibili_bindings_challenge_id_binding_challenges_id_fk" FOREIGN KEY ("challenge_id") REFERENCES "public"."binding_challenges"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "binding_conflicts" ADD CONSTRAINT "binding_conflicts_challenge_id_binding_challenges_id_fk" FOREIGN KEY ("challenge_id") REFERENCES "public"."binding_challenges"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "binding_conflicts" ADD CONSTRAINT "binding_conflicts_observed_binding_id_bilibili_bindings_id_fk" FOREIGN KEY ("observed_binding_id") REFERENCES "public"."bilibili_bindings"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "binding_conflicts" ADD CONSTRAINT "binding_conflicts_closed_by_user_id_users_id_fk" FOREIGN KEY ("closed_by_user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "binding_challenges" ADD CONSTRAINT "binding_challenges_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "binding_challenges" ADD CONSTRAINT "binding_challenges_verification_room_id_verification_rooms_id_fk" FOREIGN KEY ("verification_room_id") REFERENCES "public"."verification_rooms"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "creators" ADD CONSTRAINT "creators_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -523,6 +544,8 @@ CREATE UNIQUE INDEX "bilibili_bindings_challenge_unique" ON "bilibili_bindings" 
 CREATE UNIQUE INDEX "bilibili_bindings_active_user_unique" ON "bilibili_bindings" USING btree ("user_id") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "bilibili_bindings_active_uid_unique" ON "bilibili_bindings" USING btree ("bili_uid") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
 CREATE INDEX "bilibili_bindings_user_history_idx" ON "bilibili_bindings" USING btree ("user_id","bound_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "binding_conflicts_challenge_unique" ON "binding_conflicts" USING btree ("challenge_id");--> statement-breakpoint
+CREATE INDEX "binding_conflicts_open_created_idx" ON "binding_conflicts" USING btree ("status","created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "binding_challenges_active_user_unique" ON "binding_challenges" USING btree ("user_id") WHERE "binding_challenges"."status" = 'ACTIVE';--> statement-breakpoint
 CREATE UNIQUE INDEX "binding_challenges_consumed_event_unique" ON "binding_challenges" USING btree ("consumed_event_id") WHERE "binding_challenges"."consumed_event_id" is not null;--> statement-breakpoint
 CREATE INDEX "binding_challenges_match_idx" ON "binding_challenges" USING btree ("verification_room_id","code_digest","status");--> statement-breakpoint
@@ -582,6 +605,28 @@ CREATE TRIGGER tracking_events_append_only
 CREATE TRIGGER announcement_reads_append_only
 	BEFORE UPDATE OR DELETE ON "announcement_reads"
 	FOR EACH ROW EXECUTE FUNCTION club_reject_mutation();--> statement-breakpoint
+
+-- Binding conflicts preserve the exact challenge and binding observed when the conflict opened.
+CREATE FUNCTION enforce_binding_conflict_lifecycle() RETURNS trigger AS $$
+BEGIN
+	IF TG_OP = 'DELETE' THEN
+		RAISE EXCEPTION 'binding conflicts cannot be deleted';
+	END IF;
+	IF NEW.challenge_id IS DISTINCT FROM OLD.challenge_id
+		OR NEW.observed_binding_id IS DISTINCT FROM OLD.observed_binding_id
+		OR NEW.bili_uid IS DISTINCT FROM OLD.bili_uid
+		OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+		RAISE EXCEPTION 'binding conflict evidence is immutable';
+	END IF;
+	IF OLD.status <> 'OPEN' OR NEW.status NOT IN ('RESOLVED', 'DISMISSED') THEN
+		RAISE EXCEPTION 'invalid binding conflict state transition';
+	END IF;
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;--> statement-breakpoint
+CREATE TRIGGER binding_conflicts_lifecycle
+	BEFORE UPDATE OR DELETE ON "binding_conflicts"
+	FOR EACH ROW EXECUTE FUNCTION enforce_binding_conflict_lifecycle();--> statement-breakpoint
 
 -- Monthly roster evidence becomes immutable at its durable boundaries.
 CREATE FUNCTION preserve_completed_snapshot_attempt() RETURNS trigger AS $$

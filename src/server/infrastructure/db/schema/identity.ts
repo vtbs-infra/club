@@ -153,3 +153,39 @@ export const bilibiliBindings = pgTable(
     index('bilibili_bindings_user_history_idx').on(table.userId, table.boundAt),
   ],
 );
+
+export const bindingConflicts = pgTable(
+  'binding_conflicts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    challengeId: uuid('challenge_id')
+      .notNull()
+      .references(() => bindingChallenges.id, { onDelete: 'restrict' }),
+    observedBindingId: uuid('observed_binding_id')
+      .notNull()
+      .references(() => bilibiliBindings.id, { onDelete: 'restrict' }),
+    biliUid: text('bili_uid').notNull(),
+    status: text('status').default('OPEN').notNull(),
+    closedAt: timestamp('closed_at', { mode: 'date', withTimezone: true }),
+    closedByUserId: uuid('closed_by_user_id').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
+    resolutionReason: text('resolution_reason'),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('binding_conflicts_challenge_unique').on(table.challengeId),
+    index('binding_conflicts_open_created_idx').on(table.status, table.createdAt, table.id),
+    check(
+      'binding_conflicts_status_check',
+      sql`${table.status} in ('OPEN', 'RESOLVED', 'DISMISSED')`,
+    ),
+    check(
+      'binding_conflicts_lifecycle_check',
+      sql`(
+        (${table.status} = 'OPEN' and ${table.closedAt} is null and ${table.closedByUserId} is null and ${table.resolutionReason} is null)
+        or (${table.status} in ('RESOLVED', 'DISMISSED') and ${table.closedAt} is not null and ${table.closedByUserId} is not null and ${table.resolutionReason} is not null)
+      )`,
+    ),
+  ],
+);

@@ -1,6 +1,6 @@
 export const EXPECTED_SCHEMA_MIGRATIONS = [
   {
-    createdAt: '1788100611042',
-    hash: 'be30acf206217bf07adbd22f40c9174d5602e9474701f24539337786eb053acb',
+    createdAt: '1788117194431',
+    hash: '8683806fc07cfedd826c41a171e113cc32828654498a808a31192732d03e2a98',
   },
 ] as const;
