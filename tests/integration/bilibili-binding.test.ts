@@ -9,6 +9,7 @@ import {
   bilibiliBindings,
   bindingChallenges,
   users,
+  verificationRooms,
 } from '../../src/server/infrastructure/db/schema/index.js';
 import {
   createTemporaryStorage,
@@ -92,13 +93,18 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     cookie: string,
     remoteAddress = '127.0.0.1',
   ): Promise<LightMyRequestResponse> {
-    return app.inject({
+    const response = await app.inject({
       headers: { cookie, origin: TEST_ORIGIN },
       method: 'POST',
       payload: {},
       remoteAddress,
       url: '/api/v1/me/bilibili-challenges',
     });
+    if (response.statusCode === 201) {
+      const roomId = response.json<ChallengeResponse>().room.link.split('/').at(-1)!;
+      await expect.poll(() => source.activeConnectionCount(roomId), { timeout: 1_000 }).toBe(1);
+    }
+    return response;
   }
 
   beforeAll(async () => {
@@ -160,6 +166,26 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       url: '/api/v1/admin/verification-rooms',
     });
     expect(forbidden.statusCode).toBe(403);
+
+    source.failNextConnections(roomA.biliRoomId);
+    const failed = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'POST',
+      payload: {},
+      url: `/api/v1/admin/verification-rooms/${roomA.id}/test`,
+    });
+    expect(failed.statusCode, failed.body).toBe(502);
+    const [unhealthyRoom] = await database.orm
+      .select({ healthStatus: verificationRooms.healthStatus })
+      .from(verificationRooms)
+      .where(eq(verificationRooms.id, roomA.id));
+    expect(unhealthyRoom?.healthStatus).toBe('UNHEALTHY');
+    const [failedAudit] = await database.orm
+      .select({ action: auditLogs.action })
+      .from(auditLogs)
+      .where(eq(auditLogs.action, 'verification-room.connectivity-failed'))
+      .limit(1);
+    expect(failedAudit?.action).toBe('verification-room.connectivity-failed');
 
     for (const room of [roomA, roomB]) {
       const response = await app.inject({
@@ -291,7 +317,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     expect(history?.unboundAt).toBeInstanceOf(Date);
   });
 
-  it('expires stale challenges before accepting their proof message', async () => {
+  it('projects expiry without a read-side write and lets the runtime persist it', async () => {
     await registerTestUser({ app, database, email: 'dave@example.com', name: 'Dave' });
     const daveCookie = await signInTestUser({ app, email: 'dave@example.com' });
     const issued = await issue(daveCookie, '192.0.2.40');
@@ -303,6 +329,23 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       .set({ expiresAt: new Date(Date.now() - 1_000) })
       .where(eq(bindingChallenges.id, challenge.id));
 
+    const [beforeRead] = await database.orm
+      .select({ status: bindingChallenges.status, updatedAt: bindingChallenges.updatedAt })
+      .from(bindingChallenges)
+      .where(eq(bindingChallenges.id, challenge.id));
+    expect(beforeRead?.status).toBe('ACTIVE');
+    const projectedState = await app.inject({
+      headers: { cookie: daveCookie },
+      method: 'GET',
+      url: '/api/v1/me/bilibili-challenges/current',
+    });
+    expect(projectedState.json()).toMatchObject({ connectionState: null, status: 'EXPIRED' });
+    const [afterRead] = await database.orm
+      .select({ status: bindingChallenges.status, updatedAt: bindingChallenges.updatedAt })
+      .from(bindingChallenges)
+      .where(eq(bindingChallenges.id, challenge.id));
+    expect(afterRead).toEqual(beforeRead);
+
     await source.emitMessage({
       biliDisplayName: 'Too late',
       biliUid: '444444444',
@@ -310,12 +353,18 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       message: challenge.code,
       roomId,
     });
+    await runtime.bindings.reconcileConnections();
     const state = await app.inject({
       headers: { cookie: daveCookie },
       method: 'GET',
       url: '/api/v1/me/bilibili-challenges/current',
     });
     expect(state.json()).toMatchObject({ status: 'EXPIRED' });
+    const [expiredChallenge] = await database.orm
+      .select({ status: bindingChallenges.status })
+      .from(bindingChallenges)
+      .where(eq(bindingChallenges.id, challenge.id));
+    expect(expiredChallenge?.status).toBe('EXPIRED');
     const [binding] = await database.orm
       .select({ id: bilibiliBindings.id })
       .from(bilibiliBindings)

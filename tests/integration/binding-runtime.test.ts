@@ -10,6 +10,10 @@ import {
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { FakeLiveMessageSource } from '../../src/server/modules/bilibili/fake-live-message-source.js';
+import type {
+  LiveMessageListener,
+  RoomConnection,
+} from '../../src/server/modules/bilibili/live-message-source.js';
 import { createBindingRuntime } from '../../src/server/modules/binding/binding-runtime.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
 import {
@@ -29,10 +33,33 @@ interface ChallengeResponse {
   readonly room: { readonly link: string };
 }
 
+class GatedLiveMessageSource extends FakeLiveMessageSource {
+  public connectionAttempted = false;
+  private releaseConnection: (() => void) | null = null;
+  private readonly connectionGate = new Promise<void>((resolve) => {
+    this.releaseConnection = resolve;
+  });
+
+  public override async connectRoom(
+    roomId: string,
+    listener: LiveMessageListener,
+  ): Promise<RoomConnection> {
+    this.connectionAttempted = true;
+    await this.connectionGate;
+    return super.connectRoom(roomId, listener);
+  }
+
+  public allowConnection(): void {
+    this.releaseConnection?.();
+    this.releaseConnection = null;
+  }
+}
+
 integration('Bilibili binding runtime recovery', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   let database: DatabaseService;
   let integrationDatabase: IntegrationDatabase;
+  let initialSource: GatedLiveMessageSource;
   let storage: TemporaryStorage;
   let userCookie: string;
 
@@ -49,14 +76,14 @@ integration('Bilibili binding runtime recovery', () => {
       name: 'Platform Admin',
       password: TEST_PASSWORD,
     });
-    const source = new FakeLiveMessageSource();
+    initialSource = new GatedLiveMessageSource();
     const runtime = createBindingRuntime({
       clock: { now: () => new Date() },
       config,
       database,
       idleGraceMs: 0,
       reconnectDelaysMs: [1],
-      source,
+      source: initialSource,
     });
     app = await buildApp({
       auth,
@@ -90,7 +117,7 @@ integration('Bilibili binding runtime recovery', () => {
     if (integrationDatabase) await integrationDatabase.cleanup();
   });
 
-  it('restores unexpired listening and contains an initial source failure after restart', async () => {
+  it('responds before connecting, then restores listening after a failed restart', async () => {
     const issued = await app.inject({
       headers: { cookie: userCookie, origin: TEST_ORIGIN },
       method: 'POST',
@@ -99,6 +126,8 @@ integration('Bilibili binding runtime recovery', () => {
     });
     expect(issued.statusCode, issued.body).toBe(201);
     const roomId = issued.json<ChallengeResponse>().room.link.split('/').at(-1)!;
+    await expect.poll(() => initialSource.connectionAttempted, { timeout: 1_000 }).toBe(true);
+    initialSource.allowConnection();
 
     await app.close();
     const source = new FakeLiveMessageSource();

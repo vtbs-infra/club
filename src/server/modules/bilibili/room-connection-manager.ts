@@ -105,7 +105,7 @@ export class RoomConnectionManager {
 
   public releaseRoom(roomId: string): void {
     const room = this.rooms.get(roomId);
-    if (!room) return;
+    if (!room || !room.desired) return;
     room.desired = false;
     if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
     room.reconnectTimer = null;
@@ -115,6 +115,7 @@ export class RoomConnectionManager {
       void room.connection?.close();
       this.rooms.delete(roomId);
     }, this.idleGraceMs);
+    room.idleTimer.unref();
   }
 
   public async reconcile(requiredRoomIds: readonly string[]): Promise<void> {

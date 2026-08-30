@@ -50,24 +50,21 @@ export class BindingService {
     private readonly clock: Clock,
     private readonly codeSecret: string,
     private readonly connections: RoomConnectionManager,
+    private readonly onConnectionDemandChanged: () => void,
   ) {
     this.audit = new AuditService(database);
   }
 
-  public async expireChallenges(): Promise<void> {
+  public async expireChallenges(now = this.clock.now()): Promise<void> {
     await this.database.orm
       .update(bindingChallenges)
-      .set({ status: 'EXPIRED', updatedAt: this.clock.now() })
-      .where(
-        and(
-          eq(bindingChallenges.status, 'ACTIVE'),
-          lte(bindingChallenges.expiresAt, this.clock.now()),
-        ),
-      );
+      .set({ status: 'EXPIRED', updatedAt: now })
+      .where(and(eq(bindingChallenges.status, 'ACTIVE'), lte(bindingChallenges.expiresAt, now)));
   }
 
   public async reconcileConnections(): Promise<void> {
-    await this.expireChallenges();
+    const now = this.clock.now();
+    await this.expireChallenges(now);
     const rooms = await this.database.orm
       .selectDistinct({ biliRoomId: verificationRooms.biliRoomId })
       .from(bindingChallenges)
@@ -75,7 +72,7 @@ export class BindingService {
       .where(
         and(
           eq(bindingChallenges.status, 'ACTIVE'),
-          gt(bindingChallenges.expiresAt, this.clock.now()),
+          gt(bindingChallenges.expiresAt, now),
           eq(verificationRooms.enabled, true),
         ),
       );
@@ -83,7 +80,6 @@ export class BindingService {
   }
 
   public async createChallenge(input: RequestAuditContext & { readonly userId: string }) {
-    await this.expireChallenges();
     const [binding] = await this.database.orm
       .select({ id: bilibiliBindings.id })
       .from(bilibiliBindings)
@@ -148,7 +144,7 @@ export class BindingService {
       );
       return created;
     });
-    await this.reconcileConnections();
+    this.onConnectionDemandChanged();
     return {
       code,
       expiresAt: challenge.expiresAt,
@@ -162,7 +158,6 @@ export class BindingService {
   }
 
   public async getAccountState(userId: string) {
-    await this.expireChallenges();
     const [binding] = await this.database.orm
       .select({
         biliDisplayName: bilibiliBindings.biliDisplayName,
@@ -186,20 +181,26 @@ export class BindingService {
       .where(eq(bindingChallenges.userId, userId))
       .orderBy(desc(bindingChallenges.createdAt))
       .limit(1);
+    const challengeIsExpired =
+      challenge?.status === 'ACTIVE' && challenge.expiresAt <= this.clock.now();
+    const projectedChallenge = challenge
+      ? {
+          connectionState:
+            challenge.status === 'ACTIVE' && !challengeIsExpired
+              ? this.connections.getState(challenge.roomId)
+              : null,
+          expiresAt: challenge.expiresAt,
+          id: challenge.id,
+          room: {
+            displayName: challenge.roomDisplayName,
+            link: `https://live.bilibili.com/${challenge.roomId}`,
+          },
+          status: challengeIsExpired ? ('EXPIRED' as const) : challenge.status,
+        }
+      : null;
     return {
       binding: binding ?? null,
-      challenge: challenge
-        ? {
-            connectionState: this.connections.getState(challenge.roomId),
-            expiresAt: challenge.expiresAt,
-            id: challenge.id,
-            room: {
-              displayName: challenge.roomDisplayName,
-              link: `https://live.bilibili.com/${challenge.roomId}`,
-            },
-            status: challenge.status,
-          }
-        : null,
+      challenge: projectedChallenge,
     };
   }
 
@@ -338,7 +339,7 @@ export class BindingService {
         );
         return 'BOUND' as const;
       });
-      if (result !== 'IGNORED') await this.reconcileConnections();
+      if (result !== 'IGNORED') this.onConnectionDemandChanged();
       return result;
     } catch (error) {
       if (
@@ -355,7 +356,7 @@ export class BindingService {
         .limit(1);
       if (duplicate) return 'DUPLICATE';
       await this.recordConflict(matchedChallengeId, event, matchedUserId);
-      await this.reconcileConnections();
+      this.onConnectionDemandChanged();
       return 'CONFLICT';
     }
   }

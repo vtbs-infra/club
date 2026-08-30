@@ -43,6 +43,7 @@ export function createBindingRuntime(options: CreateBindingRuntimeOptions): Bind
       ? new FakeLiveMessageSource()
       : new PublicWebLiveMessageSource());
   const serviceReference: { bindings: BindingService | null } = { bindings: null };
+  let requestConnectionReconcile = (): void => undefined;
   const connections = new RoomConnectionManager({
     ...(options.idleGraceMs === undefined ? {} : { idleGraceMs: options.idleGraceMs }),
     onMessage: async (event) => {
@@ -70,31 +71,49 @@ export function createBindingRuntime(options: CreateBindingRuntimeOptions): Bind
     options.clock,
     options.config.authSecret,
     connections,
+    () => requestConnectionReconcile(),
   );
   serviceReference.bindings = bindings;
   const rooms = new VerificationRoomService(
     options.database,
     connections,
-    async () => bindings.reconcileConnections(),
+    () => requestConnectionReconcile(),
     options.reportError,
   );
   let interval: ReturnType<typeof setInterval> | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let starting: Promise<void> | null = null;
+  let activeReconcile: Promise<void> | null = null;
+  let reconcilePending = false;
   let closed = false;
   const retryDelayMs = options.retryDelayMs ?? 30_000;
   const status = new RuntimeStatusTracker(options.clock);
 
-  const reconcile = async (): Promise<void> => {
-    try {
-      await bindings.reconcileConnections();
-      status.markSuccess();
-    } catch (error) {
-      const nextRetryAt = new Date(options.clock.now().getTime() + retryDelayMs);
-      status.markFailure(error, nextRetryAt);
-      options.reportError?.(error, 'binding.reconcile');
-      throw error;
-    }
+  const reconcile = (): Promise<void> => {
+    if (closed) return Promise.resolve();
+    reconcilePending = true;
+    if (activeReconcile) return activeReconcile;
+    activeReconcile = (async () => {
+      while (reconcilePending && !closed) {
+        reconcilePending = false;
+        try {
+          await bindings.reconcileConnections();
+          status.markSuccess();
+        } catch (error) {
+          const nextRetryAt = new Date(options.clock.now().getTime() + retryDelayMs);
+          status.markFailure(error, nextRetryAt);
+          throw error;
+        }
+      }
+    })().finally(() => {
+      activeReconcile = null;
+      if (reconcilePending && !closed) requestConnectionReconcile();
+    });
+    return activeReconcile;
+  };
+
+  requestConnectionReconcile = () => {
+    void reconcile().catch((error) => options.reportError?.(error, 'binding.demand'));
   };
 
   const scheduleStartRetry = (): void => {
@@ -140,6 +159,10 @@ export function createBindingRuntime(options: CreateBindingRuntimeOptions): Bind
       interval = null;
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = null;
+      reconcilePending = false;
+      await Promise.allSettled(
+        [starting, activeReconcile].filter((task): task is Promise<void> => task !== null),
+      );
       await connections.close();
       status.markStopped();
     },

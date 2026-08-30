@@ -36,15 +36,15 @@ export class VerificationRoomService {
   public constructor(
     private readonly database: DatabaseService,
     private readonly connections: RoomConnectionManager,
-    private readonly onConfigurationChange?: () => void | Promise<void>,
+    private readonly onConfigurationChange?: () => void,
     private readonly reportError?: (error: unknown, operation: string) => void,
   ) {
     this.audit = new AuditService(database);
   }
 
-  private async notifyConfigurationChange(): Promise<void> {
+  private notifyConfigurationChange(): void {
     try {
-      await this.onConfigurationChange?.();
+      this.onConfigurationChange?.();
     } catch (error) {
       this.reportError?.(error, 'verification-room.reconcile');
       // Periodic reconciliation will retry if the database or source is unavailable here.
@@ -90,7 +90,7 @@ export class VerificationRoomService {
         );
         return room;
       });
-      await this.notifyConfigurationChange();
+      this.notifyConfigurationChange();
       return created;
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -148,7 +148,7 @@ export class VerificationRoomService {
       );
       return room;
     });
-    await this.notifyConfigurationChange();
+    this.notifyConfigurationChange();
     return updated;
   }
 
@@ -163,34 +163,25 @@ export class VerificationRoomService {
     }
     try {
       await this.connections.testRoom(room.biliRoomId);
-      const [updated] = await this.database.orm
-        .update(verificationRooms)
-        .set({ healthStatus: 'HEALTHY', lastConnectedAt: new Date(), updatedAt: new Date() })
-        .where(eq(verificationRooms.id, room.id))
-        .returning();
-      await this.audit.record({
-        action: 'verification-room.connectivity-tested',
-        actorUserId: input.actorUserId,
-        afterSummary: { healthStatus: 'HEALTHY' },
-        ipAddress: input.ipAddress,
-        requestId: input.requestId,
-        targetId: room.id,
-        targetType: 'verification-room',
-      });
-      return updated!;
     } catch {
-      await this.database.orm
-        .update(verificationRooms)
-        .set({ healthStatus: 'UNHEALTHY', updatedAt: new Date() })
-        .where(eq(verificationRooms.id, room.id));
-      await this.audit.record({
-        action: 'verification-room.connectivity-failed',
-        actorUserId: input.actorUserId,
-        afterSummary: { healthStatus: 'UNHEALTHY' },
-        ipAddress: input.ipAddress,
-        requestId: input.requestId,
-        targetId: room.id,
-        targetType: 'verification-room',
+      const now = new Date();
+      await this.database.orm.transaction(async (transaction) => {
+        await transaction
+          .update(verificationRooms)
+          .set({ healthStatus: 'UNHEALTHY', updatedAt: now })
+          .where(eq(verificationRooms.id, room.id));
+        await this.audit.record(
+          {
+            action: 'verification-room.connectivity-failed',
+            actorUserId: input.actorUserId,
+            afterSummary: { healthStatus: 'UNHEALTHY' },
+            ipAddress: input.ipAddress,
+            requestId: input.requestId,
+            targetId: room.id,
+            targetType: 'verification-room',
+          },
+          transaction,
+        );
       });
       throw new AppError(
         'VERIFICATION_ROOM_CONNECTION_FAILED',
@@ -198,5 +189,27 @@ export class VerificationRoomService {
         502,
       );
     }
+    const now = new Date();
+    return this.database.orm.transaction(async (transaction) => {
+      const [updated] = await transaction
+        .update(verificationRooms)
+        .set({ healthStatus: 'HEALTHY', lastConnectedAt: now, updatedAt: now })
+        .where(eq(verificationRooms.id, room.id))
+        .returning();
+      if (!updated) throw new Error('Verification-room test update returned no row.');
+      await this.audit.record(
+        {
+          action: 'verification-room.connectivity-tested',
+          actorUserId: input.actorUserId,
+          afterSummary: { healthStatus: 'HEALTHY' },
+          ipAddress: input.ipAddress,
+          requestId: input.requestId,
+          targetId: room.id,
+          targetType: 'verification-room',
+        },
+        transaction,
+      );
+      return updated;
+    });
   }
 }

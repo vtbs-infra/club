@@ -1,5 +1,5 @@
 import type { MessageData } from 'bilibili-live-danmaku';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { FakeLiveMessageSource } from '../../src/server/modules/bilibili/fake-live-message-source.js';
 import {
@@ -124,5 +124,26 @@ describe('live-message adapters', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(manager.getState('200')).toBe('HEALTHY');
     await manager.close();
+  });
+
+  it('does not extend an idle room grace period during repeated reconciliation', async () => {
+    vi.useFakeTimers();
+    const source = new FakeLiveMessageSource();
+    const manager = new RoomConnectionManager({
+      idleGraceMs: 100,
+      onMessage: () => undefined,
+      source,
+    });
+    try {
+      await manager.reconcile(['300']);
+      await manager.reconcile([]);
+      await vi.advanceTimersByTimeAsync(60);
+      await manager.reconcile([]);
+      await vi.advanceTimersByTimeAsync(41);
+      expect(source.activeConnectionCount('300')).toBe(0);
+    } finally {
+      await manager.close();
+      vi.useRealTimers();
+    }
   });
 });
