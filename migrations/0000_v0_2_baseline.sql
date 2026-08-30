@@ -251,7 +251,7 @@ CREATE TABLE "shipments" (
 	"carrier_name" text NOT NULL,
 	"tracking_number" text NOT NULL,
 	"tracking_url" text,
-	"status" text DEFAULT 'LABEL_CREATED' NOT NULL,
+	"progress" text DEFAULT 'LABEL_CREATED' NOT NULL,
 	"delivered_at" timestamp with time zone,
 	"last_tracking_refresh_at" timestamp with time zone,
 	"next_tracking_refresh_at" timestamp with time zone,
@@ -260,7 +260,11 @@ CREATE TABLE "shipments" (
 	"last_tracking_error" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "shipments_status_check" CHECK ("shipments"."status" in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION')),
+	CONSTRAINT "shipments_progress_check" CHECK ("shipments"."progress" in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED')),
+	CONSTRAINT "shipments_delivery_check" CHECK ((
+        ("shipments"."progress" = 'DELIVERED' and "shipments"."delivered_at" is not null and "shipments"."next_tracking_refresh_at" is null)
+        or ("shipments"."progress" <> 'DELIVERED' and "shipments"."delivered_at" is null)
+      )),
 	CONSTRAINT "shipments_tracking_identity_check" CHECK (length("shipments"."carrier_code") between 1 and 80 and length("shipments"."tracking_number") between 1 and 160)
 );
 --> statement-breakpoint
@@ -508,7 +512,7 @@ CREATE INDEX "gift_releases_creator_status_idx" ON "gift_releases" USING btree (
 CREATE UNIQUE INDEX "gift_tier_rules_release_tier_unique" ON "gift_tier_rules" USING btree ("gift_release_id","tier");--> statement-breakpoint
 CREATE UNIQUE INDEX "shipments_number_unique" ON "shipments" USING btree ("shipment_number");--> statement-breakpoint
 CREATE UNIQUE INDEX "shipments_order_unique" ON "shipments" USING btree ("gift_order_id");--> statement-breakpoint
-CREATE INDEX "shipments_creator_status_idx" ON "shipments" USING btree ("creator_id","status");--> statement-breakpoint
+CREATE INDEX "shipments_creator_progress_idx" ON "shipments" USING btree ("creator_id","progress");--> statement-breakpoint
 CREATE INDEX "shipments_tracking_due_idx" ON "shipments" USING btree ("next_tracking_refresh_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "tracking_events_shipment_provider_unique" ON "tracking_events" USING btree ("shipment_id","provider_event_id");--> statement-breakpoint
 CREATE INDEX "tracking_events_shipment_occurred_idx" ON "tracking_events" USING btree ("shipment_id","occurred_at");--> statement-breakpoint
@@ -810,6 +814,10 @@ BEGIN
 		OR (TG_OP = 'INSERT' AND order_status <> 'SUBMITTED') THEN
 		RAISE EXCEPTION 'shipment does not match a fulfillable gift order';
 	END IF;
+	IF TG_OP = 'UPDATE' AND NEW.next_tracking_refresh_at IS NOT NULL
+		AND order_status <> 'SHIPPED' THEN
+		RAISE EXCEPTION 'only shipped gift orders can schedule tracking refreshes';
+	END IF;
 	IF TG_OP = 'UPDATE' THEN
 		IF NEW.shipment_number IS DISTINCT FROM OLD.shipment_number
 			OR NEW.gift_order_id IS DISTINCT FROM OLD.gift_order_id
@@ -820,17 +828,16 @@ BEGIN
 			OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
 			RAISE EXCEPTION 'shipment identity is immutable';
 		END IF;
-		IF NEW.status <> OLD.status AND NOT (
-			(OLD.status = 'LABEL_CREATED' AND NEW.status IN ('IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'))
-			OR (OLD.status = 'IN_TRANSIT' AND NEW.status IN ('OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION'))
-			OR (OLD.status = 'OUT_FOR_DELIVERY' AND NEW.status IN ('DELIVERED', 'EXCEPTION'))
-			OR (OLD.status = 'EXCEPTION' AND NEW.status IN ('IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'))
+		IF NEW.progress <> OLD.progress AND NOT (
+			(OLD.progress = 'LABEL_CREATED' AND NEW.progress IN ('IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED'))
+			OR (OLD.progress = 'IN_TRANSIT' AND NEW.progress IN ('OUT_FOR_DELIVERY', 'DELIVERED'))
+			OR (OLD.progress = 'OUT_FOR_DELIVERY' AND NEW.progress = 'DELIVERED')
 		) THEN
-			RAISE EXCEPTION 'invalid shipment state transition';
+			RAISE EXCEPTION 'shipment progress cannot move backward';
 		END IF;
-	END IF;
-	IF NEW.status = 'DELIVERED' AND NEW.delivered_at IS NULL THEN
-		RAISE EXCEPTION 'delivered shipments require a timestamp';
+		IF OLD.delivered_at IS NOT NULL AND NEW.delivered_at IS DISTINCT FROM OLD.delivered_at THEN
+			RAISE EXCEPTION 'shipment delivery time is immutable';
+		END IF;
 	END IF;
 	RETURN NEW;
 END;

@@ -8,7 +8,11 @@ import { AddressForm } from '../components/AddressEditor';
 import { ErrorNotice, ErrorState, InlineNotice, LoadingState, StatusBadge } from '../components/Ui';
 import { useNow } from '../hooks/useNow';
 import { formatDate, formatMonth, tierLabel } from '../lib/format';
-import { giftOrderPresentation } from '../lib/status-presentation';
+import {
+  giftOrderPresentation,
+  shipmentExceptionPresentation,
+  shipmentProgressPresentation,
+} from '../lib/status-presentation';
 
 export function GiftDetailPage() {
   const now = useNow();
@@ -414,6 +418,12 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
             <p className="eyebrow">物流信息</p>
             <h3>{shipment.carrierName}</h3>
             <p>运单号 {shipment.trackingNumber}</p>
+            <span className="status-cluster">
+              <StatusBadge {...shipmentProgressPresentation(shipment.progress)} />
+              {shipment.exceptionMessage ? (
+                <StatusBadge {...shipmentExceptionPresentation} />
+              ) : null}
+            </span>
           </div>
           {shipment.trackingUrl ? (
             <a
@@ -425,6 +435,11 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
               查询物流
               <ExternalLink aria-hidden="true" size={15} />
             </a>
+          ) : null}
+          {shipment.exceptionMessage ? (
+            <InlineNotice tone="danger">
+              <p>{shipment.exceptionMessage}</p>
+            </InlineNotice>
           ) : null}
           {shipment.events.length > 0 ? (
             <ol className="tracking-events">

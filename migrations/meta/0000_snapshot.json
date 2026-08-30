@@ -1,5 +1,5 @@
 {
-  "id": "c2a87840-13ed-48be-9f66-552a30d910f8",
+  "id": "9d182378-6af4-4b71-aa89-4b0318a0bb7d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2268,8 +2268,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "status": {
-          "name": "status",
+        "progress": {
+          "name": "progress",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -2358,8 +2358,8 @@
           "method": "btree",
           "with": {}
         },
-        "shipments_creator_status_idx": {
-          "name": "shipments_creator_status_idx",
+        "shipments_creator_progress_idx": {
+          "name": "shipments_creator_progress_idx",
           "columns": [
             {
               "expression": "creator_id",
@@ -2368,7 +2368,7 @@
               "nulls": "last"
             },
             {
-              "expression": "status",
+              "expression": "progress",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2419,9 +2419,13 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "shipments_status_check": {
-          "name": "shipments_status_check",
-          "value": "\"shipments\".\"status\" in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION')"
+        "shipments_progress_check": {
+          "name": "shipments_progress_check",
+          "value": "\"shipments\".\"progress\" in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED')"
+        },
+        "shipments_delivery_check": {
+          "name": "shipments_delivery_check",
+          "value": "(\n        (\"shipments\".\"progress\" = 'DELIVERED' and \"shipments\".\"delivered_at\" is not null and \"shipments\".\"next_tracking_refresh_at\" is null)\n        or (\"shipments\".\"progress\" <> 'DELIVERED' and \"shipments\".\"delivered_at\" is null)\n      )"
         },
         "shipments_tracking_identity_check": {
           "name": "shipments_tracking_identity_check",

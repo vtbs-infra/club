@@ -519,8 +519,14 @@ integration('gift order lifecycle', () => {
     });
     await database.orm
       .update(shipments)
-      .set({ nextTrackingRefreshAt: new Date(0), status: 'OUT_FOR_DELIVERY' })
+      .set({ nextTrackingRefreshAt: new Date(0), progress: 'OUT_FOR_DELIVERY' })
       .where(eq(shipments.giftOrderId, captainOrder.id));
+    await expect(
+      database.orm
+        .update(shipments)
+        .set({ progress: 'IN_TRANSIT' })
+        .where(eq(shipments.giftOrderId, captainOrder.id)),
+    ).rejects.toMatchObject({ cause: { code: 'P0001' } });
     const regressingTrackingService = new TrackingRefreshService(
       database,
       {
@@ -537,11 +543,74 @@ integration('gift order lifecycle', () => {
     expect(
       (
         await database.orm
-          .select({ status: shipments.status })
+          .select({ progress: shipments.progress })
           .from(shipments)
           .where(eq(shipments.giftOrderId, captainOrder.id))
-      )[0]?.status,
+      )[0]?.progress,
     ).toBe('OUT_FOR_DELIVERY');
+    await database.orm
+      .update(shipments)
+      .set({ nextTrackingRefreshAt: new Date(0) })
+      .where(eq(shipments.giftOrderId, captainOrder.id));
+    const exceptionTrackingService = new TrackingRefreshService(
+      database,
+      {
+        query: () =>
+          Promise.resolve({
+            events: [
+              {
+                description: '包裹暂时滞留',
+                id: 'exception-event',
+                occurredAt: new Date(),
+                status: 'EXCEPTION',
+              },
+            ],
+            nextRefreshAt: new Date(Date.now() + 60_000),
+            status: 'EXCEPTION',
+          }),
+      },
+      new SystemClock(),
+    );
+    expect(await exceptionTrackingService.refreshDue()).toBe(1);
+    expect(
+      (
+        await database.orm
+          .select({
+            exceptionMessage: shipments.exceptionMessage,
+            progress: shipments.progress,
+          })
+          .from(shipments)
+          .where(eq(shipments.giftOrderId, captainOrder.id))
+      )[0],
+    ).toMatchObject({ exceptionMessage: '包裹暂时滞留', progress: 'OUT_FOR_DELIVERY' });
+    await database.orm
+      .update(shipments)
+      .set({ nextTrackingRefreshAt: new Date(0) })
+      .where(eq(shipments.giftOrderId, captainOrder.id));
+    const recoveredTrackingService = new TrackingRefreshService(
+      database,
+      {
+        query: () =>
+          Promise.resolve({
+            events: [],
+            nextRefreshAt: new Date(Date.now() + 60_000),
+            status: 'LABEL_CREATED',
+          }),
+      },
+      new SystemClock(),
+    );
+    expect(await recoveredTrackingService.refreshDue()).toBe(1);
+    expect(
+      (
+        await database.orm
+          .select({
+            exceptionMessage: shipments.exceptionMessage,
+            progress: shipments.progress,
+          })
+          .from(shipments)
+          .where(eq(shipments.giftOrderId, captainOrder.id))
+      )[0],
+    ).toMatchObject({ exceptionMessage: null, progress: 'OUT_FOR_DELIVERY' });
     await database.orm
       .update(shipments)
       .set({ nextTrackingRefreshAt: new Date(0) })
@@ -582,6 +651,72 @@ integration('gift order lifecycle', () => {
           )
       )[0]?.value,
     ).toBe(1);
+
+    const manuallyCompletedOrder = juneOrders.find((order) => order.biliUid === '11002')!;
+    await database.orm
+      .update(giftOrders)
+      .set({
+        status: 'SUBMITTED',
+        submittedAt: new Date(),
+        userId: userOneId,
+        version: manuallyCompletedOrder.version + 1,
+      })
+      .where(eq(giftOrders.id, manuallyCompletedOrder.id));
+    await orderService.ship(
+      creatorId,
+      manuallyCompletedOrder.id,
+      {
+        carrierCode: 'SF',
+        carrierName: '顺丰速运',
+        trackingNumber: 'SF-MANUAL-COMPLETE',
+      },
+      requestContext(creatorUserId, 'ship-manually-completed-order'),
+    );
+    await database.orm
+      .update(shipments)
+      .set({
+        exceptionMessage: '等待人工确认',
+        lastTrackingError: 'temporary provider error',
+        nextTrackingRefreshAt: new Date(0),
+        trackingFailureCount: 2,
+      })
+      .where(eq(shipments.giftOrderId, manuallyCompletedOrder.id));
+    await orderService.complete(
+      creatorId,
+      manuallyCompletedOrder.id,
+      requestContext(creatorUserId, 'manually-complete-order'),
+    );
+    expect(
+      (
+        await database.orm
+          .select({
+            exceptionMessage: shipments.exceptionMessage,
+            lastTrackingError: shipments.lastTrackingError,
+            nextTrackingRefreshAt: shipments.nextTrackingRefreshAt,
+            trackingFailureCount: shipments.trackingFailureCount,
+          })
+          .from(shipments)
+          .where(eq(shipments.giftOrderId, manuallyCompletedOrder.id))
+      )[0],
+    ).toMatchObject({
+      exceptionMessage: null,
+      lastTrackingError: null,
+      nextTrackingRefreshAt: null,
+      trackingFailureCount: 0,
+    });
+    let completedOrderQueries = 0;
+    const completedOrderTrackingService = new TrackingRefreshService(
+      database,
+      {
+        query: () => {
+          completedOrderQueries += 1;
+          return Promise.reject(new Error('completed orders must not be refreshed'));
+        },
+      },
+      new SystemClock(),
+    );
+    expect(await completedOrderTrackingService.refreshDue()).toBe(0);
+    expect(completedOrderQueries).toBe(0);
 
     const july = await releaseService.create(
       creatorId,

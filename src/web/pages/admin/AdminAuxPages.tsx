@@ -14,7 +14,8 @@ import { formatDate } from '../../lib/format';
 import {
   roomHealthPresentation,
   runtimeStatePresentation,
-  shipmentPresentation,
+  shipmentExceptionPresentation,
+  shipmentProgressPresentation,
   snapshotRunPresentation,
   systemStatusPresentation,
   type StatusTone,
@@ -100,7 +101,9 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
           value={rosterRuntime.label}
         />
         <MetricCard
-          description={`${data.trackingDueCount} 个物流等待刷新`}
+          description={`${data.trackingDueCount} 个物流等待刷新${
+            data.trackingExceptionCount > 0 ? ` · ${data.trackingExceptionCount} 个物流异常` : ''
+          }`}
           icon={Truck}
           label="物流刷新"
           tone={runtimeMetricTone(trackingRuntime.tone)}
@@ -140,15 +143,24 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
             </div>
           </div>
           <div className="count-list">
-            {Object.keys(data.shipmentCounts).length === 0 ? (
+            {Object.keys(data.shipmentProgressCounts).length === 0 &&
+            data.trackingExceptionCount === 0 ? (
               <p className="quiet-line">暂无物流记录。</p>
             ) : (
-              Object.entries(data.shipmentCounts).map(([status, count]) => (
-                <div key={status}>
-                  <StatusBadge {...shipmentPresentation(status)} />
-                  <strong>{count}</strong>
-                </div>
-              ))
+              <>
+                {Object.entries(data.shipmentProgressCounts).map(([progress, count]) => (
+                  <div key={progress}>
+                    <StatusBadge {...shipmentProgressPresentation(progress)} />
+                    <strong>{count}</strong>
+                  </div>
+                ))}
+                {data.trackingExceptionCount > 0 ? (
+                  <div>
+                    <StatusBadge {...shipmentExceptionPresentation} />
+                    <strong>{data.trackingExceptionCount}</strong>
+                  </div>
+                ) : null}
+              </>
             )}
           </div>
         </section>

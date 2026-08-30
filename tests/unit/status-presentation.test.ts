@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   giftOrderPresentation,
   roomHealthPresentation,
-  shipmentPresentation,
+  shipmentExceptionPresentation,
+  shipmentProgressPresentation,
   snapshotRunPresentation,
 } from '../../src/web/lib/status-presentation';
 
@@ -13,9 +14,13 @@ describe('status presentation', () => {
     expect(giftOrderPresentation.SHIPPED).toEqual({ label: '已发货', tone: 'info' });
   });
 
-  it('does not present shipment exceptions as in transit', () => {
-    expect(shipmentPresentation('EXCEPTION')).toEqual({ label: '物流异常', tone: 'danger' });
-    expect(shipmentPresentation('PROVIDER_EXTENSION')).toEqual({
+  it('presents shipment progress separately from active exceptions', () => {
+    expect(shipmentProgressPresentation('IN_TRANSIT')).toEqual({
+      label: '运输中',
+      tone: 'info',
+    });
+    expect(shipmentExceptionPresentation).toEqual({ label: '物流异常', tone: 'danger' });
+    expect(shipmentProgressPresentation('PROVIDER_EXTENSION')).toEqual({
       label: '状态更新中',
       tone: 'neutral',
     });

@@ -1,7 +1,7 @@
 import type { Clock } from '../../infrastructure/clock/clock.js';
-import type { ShipmentStatus, TrackingProvider, TrackingResult } from './tracking-provider.js';
+import type { TrackingProvider, TrackingResult, TrackingStatus } from './tracking-provider.js';
 
-function statusFor(trackingNumber: string): ShipmentStatus {
+function statusFor(trackingNumber: string): TrackingStatus {
   const digit = Number(trackingNumber.at(-1) ?? '0');
   if (!Number.isFinite(digit)) return 'IN_TRANSIT';
   if (digit === 9) return 'EXCEPTION';

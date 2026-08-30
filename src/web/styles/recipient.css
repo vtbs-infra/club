@@ -637,9 +637,13 @@
 .tracking-card h3 {
   margin: 0.25rem 0;
 }
-.tracking-card > div > p:last-child {
+.tracking-card > div > p:not(.eyebrow) {
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.tracking-card > .inline-notice {
+  grid-column: 1 / -1;
 }
 
 .tracking-events {

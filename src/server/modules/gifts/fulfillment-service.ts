@@ -43,10 +43,27 @@ export class GiftFulfillmentService {
     return order;
   }
 
+  private stopTracking(transaction: AppDatabase, orderId: string, now: Date) {
+    return transaction
+      .update(shipments)
+      .set({
+        exceptionMessage: null,
+        lastTrackingError: null,
+        nextTrackingRefreshAt: null,
+        trackingFailureCount: 0,
+        updatedAt: now,
+      })
+      .where(eq(shipments.giftOrderId, orderId));
+  }
+
   public async complete(creatorId: string, orderId: string, context: RequestAuditContext) {
     return this.database.orm.transaction(async (transaction) => {
       const order = await this.lockOrder(transaction, creatorId, orderId);
-      if (order.status === 'COMPLETED') return order;
+      const now = this.clock.now();
+      if (order.status === 'COMPLETED') {
+        await this.stopTracking(transaction, order.id, now);
+        return order;
+      }
       if (order.status !== 'SHIPPED') {
         throw new AppError(
           'GIFT_ORDER_TRANSITION_INVALID',
@@ -54,7 +71,7 @@ export class GiftFulfillmentService {
           409,
         );
       }
-      const now = this.clock.now();
+      await this.stopTracking(transaction, order.id, now);
       const [updated] = await transaction
         .update(giftOrders)
         .set({

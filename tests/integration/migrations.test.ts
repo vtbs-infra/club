@@ -102,6 +102,8 @@ integration('database migration baseline', () => {
       expect(await columnExists(database, 'creators', 'active')).toBe(false);
       expect(await columnExists(database, 'creators', 'archived_at')).toBe(false);
       expect(await columnExists(database, 'gift_orders', 'processing_at')).toBe(false);
+      expect(await columnExists(database, 'shipments', 'progress')).toBe(true);
+      expect(await columnExists(database, 'shipments', 'status')).toBe(false);
       expect(await columnExists(database, 'announcement_reads', 'announcement_version')).toBe(true);
       expect(await columnExists(database, 'announcements', 'status')).toBe(true);
       expect(await columnExists(database, 'announcements', 'withdrawn_at')).toBe(true);

@@ -70,22 +70,28 @@ export const announcementStatePresentation = {
   WITHDRAWN: { label: '已撤下', tone: 'warning' },
 } as const satisfies Readonly<Record<Announcement['status'], StatusPresentation>>;
 
-const shipmentPresentations = {
+const shipmentProgressPresentations = {
   DELIVERED: { label: '已送达', tone: 'success' },
-  EXCEPTION: { label: '物流异常', tone: 'danger' },
   IN_TRANSIT: { label: '运输中', tone: 'info' },
   LABEL_CREATED: { label: '已录单', tone: 'warning' },
   OUT_FOR_DELIVERY: { label: '派送中', tone: 'warning' },
-} as const satisfies Readonly<Record<GiftOrder['shipments'][number]['status'], StatusPresentation>>;
+} as const satisfies Readonly<
+  Record<GiftOrder['shipments'][number]['progress'], StatusPresentation>
+>;
 
-export function shipmentPresentation(status: string): StatusPresentation {
+export function shipmentProgressPresentation(progress: string): StatusPresentation {
   return (
-    (shipmentPresentations as Readonly<Record<string, StatusPresentation>>)[status] ?? {
+    (shipmentProgressPresentations as Readonly<Record<string, StatusPresentation>>)[progress] ?? {
       label: '状态更新中',
       tone: 'neutral',
     }
   );
 }
+
+export const shipmentExceptionPresentation = {
+  label: '物流异常',
+  tone: 'danger',
+} as const satisfies StatusPresentation;
 
 const roomHealthPresentations = {
   CONNECTING: { label: '连接中', tone: 'info' },

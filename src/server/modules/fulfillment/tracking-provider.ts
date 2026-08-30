@@ -1,26 +1,28 @@
-export const SHIPMENT_STATUSES = [
+export const SHIPMENT_PROGRESS_STATES = [
   'LABEL_CREATED',
   'IN_TRANSIT',
   'OUT_FOR_DELIVERY',
   'DELIVERED',
-  'EXCEPTION',
 ] as const;
 
-export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
+export const TRACKING_STATUSES = [...SHIPMENT_PROGRESS_STATES, 'EXCEPTION'] as const;
+
+export type ShipmentProgress = (typeof SHIPMENT_PROGRESS_STATES)[number];
+export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 
 export interface TrackingEventResult {
   readonly description: string;
   readonly id: string;
   readonly location?: string | undefined;
   readonly occurredAt: Date;
-  readonly status: ShipmentStatus;
+  readonly status: TrackingStatus;
 }
 
 export interface TrackingResult {
   readonly events: readonly TrackingEventResult[];
   readonly nextRefreshAt: Date | null;
   readonly publicUrl?: string | undefined;
-  readonly status: ShipmentStatus;
+  readonly status: TrackingStatus;
 }
 
 export interface TrackingProvider {

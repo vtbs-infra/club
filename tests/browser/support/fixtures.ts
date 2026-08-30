@@ -273,10 +273,11 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
       roster: runtime,
       tracking: { ...runtime, configured: false },
     },
-    shipmentCounts: {},
+    shipmentProgressCounts: {},
     snapshotRunCounts: {},
     status: 'ok',
     trackingDueCount: 0,
+    trackingExceptionCount: 0,
     version: APPLICATION_VERSION,
     ...overrides,
   };

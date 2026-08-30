@@ -285,7 +285,7 @@ export const shipments = pgTable(
     carrierName: text('carrier_name').notNull(),
     trackingNumber: text('tracking_number').notNull(),
     trackingUrl: text('tracking_url'),
-    status: text('status').default('LABEL_CREATED').notNull(),
+    progress: text('progress').default('LABEL_CREATED').notNull(),
     deliveredAt: timestamp('delivered_at', { mode: 'date', withTimezone: true }),
     lastTrackingRefreshAt: timestamp('last_tracking_refresh_at', {
       mode: 'date',
@@ -303,11 +303,18 @@ export const shipments = pgTable(
   (table) => [
     uniqueIndex('shipments_number_unique').on(table.shipmentNumber),
     uniqueIndex('shipments_order_unique').on(table.giftOrderId),
-    index('shipments_creator_status_idx').on(table.creatorId, table.status),
+    index('shipments_creator_progress_idx').on(table.creatorId, table.progress),
     index('shipments_tracking_due_idx').on(table.nextTrackingRefreshAt),
     check(
-      'shipments_status_check',
-      sql`${table.status} in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION')`,
+      'shipments_progress_check',
+      sql`${table.progress} in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED')`,
+    ),
+    check(
+      'shipments_delivery_check',
+      sql`(
+        (${table.progress} = 'DELIVERED' and ${table.deliveredAt} is not null and ${table.nextTrackingRefreshAt} is null)
+        or (${table.progress} <> 'DELIVERED' and ${table.deliveredAt} is null)
+      )`,
     ),
     check(
       'shipments_tracking_identity_check',

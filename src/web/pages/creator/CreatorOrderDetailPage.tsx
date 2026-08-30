@@ -18,7 +18,11 @@ import {
   StatusBadge,
 } from '../../components/Ui';
 import { formatDate, formatMonth, tierLabel } from '../../lib/format';
-import { giftOrderPresentation, shipmentPresentation } from '../../lib/status-presentation';
+import {
+  giftOrderPresentation,
+  shipmentExceptionPresentation,
+  shipmentProgressPresentation,
+} from '../../lib/status-presentation';
 
 const carrierCodes: Readonly<Record<string, string>> = {
   EMS: 'EMS',
@@ -325,7 +329,17 @@ export function CreatorOrderDetailPage() {
                 <div key={shipment.id}>
                   <strong>{shipment.carrierName}</strong>
                   <p>{shipment.trackingNumber}</p>
-                  <StatusBadge {...shipmentPresentation(shipment.status)} />
+                  <span className="status-cluster">
+                    <StatusBadge {...shipmentProgressPresentation(shipment.progress)} />
+                    {shipment.exceptionMessage ? (
+                      <StatusBadge {...shipmentExceptionPresentation} />
+                    ) : null}
+                  </span>
+                  {shipment.exceptionMessage ? (
+                    <InlineNotice tone="danger">
+                      <p>{shipment.exceptionMessage}</p>
+                    </InlineNotice>
+                  ) : null}
                   {shipment.trackingUrl ? (
                     <a href={shipment.trackingUrl} rel="noreferrer" target="_blank">
                       查询物流

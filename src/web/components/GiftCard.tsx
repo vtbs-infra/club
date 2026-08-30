@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom';
 
 import type { GiftOrder } from '../api/client';
 import { formatMonth, relativeDeadline, tierLabel } from '../lib/format';
-import { giftOrderPresentation, shipmentPresentation } from '../lib/status-presentation';
+import {
+  giftOrderPresentation,
+  shipmentExceptionPresentation,
+  shipmentProgressPresentation,
+} from '../lib/status-presentation';
 import { StatusBadge } from './Ui';
 
 function action(order: GiftOrder): string {
@@ -22,7 +26,11 @@ function progress(order: GiftOrder, now: number): string {
       return '领取信息已提交，等待主播发货';
     case 'SHIPPED':
       return shipment
-        ? `${shipment.carrierName} · ${shipmentPresentation(shipment.status).label}`
+        ? `${shipment.carrierName} · ${
+            shipment.exceptionMessage
+              ? shipmentExceptionPresentation.label
+              : shipmentProgressPresentation(shipment.progress).label
+          }`
         : '已发货，物流信息正在更新';
     case 'COMPLETED':
       return '礼物流程已完成';

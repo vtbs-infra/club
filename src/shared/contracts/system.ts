@@ -57,10 +57,11 @@ export const SystemStatusSchema = Type.Object({
       configured: Type.Boolean(),
     }),
   }),
-  shipmentCounts: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
+  shipmentProgressCounts: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
   snapshotRunCounts: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
   status: Type.Union([Type.Literal('ok'), Type.Literal('needs_setup'), Type.Literal('degraded')]),
   trackingDueCount: Type.Integer({ minimum: 0 }),
+  trackingExceptionCount: Type.Integer({ minimum: 0 }),
   version: Type.String(),
 });
 export type SystemStatus = Static<typeof SystemStatusSchema>;
