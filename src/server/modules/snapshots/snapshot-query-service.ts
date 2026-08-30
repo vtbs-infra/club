@@ -5,6 +5,8 @@ import { gunzip } from 'node:zlib';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
+import { SNAPSHOT_ATTEMPT_LIMIT } from '../../../shared/contracts/snapshots.js';
+import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   creators,
@@ -41,6 +43,7 @@ export class SnapshotQueryService {
   public constructor(
     private readonly database: DatabaseService,
     private readonly storage: StorageDriver,
+    private readonly clock: Clock,
   ) {}
 
   public listForCreator(creatorId: string) {
@@ -67,11 +70,13 @@ export class SnapshotQueryService {
   }
 
   public async getDetail(runId: string) {
-    const [run] = await this.database.orm
-      .select()
+    const [selection] = await this.database.orm
+      .select({ monthlySyncEnabled: creators.monthlySyncEnabled, run: snapshotRuns })
       .from(snapshotRuns)
+      .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
       .where(eq(snapshotRuns.id, runId))
       .limit(1);
+    const run = selection?.run;
     if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
     const attempts = await this.database.orm
       .select()
@@ -96,7 +101,21 @@ export class SnapshotQueryService {
       .from(snapshotMembers)
       .where(eq(snapshotMembers.snapshotRunId, run.id))
       .orderBy(asc(snapshotMembers.sourcePosition));
-    return { attempts, members, pages, run };
+    const remainingAttempts = Math.max(0, SNAPSHOT_ATTEMPT_LIMIT - attempts.length);
+    return {
+      attempts,
+      members,
+      pages,
+      retry: {
+        canRetry:
+          selection.monthlySyncEnabled &&
+          remainingAttempts > 0 &&
+          ['FAILED', 'REJECTED'].includes(run.status) &&
+          run.scheduledCutoffAt <= this.clock.now(),
+        remainingAttempts,
+      },
+      run,
+    };
   }
 
   public async assertAccess(

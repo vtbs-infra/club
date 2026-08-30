@@ -1,5 +1,7 @@
 export type GuardTier = 'CAPTAIN' | 'ADMIRAL' | 'GOVERNOR';
 
+export const GUARD_ROSTER_PAGE_BYTE_LIMIT = 2 * 1024 * 1024;
+
 export interface GuardRosterMember {
   readonly biliUid: string;
   readonly displayName: string;

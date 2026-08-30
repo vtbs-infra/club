@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 
-import { and, asc, desc, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lte } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
+import { SNAPSHOT_ATTEMPT_LIMIT } from '../../../shared/contracts/snapshots.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
@@ -18,10 +19,11 @@ import {
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
-import type {
-  GuardRosterMember,
-  GuardRosterPage,
-  GuardRosterSource,
+import {
+  GUARD_ROSTER_PAGE_BYTE_LIMIT,
+  type GuardRosterMember,
+  type GuardRosterPage,
+  type GuardRosterSource,
 } from '../bilibili/guard-roster-source.js';
 import {
   calculateMonthlyCutoff,
@@ -33,9 +35,8 @@ import { SnapshotQueryService } from './snapshot-query-service.js';
 const gzipAsync = promisify(gzip);
 const PAGE_SIZE = 30;
 const MAX_PAGES = 1_000;
-const MAX_ATTEMPTS = 3;
+const MAX_MEMBERS = MAX_PAGES * PAGE_SIZE;
 const SCHEDULER_CONCURRENCY = 4;
-
 class CaptureFailure extends Error {
   public constructor(
     public readonly code: string,
@@ -75,8 +76,12 @@ function failure(error: unknown): CaptureFailure {
 }
 
 export class SnapshotService {
-  private readonly backgroundCaptures = new Set<Promise<void>>();
+  private readonly activeCaptures = new Map<
+    string,
+    { readonly controller: AbortController; readonly execution: Promise<void> }
+  >();
   private readonly audit: AuditService;
+  private shuttingDown = false;
   public readonly queries: SnapshotQueryService;
 
   public constructor(
@@ -89,7 +94,7 @@ export class SnapshotService {
     private readonly onBackgroundError?: (error: unknown) => void,
   ) {
     this.audit = new AuditService(database);
-    this.queries = new SnapshotQueryService(database, storage);
+    this.queries = new SnapshotQueryService(database, storage, clock);
   }
 
   public async precreateRuns(): Promise<number> {
@@ -151,13 +156,14 @@ export class SnapshotService {
   }
 
   public async runDue(): Promise<number> {
+    if (this.shuttingDown) return 0;
     const due = await this.database.orm
       .select({ id: snapshotRuns.id })
       .from(snapshotRuns)
       .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
       .where(
         and(
-          inArray(snapshotRuns.status, ['SCHEDULED', 'FAILED']),
+          eq(snapshotRuns.status, 'SCHEDULED'),
           lte(snapshotRuns.scheduledCutoffAt, this.clock.now()),
           eq(creators.monthlySyncEnabled, true),
         ),
@@ -193,6 +199,13 @@ export class SnapshotService {
     runId: string,
     request: AttemptRequest,
   ): Promise<{ attemptId: string; run: CaptureRun }> {
+    if (this.shuttingDown) {
+      throw new AppError(
+        'SNAPSHOT_RUNTIME_STOPPING',
+        'Snapshot captures cannot start while the application is shutting down.',
+        503,
+      );
+    }
     return this.database.orm.transaction(async (transaction) => {
       const [selection] = await transaction
         .select({ monthlySyncEnabled: creators.monthlySyncEnabled, run: snapshotRuns })
@@ -210,7 +223,9 @@ export class SnapshotService {
           409,
         );
       }
-      if (!['SCHEDULED', 'FAILED', 'REJECTED'].includes(run.status)) {
+      const allowedStatuses =
+        request.initiatedBy === 'SCHEDULER' ? ['SCHEDULED'] : ['FAILED', 'REJECTED'];
+      if (!allowedStatuses.includes(run.status)) {
         throw new AppError('SNAPSHOT_CAPTURE_NOT_ALLOWED', 'This snapshot cannot be retried.', 409);
       }
       if (run.scheduledCutoffAt > this.clock.now()) {
@@ -222,7 +237,7 @@ export class SnapshotService {
         .where(eq(snapshotAttempts.snapshotRunId, run.id))
         .orderBy(desc(snapshotAttempts.attemptNumber))
         .limit(1);
-      if ((latest?.attemptNumber ?? 0) >= MAX_ATTEMPTS) {
+      if ((latest?.attemptNumber ?? 0) >= SNAPSHOT_ATTEMPT_LIMIT) {
         throw new AppError(
           'SNAPSHOT_ATTEMPT_LIMIT_REACHED',
           'This snapshot has reached its capture attempt limit.',
@@ -339,7 +354,26 @@ export class SnapshotService {
     })[];
   }
 
-  private async executeCapture(attemptId: string, run: CaptureRun): Promise<void> {
+  private validateFirstPage(first: GuardRosterPage): void {
+    if (first.pageNumber !== 1 || first.declaredPageCount < 1) {
+      throw new CaptureFailure('INVALID_FIRST_PAGE', 'The provider returned invalid pagination.');
+    }
+    if (first.declaredPageCount > MAX_PAGES) {
+      throw new CaptureFailure('PAGE_LIMIT_EXCEEDED', 'The provider declared too many pages.');
+    }
+    if (first.declaredTotal > MAX_MEMBERS) {
+      throw new CaptureFailure('MEMBER_LIMIT_EXCEEDED', 'The provider declared too many members.');
+    }
+    if (first.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
+      throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
+    }
+  }
+
+  private async executeCapture(
+    attemptId: string,
+    run: CaptureRun,
+    shutdownSignal: AbortSignal,
+  ): Promise<void> {
     const captureStartedAt = this.clock.now();
     const punctuality = classifyPunctuality(
       captureStartedAt,
@@ -350,7 +384,7 @@ export class SnapshotService {
       .update(snapshotAttempts)
       .set({ captureStartedAt, punctuality })
       .where(eq(snapshotAttempts.id, attemptId));
-    const signal = AbortSignal.timeout(this.maxDurationMs);
+    const signal = AbortSignal.any([shutdownSignal, AbortSignal.timeout(this.maxDurationMs)]);
     try {
       const fetch = (pageNumber: number) =>
         this.source.fetchPage({
@@ -361,9 +395,8 @@ export class SnapshotService {
           signal,
         });
       const first = await fetch(1);
-      if (first.pageNumber !== 1 || first.declaredPageCount < 1) {
-        throw new CaptureFailure('INVALID_FIRST_PAGE', 'The provider returned invalid pagination.');
-      }
+      this.validateFirstPage(first);
+      signal.throwIfAborted();
       await this.persistPage(run.id, attemptId, first, 'PAGE');
       const pages: GuardRosterPage[] = [first];
       for (let start = 2; start <= first.declaredPageCount; start += 4) {
@@ -372,12 +405,23 @@ export class SnapshotService {
           (_, offset) => start + offset,
         );
         const chunk = await Promise.all(numbers.map(fetch));
-        for (const page of chunk) await this.persistPage(run.id, attemptId, page, 'PAGE');
+        signal.throwIfAborted();
+        for (const page of chunk) {
+          if (page.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
+            throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
+          }
+          await this.persistPage(run.id, attemptId, page, 'PAGE');
+        }
         pages.push(...chunk);
       }
       const recheck = await fetch(1);
+      signal.throwIfAborted();
+      if (recheck.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
+        throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
+      }
       await this.persistPage(run.id, attemptId, recheck, 'RECHECK');
       const members = this.validatePages(pages, recheck);
+      signal.throwIfAborted();
       const completedAt = this.clock.now();
       await this.database.orm.transaction(async (transaction) => {
         if (members.length > 0) {
@@ -444,7 +488,7 @@ export class SnapshotService {
         }
       });
     } catch (error) {
-      const captureFailure = failure(error);
+      const captureFailure = failure(signal.aborted ? signal.reason : error);
       await this.database.orm.transaction(async (transaction) => {
         await transaction
           .update(snapshotAttempts)
@@ -463,9 +507,22 @@ export class SnapshotService {
     }
   }
 
+  private startExecution(attemptId: string, run: CaptureRun): Promise<void> {
+    const controller = new AbortController();
+    if (this.shuttingDown) controller.abort(shutdownFailure());
+    const execution = this.executeCapture(attemptId, run, controller.signal);
+    const active = { controller, execution };
+    this.activeCaptures.set(attemptId, active);
+    const remove = () => {
+      if (this.activeCaptures.get(attemptId) === active) this.activeCaptures.delete(attemptId);
+    };
+    void execution.then(remove, remove);
+    return execution;
+  }
+
   public async capture(runId: string): Promise<void> {
     const { attemptId, run } = await this.beginAttempt(runId, { initiatedBy: 'SCHEDULER' });
-    await this.executeCapture(attemptId, run);
+    await this.startExecution(attemptId, run);
   }
 
   public async queueCapture(
@@ -476,16 +533,22 @@ export class SnapshotService {
       context,
       initiatedBy: 'ADMIN',
     });
-    const execution = this.executeCapture(attemptId, run);
-    this.backgroundCaptures.add(execution);
-    void execution
-      .catch((error: unknown) => this.onBackgroundError?.(error))
-      .finally(() => this.backgroundCaptures.delete(execution));
+    const execution = this.startExecution(attemptId, run);
+    void execution.catch((error: unknown) => this.onBackgroundError?.(error));
     return { attemptId };
   }
 
+  public beginShutdown(): void {
+    this.shuttingDown = true;
+    for (const { controller } of this.activeCaptures.values()) {
+      if (!controller.signal.aborted) controller.abort(shutdownFailure());
+    }
+  }
+
   public async waitForIdle(): Promise<void> {
-    await Promise.allSettled([...this.backgroundCaptures]);
+    while (this.activeCaptures.size > 0) {
+      await Promise.allSettled([...this.activeCaptures.values()].map(({ execution }) => execution));
+    }
   }
 
   public async approveLate(runId: string, context: RequestAuditContext): Promise<void> {
@@ -562,22 +625,34 @@ export class SnapshotService {
   }
 
   public async rejectLate(runId: string, context: RequestAuditContext & { reason: string }) {
-    const [run] = await this.database.orm
-      .update(snapshotRuns)
-      .set({ status: 'REJECTED', updatedAt: this.clock.now() })
-      .where(and(eq(snapshotRuns.id, runId), eq(snapshotRuns.status, 'PENDING_APPROVAL')))
-      .returning();
-    if (!run) throw new AppError('SNAPSHOT_NOT_REJECTABLE', 'No late attempt is pending.', 409);
-    await this.audit.record({
-      action: 'snapshot.late-rejected',
-      actorUserId: context.actorUserId,
-      creatorId: run.creatorId,
-      ipAddress: context.ipAddress,
-      reason: context.reason,
-      requestId: context.requestId,
-      targetId: run.id,
-      targetType: 'snapshot-run',
+    return this.database.orm.transaction(async (transaction) => {
+      const [run] = await transaction
+        .update(snapshotRuns)
+        .set({ status: 'REJECTED', updatedAt: this.clock.now() })
+        .where(and(eq(snapshotRuns.id, runId), eq(snapshotRuns.status, 'PENDING_APPROVAL')))
+        .returning();
+      if (!run) throw new AppError('SNAPSHOT_NOT_REJECTABLE', 'No late attempt is pending.', 409);
+      await this.audit.record(
+        {
+          action: 'snapshot.late-rejected',
+          actorUserId: context.actorUserId,
+          creatorId: run.creatorId,
+          ipAddress: context.ipAddress,
+          reason: context.reason,
+          requestId: context.requestId,
+          targetId: run.id,
+          targetType: 'snapshot-run',
+        },
+        transaction,
+      );
+      return run;
     });
-    return run;
   }
+}
+
+function shutdownFailure(): CaptureFailure {
+  return new CaptureFailure(
+    'PROCESS_SHUTDOWN',
+    'The application is shutting down before this attempt completed.',
+  );
 }

@@ -2,6 +2,8 @@ import { Type, type Static } from '@sinclair/typebox';
 
 import { DateTimeSchema, GuardTierSchema, IdSchema, Nullable } from './common.js';
 
+export const SNAPSHOT_ATTEMPT_LIMIT = 3;
+
 export const SnapshotRunStatusSchema = Type.Union([
   Type.Literal('SCHEDULED'),
   Type.Literal('RUNNING'),
@@ -83,10 +85,16 @@ export const SnapshotMemberSchema = Type.Object({
   tier: GuardTierSchema,
 });
 
+export const SnapshotRetryPolicySchema = Type.Object({
+  canRetry: Type.Boolean(),
+  remainingAttempts: Type.Integer({ maximum: SNAPSHOT_ATTEMPT_LIMIT, minimum: 0 }),
+});
+
 export const SnapshotDetailSchema = Type.Object({
   attempts: Type.Array(SnapshotAttemptSchema),
   members: Type.Array(SnapshotMemberSchema),
   pages: Type.Array(SnapshotPageSchema),
+  retry: SnapshotRetryPolicySchema,
   run: SnapshotRunSchema,
 });
 export type SnapshotDetail = Static<typeof SnapshotDetailSchema>;

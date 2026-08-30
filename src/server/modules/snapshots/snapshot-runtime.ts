@@ -53,6 +53,7 @@ export function createSnapshotRuntime(input: {
   const retryDelayMs = input.retryDelayMs ?? 30_000;
   const status = new RuntimeStatusTracker(input.clock);
   const tick = (): Promise<void> => {
+    if (closed) return Promise.resolve();
     if (activeTick) return activeTick;
     activeTick = (async () => {
       try {
@@ -115,6 +116,7 @@ export function createSnapshotRuntime(input: {
       interval = null;
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = null;
+      service.beginShutdown();
       await Promise.allSettled([starting, activeTick].filter((task) => task !== null));
       await service.waitForIdle();
       status.markStopped();

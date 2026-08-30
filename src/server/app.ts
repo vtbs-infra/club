@@ -169,12 +169,24 @@ export async function buildApp(options: BuildAppOptions = {}) {
     }
   });
 
-  if (ownsDatabase) {
-    app.addHook('onClose', async () => database.close());
-  }
-  app.addHook('onClose', async () => bindingRuntime.close());
-  app.addHook('onClose', async () => snapshotRuntime.close());
-  app.addHook('onClose', async () => fulfillmentRuntime.close());
+  app.addHook('onClose', async () => {
+    const closeRuntimes = [
+      () => bindingRuntime.close(),
+      () => snapshotRuntime.close(),
+      () => fulfillmentRuntime.close(),
+    ];
+    const results = await Promise.allSettled(
+      closeRuntimes.map(async (closeRuntime) => closeRuntime()),
+    );
+    const failures: unknown[] = [];
+    for (const result of results) {
+      if (result.status === 'rejected') failures.push(result.reason);
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'One or more background runtimes failed to stop.');
+    }
+    if (ownsDatabase) await database.close();
+  });
   const backgroundRequired = options.startBackground ?? config.nodeEnv !== 'test';
   if (backgroundRequired) {
     app.addHook('onReady', async () => {

@@ -34,9 +34,12 @@ const failureLabel: Readonly<Record<string, string>> = {
   DUPLICATE_UID: '名单中存在重复 UID',
   FIRST_PAGE_DRIFT: '抓取期间首页名单发生变化',
   INVALID_FIRST_PAGE: '来源返回了无效的首页分页信息',
+  MEMBER_LIMIT_EXCEEDED: '来源声明的名单人数超过安全上限',
   MISSING_PAGE: '来源返回的分页缺失或顺序异常',
   PAGE_LIMIT_EXCEEDED: '来源返回的分页数量异常',
+  PAGE_SIZE_EXCEEDED: '来源返回的单页数据超过安全上限',
   PROCESS_INTERRUPTED: '应用在抓取完成前停止',
+  PROCESS_SHUTDOWN: '应用关闭时取消了未完成的抓取',
   SOURCE_FAILURE: 'B站名单来源请求失败',
   UNKNOWN_TIER: '名单包含无法识别的大航海等级',
 };
@@ -246,16 +249,24 @@ export function AdminRostersPage() {
                     <strong>
                       {detail.data.run.status === 'FAILED' ? '名单同步失败' : '上次抓取已被拒绝'}
                     </strong>
-                    <p>检查最近一次错误后，可重新执行。每个任务最多保留三次尝试。</p>
+                    <p>
+                      {detail.data.retry.canRetry
+                        ? `检查最近一次错误后，可由管理员重新执行；还可尝试 ${detail.data.retry.remainingAttempts} 次。`
+                        : detail.data.retry.remainingAttempts === 0
+                          ? '该任务已达到三次尝试上限，不能再次执行。'
+                          : '当前设置不允许重新执行该任务。'}
+                    </p>
                   </div>
-                  <button
-                    className="button primary"
-                    disabled={retry.isPending}
-                    onClick={() => retry.mutate()}
-                    type="button"
-                  >
-                    重新同步
-                  </button>
+                  {detail.data.retry.canRetry ? (
+                    <button
+                      className="button primary"
+                      disabled={retry.isPending}
+                      onClick={() => retry.mutate()}
+                      type="button"
+                    >
+                      重新同步
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               <div>

@@ -159,6 +159,33 @@ class BlockingEmptySource implements GuardRosterSource {
   }
 }
 
+class AbortableBlockingSource implements GuardRosterSource {
+  public readonly name = 'abortable-blocking-fake';
+  public readonly version = '1';
+  public readonly entered: Promise<void>;
+  private markEntered!: () => void;
+
+  public constructor() {
+    this.entered = new Promise((resolve) => {
+      this.markEntered = resolve;
+    });
+  }
+
+  public fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage> {
+    this.markEntered();
+    return new Promise((_resolve, reject) => {
+      const rejectAborted = () =>
+        reject(
+          input.signal.reason instanceof Error
+            ? input.signal.reason
+            : new Error('Snapshot capture aborted.'),
+        );
+      if (input.signal.aborted) rejectAborted();
+      else input.signal.addEventListener('abort', rejectAborted, { once: true });
+    });
+  }
+}
+
 integration('month-end snapshot capture', () => {
   let database: DatabaseService;
   let integrationDatabase: IntegrationDatabase;
@@ -318,7 +345,12 @@ integration('month-end snapshot capture', () => {
     expect(candidates?.value).toBe(0);
 
     source.setScenario(buildFakeRosterScenario([member('3001', 1), member('3002', 2)]));
-    await service.capture(run.id);
+    await service.queueCapture(run.id, {
+      actorUserId: ownerId,
+      ipAddress: '127.0.0.1',
+      requestId: 'retry-consistency-failure',
+    });
+    await service.waitForIdle();
     const detail = await service.queries.getDetail(run.id);
     expect(detail.attempts.map((attempt) => attempt.attemptNumber).sort()).toEqual([1, 2]);
     expect(new Set(detail.pages.map((page) => page.snapshotAttemptId)).size).toBe(2);
@@ -380,7 +412,7 @@ integration('month-end snapshot capture', () => {
     ).rejects.toThrow();
   });
 
-  it('marks an interrupted attempt failed so the scheduler can retry it', async () => {
+  it('marks an interrupted attempt failed for administrator review', async () => {
     const [run] = await database.orm
       .select()
       .from(snapshotRuns)
@@ -401,12 +433,16 @@ integration('month-end snapshot capture', () => {
       database,
       storage.driver,
       new FakeGuardRosterSource(),
-      new MutableClock(new Date('2026-07-22T00:05:00.000Z')),
+      new MutableClock(new Date('2026-07-31T16:05:00.000Z')),
     );
     expect(await service.recoverInterrupted()).toBe(1);
     expect((await service.queries.getDetail(run!.id)).attempts[0]).toMatchObject({
       consistencyStatus: 'INCONSISTENT',
       failureCode: 'PROCESS_INTERRUPTED',
+    });
+    expect((await service.queries.getDetail(run!.id)).retry).toEqual({
+      canRetry: true,
+      remainingAttempts: 2,
     });
   });
 
@@ -430,6 +466,8 @@ integration('month-end snapshot capture', () => {
     expect(newCreatorRuns.every((run) => run.status === 'FINALIZED')).toBe(true);
     expect(source.maximumConcurrentRequests).toBeGreaterThan(1);
     expect(source.maximumConcurrentRequests).toBeLessThanOrEqual(4);
+    const failedRun = await julyRun(creatorIds[3]!);
+    expect((await service.queries.getDetail(failedRun.id)).attempts).toHaveLength(1);
   });
 
   it('records administrator retries and waits for queued captures during shutdown', async () => {
@@ -443,6 +481,14 @@ integration('month-end snapshot capture', () => {
           eq(snapshotRuns.periodStart, '2026-08-01'),
         ),
       );
+    const failedSource = new FakeGuardRosterSource();
+    failedSource.setScenario(
+      buildFakeRosterScenario([
+        member('administrator-retry-member', 1),
+        member('administrator-retry-member', 2),
+      ]),
+    );
+    await new SnapshotService(database, storage.driver, failedSource, clock).capture(run!.id);
     const source = new BlockingEmptySource();
     const service = new SnapshotService(database, storage.driver, source, clock);
     const queued = await service.queueCapture(run!.id, {
@@ -560,8 +606,79 @@ integration('month-end snapshot capture', () => {
       .update(snapshotRuns)
       .set({ status: 'FAILED' })
       .where(eq(snapshotRuns.id, limitedRun!.id));
-    await expect(service.capture(limitedRun!.id)).rejects.toMatchObject({
+    await expect(
+      service.queueCapture(limitedRun!.id, {
+        actorUserId: ownerId,
+        ipAddress: '127.0.0.1',
+        requestId: 'attempt-limit-test',
+      }),
+    ).rejects.toMatchObject({
       code: 'SNAPSHOT_ATTEMPT_LIMIT_REACHED',
+    });
+  });
+
+  it('rejects oversized pagination before requesting or storing later pages', async () => {
+    const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
+    let requests = 0;
+    const source: GuardRosterSource = {
+      name: 'oversized-pagination-fake',
+      version: '1',
+      fetchPage: (input) => {
+        requests += 1;
+        return Promise.resolve({
+          declaredPageCount: 1_001,
+          declaredTotal: 1,
+          fetchedAt: clock.now(),
+          members: [member('oversized-page-member', 1)],
+          pageNumber: input.pageNumber,
+          rawBytes: new TextEncoder().encode('{}'),
+        });
+      },
+    };
+    const service = new SnapshotService(database, storage.driver, source, clock);
+    const [run] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(
+          eq(snapshotRuns.creatorId, creatorIds[13]!),
+          eq(snapshotRuns.periodStart, '2026-08-01'),
+        ),
+      );
+
+    await service.capture(run!.id);
+
+    expect(requests).toBe(1);
+    expect((await service.queries.getDetail(run!.id)).attempts[0]).toMatchObject({
+      consistencyStatus: 'INCONSISTENT',
+      failureCode: 'PAGE_LIMIT_EXCEEDED',
+    });
+    expect((await service.queries.getDetail(run!.id)).pages).toHaveLength(0);
+  });
+
+  it('records a deterministic failure when graceful shutdown cancels a capture', async () => {
+    const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
+    const source = new AbortableBlockingSource();
+    const service = new SnapshotService(database, storage.driver, source, clock);
+    const [run] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(
+          eq(snapshotRuns.creatorId, creatorIds[12]!),
+          eq(snapshotRuns.periodStart, '2026-08-01'),
+        ),
+      );
+    const capture = service.capture(run!.id);
+    await source.entered;
+
+    service.beginShutdown();
+    await service.waitForIdle();
+    await capture;
+
+    expect((await service.queries.getDetail(run!.id)).attempts[0]).toMatchObject({
+      consistencyStatus: 'INCONSISTENT',
+      failureCode: 'PROCESS_SHUTDOWN',
     });
   });
 
