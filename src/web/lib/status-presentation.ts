@@ -65,9 +65,10 @@ export const announcementSeverityPresentation = {
 } as const satisfies Readonly<Record<Announcement['severity'], StatusPresentation>>;
 
 export const announcementStatePresentation = {
-  draft: { label: '草稿', tone: 'neutral' },
-  published: { label: '已发布', tone: 'success' },
-} as const satisfies Readonly<Record<'draft' | 'published', StatusPresentation>>;
+  DRAFT: { label: '草稿', tone: 'neutral' },
+  PUBLISHED: { label: '已发布', tone: 'success' },
+  WITHDRAWN: { label: '已撤下', tone: 'warning' },
+} as const satisfies Readonly<Record<Announcement['status'], StatusPresentation>>;
 
 const shipmentPresentations = {
   DELIVERED: { label: '已送达', tone: 'success' },

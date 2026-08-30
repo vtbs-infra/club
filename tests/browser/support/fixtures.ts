@@ -203,9 +203,11 @@ export function announcement(overrides: Partial<Announcement> = {}): Announcemen
     read: false,
     scope: 'PLATFORM',
     severity: 'INFO',
+    status: 'PUBLISHED',
     title: '欢迎使用 Club',
     updatedAt: testTime(-1),
     version: 1,
+    withdrawnAt: null,
     ...overrides,
   };
 }

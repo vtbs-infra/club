@@ -1,0 +1,2 @@
+# Drizzle hashes migration SQL from its exact file bytes.
+migrations/*.sql text eol=lf

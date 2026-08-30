@@ -1,7 +1,7 @@
-import type { Announcement, ManagedAnnouncementInput } from '../../shared/contracts/announcements';
+import type { Announcement, AnnouncementContent } from '../../shared/contracts/announcements';
 import { apiRequest } from './http';
 
-export type { Announcement, ManagedAnnouncementInput };
+export type { Announcement, AnnouncementContent };
 
 export function getAnnouncements(limit?: number): Promise<readonly Announcement[]> {
   return apiRequest(`/api/v1/me/announcements${limit ? `?limit=${limit}` : ''}`);
@@ -22,7 +22,7 @@ export function getManagedAnnouncements(
 
 export function createManagedAnnouncement(
   area: 'admin' | 'creator',
-  input: ManagedAnnouncementInput,
+  input: AnnouncementContent,
 ): Promise<Announcement> {
   return apiRequest(`/api/v1/${area}/announcements`, {
     body: JSON.stringify(input),
@@ -30,14 +30,36 @@ export function createManagedAnnouncement(
   });
 }
 
-export function updateManagedAnnouncement(
+export function saveManagedAnnouncement(
   area: 'admin' | 'creator',
   announcementId: string,
-  input: ManagedAnnouncementInput & { readonly expectedVersion: number },
+  input: AnnouncementContent & { readonly expectedVersion: number },
 ): Promise<Announcement> {
   return apiRequest(`/api/v1/${area}/announcements/${announcementId}`, {
     body: JSON.stringify(input),
     method: 'PUT',
+  });
+}
+
+export function publishManagedAnnouncement(
+  area: 'admin' | 'creator',
+  announcementId: string,
+  expectedVersion: number,
+): Promise<Announcement> {
+  return apiRequest(`/api/v1/${area}/announcements/${announcementId}/publish`, {
+    body: JSON.stringify({ expectedVersion }),
+    method: 'POST',
+  });
+}
+
+export function withdrawManagedAnnouncement(
+  area: 'admin' | 'creator',
+  announcementId: string,
+  expectedVersion: number,
+): Promise<Announcement> {
+  return apiRequest(`/api/v1/${area}/announcements/${announcementId}/withdraw`, {
+    body: JSON.stringify({ expectedVersion }),
+    method: 'POST',
   });
 }
 

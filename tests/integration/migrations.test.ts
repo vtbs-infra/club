@@ -103,6 +103,8 @@ integration('database migration baseline', () => {
       expect(await columnExists(database, 'creators', 'archived_at')).toBe(false);
       expect(await columnExists(database, 'gift_orders', 'processing_at')).toBe(false);
       expect(await columnExists(database, 'announcement_reads', 'announcement_version')).toBe(true);
+      expect(await columnExists(database, 'announcements', 'status')).toBe(true);
+      expect(await columnExists(database, 'announcements', 'withdrawn_at')).toBe(true);
       expect(await columnExists(database, 'snapshot_attempts', 'initiated_by')).toBe(true);
       expect(await columnExists(database, 'snapshot_pages', 'capture_kind')).toBe(true);
       expect(await columnExists(database, 'verification_rooms', 'bili_owner_uid')).toBe(false);
@@ -142,8 +144,12 @@ integration('database migration baseline', () => {
       expect(migrations[0]?.value).toBe(1);
       await expect(database.checkSchema()).resolves.toBeUndefined();
 
-      const [appliedMigration] = await database.orm.execute<{ createdAt: string; id: number }>(sql`
-        select id, created_at::text as "createdAt"
+      const [appliedMigration] = await database.orm.execute<{
+        createdAt: string;
+        hash: string;
+        id: number;
+      }>(sql`
+        select id, created_at::text as "createdAt", hash
         from drizzle.__drizzle_migrations
         order by id
         limit 1
@@ -155,7 +161,7 @@ integration('database migration baseline', () => {
         where id = ${appliedMigration!.id}
       `);
       await expect(database.checkSchema()).rejects.toThrow(
-        'Database schema migration version does not match this application.',
+        'Database schema migration identity does not match this application.',
       );
       await database.orm.execute(sql`
         update drizzle.__drizzle_migrations
@@ -164,11 +170,25 @@ integration('database migration baseline', () => {
       `);
 
       await database.orm.execute(sql`
+        update drizzle.__drizzle_migrations
+        set hash = 'unexpected-migration-hash'
+        where id = ${appliedMigration!.id}
+      `);
+      await expect(database.checkSchema()).rejects.toThrow(
+        'Database schema migration identity does not match this application.',
+      );
+      await database.orm.execute(sql`
+        update drizzle.__drizzle_migrations
+        set hash = ${appliedMigration!.hash}
+        where id = ${appliedMigration!.id}
+      `);
+
+      await database.orm.execute(sql`
         insert into drizzle.__drizzle_migrations (hash, created_at)
         values ('unexpected-migration', 9999999999999)
       `);
       await expect(database.checkSchema()).rejects.toThrow(
-        'Database schema migration version does not match this application.',
+        'Database schema migration identity does not match this application.',
       );
     } finally {
       await database.close();

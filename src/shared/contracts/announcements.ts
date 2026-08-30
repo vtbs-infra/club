@@ -8,24 +8,34 @@ export const AnnouncementSeveritySchema = Type.Union([
   Type.Literal('CRITICAL'),
 ]);
 
-export const AnnouncementInputSchema = Type.Object(
+export const AnnouncementStatusSchema = Type.Union([
+  Type.Literal('DRAFT'),
+  Type.Literal('PUBLISHED'),
+  Type.Literal('WITHDRAWN'),
+]);
+
+export const AnnouncementContentSchema = Type.Object(
   {
     body: Type.String({ maxLength: 20_000, minLength: 1 }),
     expiresAt: Type.Optional(Nullable(DateTimeSchema)),
     pinned: Type.Boolean(),
     publicVisible: Type.Boolean(),
-    publishNow: Type.Boolean(),
     severity: AnnouncementSeveritySchema,
     title: Type.String({ maxLength: 200, minLength: 1 }),
   },
   { additionalProperties: false },
 );
 
-export const AnnouncementUpdateSchema = Type.Object(
+export const AnnouncementContentUpdateSchema = Type.Object(
   {
-    ...AnnouncementInputSchema.properties,
+    ...AnnouncementContentSchema.properties,
     expectedVersion: Type.Integer({ minimum: 1 }),
   },
+  { additionalProperties: false },
+);
+
+export const AnnouncementVersionCommandSchema = Type.Object(
+  { expectedVersion: Type.Integer({ minimum: 1 }) },
   { additionalProperties: false },
 );
 
@@ -40,9 +50,11 @@ export const AnnouncementSchema = Type.Object({
   read: Type.Optional(Type.Boolean()),
   scope: Type.Union([Type.Literal('PLATFORM'), Type.Literal('CREATOR')]),
   severity: AnnouncementSeveritySchema,
+  status: AnnouncementStatusSchema,
   title: Type.String(),
   updatedAt: DateTimeSchema,
   version: Type.Integer({ minimum: 1 }),
+  withdrawnAt: Nullable(DateTimeSchema),
 });
 export type Announcement = Static<typeof AnnouncementSchema>;
-export type ManagedAnnouncementInput = Static<typeof AnnouncementInputSchema>;
+export type AnnouncementContent = Static<typeof AnnouncementContentSchema>;

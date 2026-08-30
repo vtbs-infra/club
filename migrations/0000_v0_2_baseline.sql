@@ -16,7 +16,9 @@ CREATE TABLE "announcements" (
 	"severity" text DEFAULT 'INFO' NOT NULL,
 	"pinned" boolean DEFAULT false NOT NULL,
 	"public_visible" boolean DEFAULT false NOT NULL,
+	"status" text DEFAULT 'DRAFT' NOT NULL,
 	"published_at" timestamp with time zone,
+	"withdrawn_at" timestamp with time zone,
 	"expires_at" timestamp with time zone,
 	"created_by_user_id" uuid NOT NULL,
 	"version" integer DEFAULT 1 NOT NULL,
@@ -25,7 +27,13 @@ CREATE TABLE "announcements" (
 	CONSTRAINT "announcements_scope_check" CHECK ("announcements"."scope" in ('PLATFORM', 'CREATOR')),
 	CONSTRAINT "announcements_severity_check" CHECK ("announcements"."severity" in ('INFO', 'WARNING', 'CRITICAL')),
 	CONSTRAINT "announcements_version_positive" CHECK ("announcements"."version" > 0),
-	CONSTRAINT "announcements_expiry_check" CHECK ("announcements"."expires_at" is null or "announcements"."published_at" is null or "announcements"."expires_at" > "announcements"."published_at"),
+	CONSTRAINT "announcements_expiry_check" CHECK ("announcements"."status" = 'DRAFT' or "announcements"."expires_at" is null or "announcements"."expires_at" > "announcements"."published_at"),
+	CONSTRAINT "announcements_lifecycle_check" CHECK ((
+        ("announcements"."status" = 'DRAFT' and "announcements"."published_at" is null and "announcements"."withdrawn_at" is null)
+        or ("announcements"."status" = 'PUBLISHED' and "announcements"."published_at" is not null and "announcements"."withdrawn_at" is null)
+        or ("announcements"."status" = 'WITHDRAWN' and "announcements"."published_at" is not null and "announcements"."withdrawn_at" is not null and "announcements"."withdrawn_at" >= "announcements"."published_at")
+      )),
+	CONSTRAINT "announcements_public_scope_check" CHECK (not "announcements"."public_visible" or "announcements"."scope" = 'PLATFORM'),
 	CONSTRAINT "announcements_scope_identity_check" CHECK ((
         ("announcements"."scope" = 'PLATFORM' and "announcements"."creator_id" is null)
         or ("announcements"."scope" = 'CREATOR' and "announcements"."creator_id" is not null)
@@ -470,7 +478,7 @@ ALTER TABLE "snapshot_runs" ADD CONSTRAINT "snapshot_runs_accepted_attempt_id_sn
 ALTER TABLE "snapshot_runs" ADD CONSTRAINT "snapshot_runs_approved_by_users_id_fk" FOREIGN KEY ("approved_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "announcement_reads_announcement_user_version_unique" ON "announcement_reads" USING btree ("announcement_id","user_id","announcement_version");--> statement-breakpoint
 CREATE INDEX "announcement_reads_user_read_idx" ON "announcement_reads" USING btree ("user_id","read_at");--> statement-breakpoint
-CREATE INDEX "announcements_visibility_idx" ON "announcements" USING btree ("scope","published_at","expires_at");--> statement-breakpoint
+CREATE INDEX "announcements_visibility_idx" ON "announcements" USING btree ("scope","status","published_at","expires_at");--> statement-breakpoint
 CREATE INDEX "announcements_creator_created_idx" ON "announcements" USING btree ("creator_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "accounts_provider_account_unique" ON "accounts" USING btree ("provider_id","account_id");--> statement-breakpoint
 CREATE INDEX "accounts_user_id_idx" ON "accounts" USING btree ("user_id");--> statement-breakpoint
@@ -831,12 +839,12 @@ CREATE TRIGGER shipments_lifecycle
 	BEFORE UPDATE OR DELETE ON "shipments"
 	FOR EACH ROW EXECUTE FUNCTION enforce_shipment_lifecycle();--> statement-breakpoint
 
--- Announcement identity is stable while content changes remain versioned.
+-- Announcement identity is stable and publication state follows an explicit lifecycle.
 CREATE FUNCTION enforce_announcement_lifecycle() RETURNS trigger AS $$
 BEGIN
 	IF TG_OP = 'DELETE' THEN
-		IF OLD.published_at IS NOT NULL THEN
-			RAISE EXCEPTION 'published announcements cannot be deleted';
+		IF OLD.status <> 'DRAFT' THEN
+			RAISE EXCEPTION 'only draft announcements can be deleted';
 		END IF;
 		RETURN OLD;
 	END IF;
@@ -848,6 +856,23 @@ BEGIN
 	END IF;
 	IF NEW.version <> OLD.version + 1 THEN
 		RAISE EXCEPTION 'announcement version must increment exactly once';
+	END IF;
+	IF (OLD.status = 'DRAFT' AND NEW.status NOT IN ('DRAFT', 'PUBLISHED'))
+		OR (OLD.status = 'PUBLISHED' AND NEW.status NOT IN ('PUBLISHED', 'WITHDRAWN'))
+		OR (OLD.status = 'WITHDRAWN' AND NEW.status NOT IN ('WITHDRAWN', 'PUBLISHED')) THEN
+		RAISE EXCEPTION 'invalid announcement status transition';
+	END IF;
+	IF OLD.status = 'PUBLISHED' AND NEW.published_at IS DISTINCT FROM OLD.published_at THEN
+		RAISE EXCEPTION 'published announcement publication time is immutable until republished';
+	END IF;
+	IF OLD.status = 'WITHDRAWN' AND NEW.status = 'WITHDRAWN'
+		AND (NEW.published_at IS DISTINCT FROM OLD.published_at
+			OR NEW.withdrawn_at IS DISTINCT FROM OLD.withdrawn_at) THEN
+		RAISE EXCEPTION 'withdrawn announcement lifecycle times are immutable until republished';
+	END IF;
+	IF OLD.status = 'WITHDRAWN' AND NEW.status = 'PUBLISHED'
+		AND NEW.published_at < OLD.withdrawn_at THEN
+		RAISE EXCEPTION 'republished announcement time cannot precede withdrawal';
 	END IF;
 	RETURN NEW;
 END;

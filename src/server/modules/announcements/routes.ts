@@ -2,9 +2,10 @@ import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import {
-  AnnouncementInputSchema,
+  AnnouncementContentSchema,
+  AnnouncementContentUpdateSchema,
   AnnouncementSchema,
-  AnnouncementUpdateSchema,
+  AnnouncementVersionCommandSchema,
 } from '../../../shared/contracts/announcements.js';
 import { IdSchema } from '../../../shared/contracts/common.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
@@ -84,10 +85,9 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
   ) => {
     const guard = mode === 'PLATFORM' ? requireAdmin : requireCreator;
     const target = (request: { readonly creatorProfile: null | { readonly id: string } }) =>
-      ({
-        ...(mode === 'CREATOR' ? { creatorId: request.creatorProfile!.id } : {}),
-        scope: mode,
-      }) as const;
+      mode === 'CREATOR'
+        ? ({ creatorId: request.creatorProfile!.id, scope: 'CREATOR' } as const)
+        : ({ scope: 'PLATFORM' } as const);
 
     app.get(
       prefix,
@@ -98,18 +98,15 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
           tags: ['manage-announcements'],
         },
       },
-      (request) => {
-        const resolved = target(request);
-        return options.service.listManaged(resolved.scope, resolved.creatorId);
-      },
+      (request) => options.service.listManaged(target(request)),
     );
 
-    app.post<{ Body: typeof AnnouncementInputSchema.static }>(
+    app.post<{ Body: typeof AnnouncementContentSchema.static }>(
       prefix,
       {
         preHandler: guard,
         schema: {
-          body: AnnouncementInputSchema,
+          body: AnnouncementContentSchema,
           response: { 201: AnnouncementSchema },
           tags: ['manage-announcements'],
         },
@@ -117,28 +114,74 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
       async (request, reply) =>
         reply
           .status(201)
-          .send(await options.service.create(target(request), request.body, context(request))),
+          .send(await options.service.createDraft(target(request), request.body, context(request))),
     );
 
     app.put<{
-      Body: typeof AnnouncementUpdateSchema.static;
+      Body: typeof AnnouncementContentUpdateSchema.static;
       Params: { announcementId: string };
     }>(
       `${prefix}/:announcementId`,
       {
         preHandler: guard,
         schema: {
-          body: AnnouncementUpdateSchema,
+          body: AnnouncementContentUpdateSchema,
           params: Parameters,
           response: { 200: AnnouncementSchema },
           tags: ['manage-announcements'],
         },
       },
       (request) =>
-        options.service.update(
+        options.service.saveContent(
           target(request),
           request.params.announcementId,
           request.body,
+          context(request),
+        ),
+    );
+
+    app.post<{
+      Body: typeof AnnouncementVersionCommandSchema.static;
+      Params: { announcementId: string };
+    }>(
+      `${prefix}/:announcementId/publish`,
+      {
+        preHandler: guard,
+        schema: {
+          body: AnnouncementVersionCommandSchema,
+          params: Parameters,
+          response: { 200: AnnouncementSchema },
+          tags: ['manage-announcements'],
+        },
+      },
+      (request) =>
+        options.service.publish(
+          target(request),
+          request.params.announcementId,
+          request.body.expectedVersion,
+          context(request),
+        ),
+    );
+
+    app.post<{
+      Body: typeof AnnouncementVersionCommandSchema.static;
+      Params: { announcementId: string };
+    }>(
+      `${prefix}/:announcementId/withdraw`,
+      {
+        preHandler: guard,
+        schema: {
+          body: AnnouncementVersionCommandSchema,
+          params: Parameters,
+          response: { 200: AnnouncementSchema },
+          tags: ['manage-announcements'],
+        },
+      },
+      (request) =>
+        options.service.withdraw(
+          target(request),
+          request.params.announcementId,
+          request.body.expectedVersion,
           context(request),
         ),
     );

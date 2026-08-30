@@ -8,6 +8,7 @@ import {
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
+import type { AnnouncementContent } from '../../src/shared/contracts/announcements.js';
 import type { PortalHome } from '../../src/shared/contracts/portal.js';
 import {
   promoteTestCreator,
@@ -94,6 +95,29 @@ integration('public portal visibility', () => {
   });
 
   it('publishes only explicitly public and currently active content', async () => {
+    const createPublishedAnnouncement = async (
+      area: 'admin' | 'creator',
+      cookie: string,
+      input: AnnouncementContent,
+    ) => {
+      const createdAnnouncement = await app.inject({
+        headers: { cookie, origin: TEST_ORIGIN },
+        method: 'POST',
+        payload: input,
+        url: `/api/v1/${area}/announcements`,
+      });
+      expect(createdAnnouncement.statusCode, createdAnnouncement.body).toBe(201);
+      const draftAnnouncement = createdAnnouncement.json<{ id: string; version: number }>();
+      const publishedAnnouncement = await app.inject({
+        headers: { cookie, origin: TEST_ORIGIN },
+        method: 'POST',
+        payload: { expectedVersion: draftAnnouncement.version },
+        url: `/api/v1/${area}/announcements/${draftAnnouncement.id}/publish`,
+      });
+      expect(publishedAnnouncement.statusCode, publishedAnnouncement.body).toBe(200);
+      return publishedAnnouncement;
+    };
+
     const publicRelease = createReleaseDraft('2026-08-01', {
       description: '本月舰长纪念礼物。',
       fulfillmentMode: 'HIGHEST_ONLY',
@@ -149,49 +173,28 @@ integration('public portal visibility', () => {
     });
     expect(privatePublished.statusCode, privatePublished.body).toBe(200);
 
-    const creatorAnnouncement = await app.inject({
-      headers: { cookie: creatorOneCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: {
-        body: '只应显示给相关礼物领取用户。',
-        pinned: false,
-        publicVisible: false,
-        publishNow: true,
-        severity: 'INFO',
-        title: '主播定向公告',
-      },
-      url: '/api/v1/creator/announcements',
+    await createPublishedAnnouncement('creator', creatorOneCookie, {
+      body: '只应显示给相关礼物领取用户。',
+      pinned: false,
+      publicVisible: false,
+      severity: 'INFO',
+      title: '主播定向公告',
     });
-    expect(creatorAnnouncement.statusCode, creatorAnnouncement.body).toBe(201);
 
-    const platformAnnouncement = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: {
-        body: '本月礼物已经开放领取。',
-        pinned: true,
-        publicVisible: true,
-        publishNow: true,
-        severity: 'INFO',
-        title: '八月礼物领取通知',
-      },
-      url: '/api/v1/admin/announcements',
+    const platformAnnouncement = await createPublishedAnnouncement('admin', adminCookie, {
+      body: '本月礼物已经开放领取。',
+      pinned: true,
+      publicVisible: true,
+      severity: 'INFO',
+      title: '八月礼物领取通知',
     });
-    expect(platformAnnouncement.statusCode, platformAnnouncement.body).toBe(201);
-    const loginOnlyAnnouncement = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: {
-        body: '这条公告只应在登录后显示。',
-        pinned: false,
-        publicVisible: false,
-        publishNow: true,
-        severity: 'INFO',
-        title: '登录用户公告',
-      },
-      url: '/api/v1/admin/announcements',
+    await createPublishedAnnouncement('admin', adminCookie, {
+      body: '这条公告只应在登录后显示。',
+      pinned: false,
+      publicVisible: false,
+      severity: 'INFO',
+      title: '登录用户公告',
     });
-    expect(loginOnlyAnnouncement.statusCode, loginOnlyAnnouncement.body).toBe(201);
 
     const managedAnnouncement = platformAnnouncement.json<{ id: string; version: number }>();
     const updatedAnnouncement = await app.inject({
@@ -203,7 +206,6 @@ integration('public portal visibility', () => {
         expiresAt: null,
         pinned: true,
         publicVisible: true,
-        publishNow: true,
         severity: 'INFO',
         title: '八月礼物领取通知',
       },

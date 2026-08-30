@@ -1,5 +1,5 @@
 {
-  "id": "1c032519-a6c9-49dd-88eb-0b4aef78ef3e",
+  "id": "c2a87840-13ed-48be-9f66-552a30d910f8",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -178,8 +178,21 @@
           "notNull": true,
           "default": false
         },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
         "published_at": {
           "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "withdrawn_at": {
+          "name": "withdrawn_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -224,6 +237,12 @@
           "columns": [
             {
               "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -306,7 +325,15 @@
         },
         "announcements_expiry_check": {
           "name": "announcements_expiry_check",
-          "value": "\"announcements\".\"expires_at\" is null or \"announcements\".\"published_at\" is null or \"announcements\".\"expires_at\" > \"announcements\".\"published_at\""
+          "value": "\"announcements\".\"status\" = 'DRAFT' or \"announcements\".\"expires_at\" is null or \"announcements\".\"expires_at\" > \"announcements\".\"published_at\""
+        },
+        "announcements_lifecycle_check": {
+          "name": "announcements_lifecycle_check",
+          "value": "(\n        (\"announcements\".\"status\" = 'DRAFT' and \"announcements\".\"published_at\" is null and \"announcements\".\"withdrawn_at\" is null)\n        or (\"announcements\".\"status\" = 'PUBLISHED' and \"announcements\".\"published_at\" is not null and \"announcements\".\"withdrawn_at\" is null)\n        or (\"announcements\".\"status\" = 'WITHDRAWN' and \"announcements\".\"published_at\" is not null and \"announcements\".\"withdrawn_at\" is not null and \"announcements\".\"withdrawn_at\" >= \"announcements\".\"published_at\")\n      )"
+        },
+        "announcements_public_scope_check": {
+          "name": "announcements_public_scope_check",
+          "value": "not \"announcements\".\"public_visible\" or \"announcements\".\"scope\" = 'PLATFORM'"
         },
         "announcements_scope_identity_check": {
           "name": "announcements_scope_identity_check",

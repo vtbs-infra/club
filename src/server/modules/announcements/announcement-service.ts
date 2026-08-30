@@ -1,8 +1,9 @@
-import { and, desc, eq, gt, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lte, or, type SQL } from 'drizzle-orm';
 
+import type { AnnouncementContent } from '../../../shared/contracts/announcements.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
-import type { DatabaseService } from '../../infrastructure/db/database.js';
+import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   announcementReads,
   announcements,
@@ -11,17 +12,16 @@ import {
 } from '../../infrastructure/db/schema/index.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
 
-export interface AnnouncementInput {
+export type AnnouncementTarget =
+  { readonly scope: 'PLATFORM' } | { readonly creatorId: string; readonly scope: 'CREATOR' };
+
+interface NormalizedContent {
   readonly body: string;
-  readonly expiresAt?: null | string;
-  readonly pinned: boolean;
-  readonly publicVisible: boolean;
-  readonly publishNow: boolean;
-  readonly severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  readonly expiresAt: Date | null;
   readonly title: string;
 }
 
-function validate(input: AnnouncementInput) {
+function normalizeContent(input: AnnouncementContent): NormalizedContent {
   const title = input.title.trim();
   const body = input.body.trim();
   if (!title || title.length > 200 || !body || body.length > 20_000) {
@@ -32,6 +32,45 @@ function validate(input: AnnouncementInput) {
     throw new AppError('ANNOUNCEMENT_EXPIRY_INVALID', 'Announcement expiry is invalid.', 400);
   }
   return { body, expiresAt, title };
+}
+
+function targetCondition(target: AnnouncementTarget): SQL {
+  return and(
+    eq(announcements.scope, target.scope),
+    target.scope === 'CREATOR'
+      ? eq(announcements.creatorId, target.creatorId)
+      : isNull(announcements.creatorId),
+  )!;
+}
+
+function assertVersion(actual: number, expected: number): void {
+  if (actual !== expected) {
+    throw new AppError(
+      'ANNOUNCEMENT_VERSION_CONFLICT',
+      'This announcement changed. Reload before continuing.',
+      409,
+    );
+  }
+}
+
+function assertExpiryAfterPublication(expiresAt: Date | null, publishedAt: Date): void {
+  if (expiresAt && expiresAt <= publishedAt) {
+    throw new AppError(
+      'ANNOUNCEMENT_EXPIRY_INVALID',
+      'Announcement expiry must be after publication.',
+      400,
+    );
+  }
+}
+
+function auditSummary(row: typeof announcements.$inferSelect) {
+  return {
+    publicVisible: row.publicVisible,
+    severity: row.severity,
+    status: row.status,
+    title: row.title,
+    version: row.version,
+  };
 }
 
 export class AnnouncementService {
@@ -73,6 +112,7 @@ export class AnnouncementService {
       .where(
         and(
           visibility,
+          eq(announcements.status, 'PUBLISHED'),
           lte(announcements.publishedAt, now),
           or(isNull(announcements.expiresAt), gt(announcements.expiresAt, now)),
         ),
@@ -106,35 +146,37 @@ export class AnnouncementService {
     }));
   }
 
-  public listManaged(scope: 'PLATFORM' | 'CREATOR', creatorId?: string) {
+  public listManaged(target: AnnouncementTarget) {
     return this.database.orm
       .select()
       .from(announcements)
-      .where(
-        and(
-          eq(announcements.scope, scope),
-          scope === 'CREATOR'
-            ? eq(announcements.creatorId, creatorId!)
-            : isNull(announcements.creatorId),
-        ),
-      )
+      .where(targetCondition(target))
       .orderBy(desc(announcements.createdAt));
   }
 
-  public async create(
-    target: { readonly creatorId?: string; readonly scope: 'PLATFORM' | 'CREATOR' },
-    input: AnnouncementInput,
+  private async selectForUpdate(
+    transaction: AppDatabase,
+    target: AnnouncementTarget,
+    announcementId: string,
+  ) {
+    const [announcement] = await transaction
+      .select()
+      .from(announcements)
+      .where(and(eq(announcements.id, announcementId), targetCondition(target)))
+      .limit(1)
+      .for('update');
+    if (!announcement) {
+      throw new AppError('ANNOUNCEMENT_NOT_FOUND', 'Announcement not found.', 404);
+    }
+    return announcement;
+  }
+
+  public async createDraft(
+    target: AnnouncementTarget,
+    input: AnnouncementContent,
     context: RequestAuditContext,
   ) {
-    const normalized = validate(input);
-    const now = this.clock.now();
-    if (normalized.expiresAt && input.publishNow && normalized.expiresAt <= now) {
-      throw new AppError(
-        'ANNOUNCEMENT_EXPIRY_INVALID',
-        'Announcement expiry must be after publication.',
-        400,
-      );
-    }
+    const normalized = normalizeContent(input);
     return this.database.orm.transaction(async (transaction) => {
       const [created] = await transaction
         .insert(announcements)
@@ -145,9 +187,9 @@ export class AnnouncementService {
           expiresAt: normalized.expiresAt,
           pinned: input.pinned,
           publicVisible: target.scope === 'PLATFORM' && input.publicVisible,
-          publishedAt: input.publishNow ? now : null,
           scope: target.scope,
           severity: input.severity,
+          status: 'DRAFT',
           title: normalized.title,
         })
         .returning();
@@ -156,14 +198,8 @@ export class AnnouncementService {
         {
           action: 'announcement.created',
           actorUserId: context.actorUserId,
-          afterSummary: {
-            published: Boolean(created.publishedAt),
-            publicVisible: created.publicVisible,
-            scope: created.scope,
-            severity: created.severity,
-            title: created.title,
-          },
-          creatorId: target.creatorId,
+          afterSummary: auditSummary(created),
+          creatorId: target.scope === 'CREATOR' ? target.creatorId : undefined,
           ipAddress: context.ipAddress,
           requestId: context.requestId,
           targetId: created.id,
@@ -175,44 +211,18 @@ export class AnnouncementService {
     });
   }
 
-  public async update(
-    target: { readonly creatorId?: string; readonly scope: 'PLATFORM' | 'CREATOR' },
+  public async saveContent(
+    target: AnnouncementTarget,
     announcementId: string,
-    input: AnnouncementInput & { readonly expectedVersion: number },
+    input: AnnouncementContent & { readonly expectedVersion: number },
     context: RequestAuditContext,
   ) {
-    const normalized = validate(input);
+    const normalized = normalizeContent(input);
     return this.database.orm.transaction(async (transaction) => {
-      const [before] = await transaction
-        .select()
-        .from(announcements)
-        .where(
-          and(
-            eq(announcements.id, announcementId),
-            eq(announcements.scope, target.scope),
-            target.scope === 'CREATOR'
-              ? eq(announcements.creatorId, target.creatorId!)
-              : isNull(announcements.creatorId),
-          ),
-        )
-        .limit(1)
-        .for('update');
-      if (!before) throw new AppError('ANNOUNCEMENT_NOT_FOUND', 'Announcement not found.', 404);
-      if (before.version !== input.expectedVersion) {
-        throw new AppError(
-          'ANNOUNCEMENT_VERSION_CONFLICT',
-          'This announcement changed. Reload before saving.',
-          409,
-        );
-      }
-      const now = this.clock.now();
-      const publishedAt = input.publishNow ? (before.publishedAt ?? now) : null;
-      if (normalized.expiresAt && publishedAt && normalized.expiresAt <= publishedAt) {
-        throw new AppError(
-          'ANNOUNCEMENT_EXPIRY_INVALID',
-          'Announcement expiry must be after publication.',
-          400,
-        );
+      const before = await this.selectForUpdate(transaction, target, announcementId);
+      assertVersion(before.version, input.expectedVersion);
+      if (before.publishedAt) {
+        assertExpiryAfterPublication(normalized.expiresAt, before.publishedAt);
       }
       const [updated] = await transaction
         .update(announcements)
@@ -221,10 +231,9 @@ export class AnnouncementService {
           expiresAt: normalized.expiresAt,
           pinned: input.pinned,
           publicVisible: target.scope === 'PLATFORM' && input.publicVisible,
-          publishedAt,
           severity: input.severity,
           title: normalized.title,
-          updatedAt: now,
+          updatedAt: this.clock.now(),
           version: before.version + 1,
         })
         .where(and(eq(announcements.id, before.id), eq(announcements.version, before.version)))
@@ -232,7 +241,7 @@ export class AnnouncementService {
       if (!updated) {
         throw new AppError(
           'ANNOUNCEMENT_VERSION_CONFLICT',
-          'This announcement changed. Reload before saving.',
+          'This announcement changed. Reload before continuing.',
           409,
         );
       }
@@ -240,19 +249,9 @@ export class AnnouncementService {
         {
           action: 'announcement.updated',
           actorUserId: context.actorUserId,
-          afterSummary: {
-            published: Boolean(updated.publishedAt),
-            publicVisible: updated.publicVisible,
-            severity: updated.severity,
-            title: updated.title,
-          },
-          beforeSummary: {
-            published: Boolean(before.publishedAt),
-            publicVisible: before.publicVisible,
-            severity: before.severity,
-            title: before.title,
-          },
-          creatorId: target.creatorId,
+          afterSummary: auditSummary(updated),
+          beforeSummary: auditSummary(before),
+          creatorId: target.scope === 'CREATOR' ? target.creatorId : undefined,
           ipAddress: context.ipAddress,
           requestId: context.requestId,
           targetId: updated.id,
@@ -264,9 +263,116 @@ export class AnnouncementService {
     });
   }
 
+  public async publish(
+    target: AnnouncementTarget,
+    announcementId: string,
+    expectedVersion: number,
+    context: RequestAuditContext,
+  ) {
+    return this.database.orm.transaction(async (transaction) => {
+      const before = await this.selectForUpdate(transaction, target, announcementId);
+      assertVersion(before.version, expectedVersion);
+      if (before.status !== 'DRAFT' && before.status !== 'WITHDRAWN') {
+        throw new AppError(
+          'ANNOUNCEMENT_NOT_PUBLISHABLE',
+          'Only a draft or withdrawn announcement can be published.',
+          409,
+        );
+      }
+      const now = this.clock.now();
+      assertExpiryAfterPublication(before.expiresAt, now);
+      const [published] = await transaction
+        .update(announcements)
+        .set({
+          publishedAt: now,
+          status: 'PUBLISHED',
+          updatedAt: now,
+          version: before.version + 1,
+          withdrawnAt: null,
+        })
+        .where(and(eq(announcements.id, before.id), eq(announcements.version, before.version)))
+        .returning();
+      if (!published) {
+        throw new AppError(
+          'ANNOUNCEMENT_VERSION_CONFLICT',
+          'This announcement changed. Reload before continuing.',
+          409,
+        );
+      }
+      await this.audit.record(
+        {
+          action:
+            before.status === 'WITHDRAWN' ? 'announcement.republished' : 'announcement.published',
+          actorUserId: context.actorUserId,
+          afterSummary: auditSummary(published),
+          beforeSummary: auditSummary(before),
+          creatorId: target.scope === 'CREATOR' ? target.creatorId : undefined,
+          ipAddress: context.ipAddress,
+          requestId: context.requestId,
+          targetId: published.id,
+          targetType: 'announcement',
+        },
+        transaction,
+      );
+      return published;
+    });
+  }
+
+  public async withdraw(
+    target: AnnouncementTarget,
+    announcementId: string,
+    expectedVersion: number,
+    context: RequestAuditContext,
+  ) {
+    return this.database.orm.transaction(async (transaction) => {
+      const before = await this.selectForUpdate(transaction, target, announcementId);
+      assertVersion(before.version, expectedVersion);
+      if (before.status !== 'PUBLISHED') {
+        throw new AppError(
+          'ANNOUNCEMENT_NOT_WITHDRAWABLE',
+          'Only a published announcement can be withdrawn.',
+          409,
+        );
+      }
+      const now = this.clock.now();
+      const [withdrawn] = await transaction
+        .update(announcements)
+        .set({
+          status: 'WITHDRAWN',
+          updatedAt: now,
+          version: before.version + 1,
+          withdrawnAt: now,
+        })
+        .where(and(eq(announcements.id, before.id), eq(announcements.version, before.version)))
+        .returning();
+      if (!withdrawn) {
+        throw new AppError(
+          'ANNOUNCEMENT_VERSION_CONFLICT',
+          'This announcement changed. Reload before continuing.',
+          409,
+        );
+      }
+      await this.audit.record(
+        {
+          action: 'announcement.withdrawn',
+          actorUserId: context.actorUserId,
+          afterSummary: auditSummary(withdrawn),
+          beforeSummary: auditSummary(before),
+          creatorId: target.scope === 'CREATOR' ? target.creatorId : undefined,
+          ipAddress: context.ipAddress,
+          requestId: context.requestId,
+          targetId: withdrawn.id,
+          targetType: 'announcement',
+        },
+        transaction,
+      );
+      return withdrawn;
+    });
+  }
+
   public async markRead(userId: string, announcementId: string): Promise<void> {
     const [announcement] = (await this.listVisible(userId)).filter(
-      (announcement) => announcement.id === announcementId,
+      (candidate) => candidate.id === announcementId,
     );
     if (!announcement) {
       throw new AppError('ANNOUNCEMENT_NOT_FOUND', 'Announcement not found.', 404);
@@ -282,28 +388,33 @@ export class AnnouncementService {
   }
 
   public async deleteDraft(
-    target: { readonly creatorId?: string; readonly scope: 'PLATFORM' | 'CREATOR' },
+    target: AnnouncementTarget,
     announcementId: string,
     context: RequestAuditContext,
   ): Promise<void> {
     await this.database.orm.transaction(async (transaction) => {
+      const before = await this.selectForUpdate(transaction, target, announcementId);
+      if (before.status !== 'DRAFT') {
+        throw new AppError(
+          'ANNOUNCEMENT_NOT_DELETABLE',
+          'Only a draft that has never been published can be deleted.',
+          409,
+        );
+      }
       const [deleted] = await transaction
         .delete(announcements)
         .where(
           and(
-            eq(announcements.id, announcementId),
-            eq(announcements.scope, target.scope),
-            isNull(announcements.publishedAt),
-            target.scope === 'CREATOR'
-              ? eq(announcements.creatorId, target.creatorId!)
-              : isNull(announcements.creatorId),
+            eq(announcements.id, before.id),
+            eq(announcements.status, 'DRAFT'),
+            eq(announcements.version, before.version),
           ),
         )
         .returning({ id: announcements.id });
       if (!deleted) {
         throw new AppError(
-          'ANNOUNCEMENT_NOT_DELETABLE',
-          'Only an unpublished announcement can be deleted.',
+          'ANNOUNCEMENT_VERSION_CONFLICT',
+          'This announcement changed. Reload before continuing.',
           409,
         );
       }
@@ -311,7 +422,8 @@ export class AnnouncementService {
         {
           action: 'announcement.deleted',
           actorUserId: context.actorUserId,
-          creatorId: target.creatorId,
+          beforeSummary: auditSummary(before),
+          creatorId: target.scope === 'CREATOR' ? target.creatorId : undefined,
           ipAddress: context.ipAddress,
           requestId: context.requestId,
           targetId: deleted.id,

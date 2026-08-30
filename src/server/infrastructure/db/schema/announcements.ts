@@ -26,7 +26,9 @@ export const announcements = pgTable(
     severity: text('severity').default('INFO').notNull(),
     pinned: boolean('pinned').default(false).notNull(),
     publicVisible: boolean('public_visible').default(false).notNull(),
+    status: text('status').default('DRAFT').notNull(),
     publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
+    withdrawnAt: timestamp('withdrawn_at', { mode: 'date', withTimezone: true }),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }),
     createdByUserId: uuid('created_by_user_id')
       .notNull()
@@ -35,7 +37,12 @@ export const announcements = pgTable(
     ...timestamps,
   },
   (table) => [
-    index('announcements_visibility_idx').on(table.scope, table.publishedAt, table.expiresAt),
+    index('announcements_visibility_idx').on(
+      table.scope,
+      table.status,
+      table.publishedAt,
+      table.expiresAt,
+    ),
     index('announcements_creator_created_idx').on(table.creatorId, table.createdAt),
     check('announcements_scope_check', sql`${table.scope} in ('PLATFORM', 'CREATOR')`),
     check(
@@ -45,7 +52,19 @@ export const announcements = pgTable(
     check('announcements_version_positive', sql`${table.version} > 0`),
     check(
       'announcements_expiry_check',
-      sql`${table.expiresAt} is null or ${table.publishedAt} is null or ${table.expiresAt} > ${table.publishedAt}`,
+      sql`${table.status} = 'DRAFT' or ${table.expiresAt} is null or ${table.expiresAt} > ${table.publishedAt}`,
+    ),
+    check(
+      'announcements_lifecycle_check',
+      sql`(
+        (${table.status} = 'DRAFT' and ${table.publishedAt} is null and ${table.withdrawnAt} is null)
+        or (${table.status} = 'PUBLISHED' and ${table.publishedAt} is not null and ${table.withdrawnAt} is null)
+        or (${table.status} = 'WITHDRAWN' and ${table.publishedAt} is not null and ${table.withdrawnAt} is not null and ${table.withdrawnAt} >= ${table.publishedAt})
+      )`,
+    ),
+    check(
+      'announcements_public_scope_check',
+      sql`not ${table.publicVisible} or ${table.scope} = 'PLATFORM'`,
     ),
     check(
       'announcements_scope_identity_check',

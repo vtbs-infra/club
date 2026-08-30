@@ -86,6 +86,7 @@ export class PortalService {
           and(
             eq(announcements.scope, 'PLATFORM'),
             eq(announcements.publicVisible, true),
+            eq(announcements.status, 'PUBLISHED'),
             isNull(announcements.creatorId),
             lte(announcements.publishedAt, now),
             or(isNull(announcements.expiresAt), gt(announcements.expiresAt, now)),
