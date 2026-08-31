@@ -10,9 +10,7 @@ import {
 } from '../../src/server/infrastructure/db/database.js';
 import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
 
-const configuredDatabaseUrl = process.env.TEST_DATABASE_URL;
-
-export const integration = configuredDatabaseUrl ? describe : describe.skip;
+export const integration = describe;
 
 export interface IntegrationDatabase {
   readonly cleanup: () => Promise<void>;
@@ -22,6 +20,7 @@ export interface IntegrationDatabase {
 }
 
 export function integrationDatabaseUrl(): string {
+  const configuredDatabaseUrl = process.env.TEST_DATABASE_URL;
   if (!configuredDatabaseUrl) {
     throw new Error('TEST_DATABASE_URL is required for PostgreSQL integration tests.');
   }

@@ -71,6 +71,7 @@ export function AdminCreatorsPage() {
     enabled: search.trim().length > 0,
     queryFn: () => getAdminUsers(search),
     queryKey: ['admin', 'users', search],
+    retry: false,
   });
   const focusEditor = (mode: 'create' | 'edit') => {
     requestAnimationFrame(() => {
@@ -233,6 +234,7 @@ export function AdminCreatorsPage() {
               <label>
                 普通用户账号
                 <select
+                  disabled={users.isPending || users.isError || !search.trim()}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, userId: event.target.value }))
                   }
@@ -251,7 +253,18 @@ export function AdminCreatorsPage() {
               {users.isPending && search.trim() ? (
                 <p className="quiet-line">正在搜索已验证用户…</p>
               ) : null}
-              {users.isError ? <ErrorNotice error={users.error} /> : null}
+              {users.isError ? (
+                <div className="stack-sm">
+                  <ErrorNotice error={users.error} />
+                  <button
+                    className="button ghost small"
+                    onClick={() => void users.refetch()}
+                    type="button"
+                  >
+                    重新搜索
+                  </button>
+                </div>
+              ) : null}
               {!search.trim() ? (
                 <InlineNotice tone="info">输入昵称、邮箱、B站昵称或 UID 开始搜索。</InlineNotice>
               ) : users.isSuccess && eligibleUsers.length === 0 ? (

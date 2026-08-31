@@ -21,6 +21,7 @@ export default defineConfig({
           name: 'integration',
           environment: 'node',
           fileParallelism: false,
+          globalSetup: ['tests/helpers/require-integration-database.ts'],
           include: ['tests/integration/**/*.test.ts'],
           testTimeout: 20_000,
           hookTimeout: 20_000,

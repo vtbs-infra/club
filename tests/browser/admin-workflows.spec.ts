@@ -166,3 +166,50 @@ test('registers a creator from verified identity without editable Bilibili field
   await expect(page.getByRole('heading', { name: 'B站主播新昵称' })).toBeVisible();
   await expect(page.getByText(/直播间 654322/)).toBeVisible();
 });
+
+test('shows and recovers from a failed creator candidate search', async ({ appUrl, page }) => {
+  const candidate = userRecord({ bilibiliBinding: bilibiliBinding() });
+  let searchRequests = 0;
+  let finishRetry: () => void = () => undefined;
+  const retryMayFinish = new Promise<void>((resolve) => {
+    finishRetry = () => resolve();
+  });
+  await mockApi(page, (request) => {
+    const pathname = requestPath(request);
+    if (pathname === '/api/v1/me') return adminIdentity();
+    if (pathname === '/api/v1/admin/creators') return { items: [], nextCursor: null };
+    return undefined;
+  });
+  await page.route('**/api/v1/admin/users?*', async (route) => {
+    searchRequests += 1;
+    if (searchRequests === 1) {
+      await route.fulfill({
+        json: {
+          error: {
+            code: 'USER_SEARCH_UNAVAILABLE',
+            message: '用户搜索暂时不可用。',
+          },
+        },
+        status: 503,
+      });
+      return;
+    }
+    await retryMayFinish;
+    await route.fulfill({ json: [candidate] });
+  });
+
+  try {
+    await page.goto(`${appUrl}/admin/creators`);
+    await page.getByLabel('搜索已验证用户').fill(candidate.name);
+    await expect(page.getByText('服务器暂时无法完成请求，请稍后重试。')).toBeVisible();
+    await page.getByRole('button', { name: '重新搜索' }).click();
+    await expect(page.getByText('正在搜索已验证用户…')).toBeVisible();
+    finishRetry();
+    await expect(page.getByLabel('普通用户账号')).toContainText(
+      `UID ${candidate.bilibiliBinding!.biliUid}`,
+    );
+    expect(searchRequests).toBe(2);
+  } finally {
+    finishRetry();
+  }
+});

@@ -1,28 +1,46 @@
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { appendFile, cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { EXPECTED_SCHEMA_MIGRATIONS } from '../../src/server/infrastructure/db/schema-version.js';
+import { assertCheckedInMigrationIdentity } from '../../scripts/migration-identity.js';
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
+});
+
+async function migrationWorkspace(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'club-migrations-'));
+  temporaryDirectories.push(directory);
+  await cp(resolve('migrations'), join(directory, 'migrations'), { recursive: true });
+  return directory;
+}
 
 describe('database schema version', () => {
-  it('matches the checked-in migration journal', async () => {
-    const journal = JSON.parse(
-      await readFile(resolve('migrations/meta/_journal.json'), 'utf8'),
-    ) as {
-      entries: readonly { readonly tag: string; readonly when: number }[];
-    };
-    const migrations = await Promise.all(
-      journal.entries.map(async (entry) => {
-        const contents = await readFile(resolve('migrations', `${entry.tag}.sql`), 'utf8');
-        return {
-          createdAt: String(entry.when),
-          hash: createHash('sha256').update(contents).digest('hex'),
-        };
-      }),
-    );
+  it('matches the complete checked-in migration set and journal', async () => {
+    await expect(assertCheckedInMigrationIdentity()).resolves.toBeUndefined();
+  });
 
-    expect(EXPECTED_SCHEMA_MIGRATIONS).toEqual(migrations);
+  it('rejects an unjournaled migration file', async () => {
+    const workspace = await migrationWorkspace();
+    await writeFile(join(workspace, 'migrations', '0001_unjournaled.sql'), 'select 1;\n');
+    await expect(assertCheckedInMigrationIdentity(workspace)).rejects.toThrow(
+      'migration SQL files do not match',
+    );
+  });
+
+  it('rejects migration contents that differ from the application identity', async () => {
+    const workspace = await migrationWorkspace();
+    await appendFile(join(workspace, 'migrations', '0000_v0_2_baseline.sql'), '\n-- changed\n');
+    await expect(assertCheckedInMigrationIdentity(workspace)).rejects.toThrow(
+      'application migration identity does not match',
+    );
   });
 });

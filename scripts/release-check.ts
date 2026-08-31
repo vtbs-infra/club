@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { assertCheckedInMigrationIdentity } from './migration-identity.js';
+
 const STABLE_SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 interface PackageMetadata {
@@ -20,6 +22,8 @@ const version = packageJson.version;
 if (typeof version !== 'string' || !STABLE_SEMVER_PATTERN.test(version)) {
   throw new Error('package.json must contain a stable semantic version.');
 }
+
+await assertCheckedInMigrationIdentity();
 
 const expectedTag = `v${version}`;
 const requestedTag = optionValue('--tag');
