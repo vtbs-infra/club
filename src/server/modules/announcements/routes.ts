@@ -5,6 +5,7 @@ import {
   AnnouncementContentSchema,
   AnnouncementContentUpdateSchema,
   AnnouncementSchema,
+  AnnouncementSummaryPageSchema,
   AnnouncementVersionCommandSchema,
 } from '../../../shared/contracts/announcements.js';
 import { IdSchema } from '../../../shared/contracts/common.js';
@@ -47,19 +48,38 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
   const requireCreator = createRequireCreator(options.auth, options.database);
   const requireAdmin = createRequirePlatformAdmin(options.auth);
 
-  app.get<{ Querystring: { limit?: number } }>(
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
     '/api/v1/me/announcements',
     {
       preHandler: requireSession,
       schema: {
         querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
           limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
         }),
-        response: { 200: Type.Array(AnnouncementSchema) },
+        response: { 200: AnnouncementSummaryPageSchema },
         tags: ['announcements'],
       },
     },
-    (request) => options.service.listVisible(session(request).user.id, request.query.limit),
+    (request) =>
+      options.service.listVisible(session(request).user.id, {
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 20,
+      }),
+  );
+
+  app.get<{ Params: { announcementId: string } }>(
+    '/api/v1/me/announcements/:announcementId',
+    {
+      preHandler: requireSession,
+      schema: {
+        params: Parameters,
+        response: { 200: AnnouncementSchema },
+        tags: ['announcements'],
+      },
+    },
+    (request) =>
+      options.service.getVisible(session(request).user.id, request.params.announcementId),
   );
 
   app.post<{ Body: Record<string, never>; Params: { announcementId: string } }>(
@@ -89,16 +109,24 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
         ? ({ creatorId: request.creatorProfile!.id, scope: 'CREATOR' } as const)
         : ({ scope: 'PLATFORM' } as const);
 
-    app.get(
+    app.get<{ Querystring: { cursor?: string; limit?: number } }>(
       prefix,
       {
         preHandler: guard,
         schema: {
-          response: { 200: Type.Array(AnnouncementSchema) },
+          querystring: Type.Object({
+            cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+            limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+          }),
+          response: { 200: AnnouncementSummaryPageSchema },
           tags: ['manage-announcements'],
         },
       },
-      (request) => options.service.listManaged(target(request)),
+      (request) =>
+        options.service.listManaged(target(request), {
+          cursor: request.query.cursor,
+          limit: request.query.limit ?? 20,
+        }),
     );
 
     app.post<{ Body: typeof AnnouncementContentSchema.static }>(
@@ -115,6 +143,19 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
         reply
           .status(201)
           .send(await options.service.createDraft(target(request), request.body, context(request))),
+    );
+
+    app.get<{ Params: { announcementId: string } }>(
+      `${prefix}/:announcementId`,
+      {
+        preHandler: guard,
+        schema: {
+          params: Parameters,
+          response: { 200: AnnouncementSchema },
+          tags: ['manage-announcements'],
+        },
+      },
+      (request) => options.service.getManaged(target(request), request.params.announcementId),
     );
 
     app.put<{

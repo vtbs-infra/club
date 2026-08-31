@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, count, eq, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
@@ -20,6 +20,8 @@ export interface UpdateVerificationRoomInput extends RequestAuditContext {
   readonly priority?: number;
   readonly roomId: string;
 }
+
+export const VERIFICATION_ROOM_LIMIT = 20;
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -61,6 +63,17 @@ export class VerificationRoomService {
   public async create(input: CreateVerificationRoomInput) {
     try {
       const created = await this.database.orm.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtext('club:verification-rooms'))`,
+        );
+        const [total] = await transaction.select({ value: count() }).from(verificationRooms);
+        if (Number(total?.value ?? 0) >= VERIFICATION_ROOM_LIMIT) {
+          throw new AppError(
+            'VERIFICATION_ROOM_LIMIT_REACHED',
+            `The platform can configure at most ${VERIFICATION_ROOM_LIMIT} verification rooms.`,
+            409,
+          );
+        }
         const [room] = await transaction
           .insert(verificationRooms)
           .values({

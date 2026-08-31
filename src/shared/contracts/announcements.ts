@@ -58,3 +58,12 @@ export const AnnouncementSchema = Type.Object({
 });
 export type Announcement = Static<typeof AnnouncementSchema>;
 export type AnnouncementContent = Static<typeof AnnouncementContentSchema>;
+
+export const AnnouncementSummarySchema = Type.Omit(AnnouncementSchema, ['body']);
+export type AnnouncementSummary = Static<typeof AnnouncementSummarySchema>;
+
+export const AnnouncementSummaryPageSchema = Type.Object({
+  items: Type.Array(AnnouncementSummarySchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type AnnouncementSummaryPage = Static<typeof AnnouncementSummaryPageSchema>;

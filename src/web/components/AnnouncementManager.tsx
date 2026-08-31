@@ -1,16 +1,18 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 
 import {
   createManagedAnnouncement,
   deleteManagedAnnouncement,
   getIdentity,
+  getManagedAnnouncement,
   getManagedAnnouncements,
   publishManagedAnnouncement,
   saveManagedAnnouncement,
   withdrawManagedAnnouncement,
   type Announcement,
   type AnnouncementContent,
+  type AnnouncementSummary,
 } from '../api/client';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { dateTimeLocalToIso, isoToDateTimeLocal, PLATFORM_TIME_ZONE } from '../lib/date-time';
@@ -83,8 +85,10 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   const editorRef = useRef<HTMLFormElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const queryKey = [area, 'announcements'] as const;
-  const announcements = useQuery({
-    queryFn: () => getManagedAnnouncements(area),
+  const announcements = useInfiniteQuery({
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getManagedAnnouncements(area, { cursor: pageParam }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
     queryKey,
   });
   const identity = useQuery({
@@ -99,6 +103,8 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   const [publishConfirmation, setPublishConfirmation] = useState(false);
   const [withdrawConfirmation, setWithdrawConfirmation] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<unknown>(null);
+  const [selectionPendingId, setSelectionPendingId] = useState<string | null>(null);
   const dirty = !sameDraft(draft, baselineDraft);
   const unsavedChanges = useUnsavedChangesGuard(dirty);
   const timeZone =
@@ -123,13 +129,25 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
     setWithdrawConfirmation(false);
     setValidationError(null);
   };
-  const selectAnnouncement = (announcement: Announcement) => {
-    const nextDraft = announcementDraft(announcement);
-    setEditing(announcement);
-    setDraft(nextDraft);
-    setBaselineDraft(nextDraft);
-    setValidationError(null);
-    focusEditor();
+  const selectAnnouncement = async (announcement: AnnouncementSummary) => {
+    setSelectionError(null);
+    setSelectionPendingId(announcement.id);
+    try {
+      const selected = await queryClient.fetchQuery({
+        queryFn: () => getManagedAnnouncement(area, announcement.id),
+        queryKey: [...queryKey, 'detail', announcement.id],
+      });
+      const nextDraft = announcementDraft(selected);
+      setEditing(selected);
+      setDraft(nextDraft);
+      setBaselineDraft(nextDraft);
+      setValidationError(null);
+      focusEditor();
+    } catch (error) {
+      setSelectionError(error);
+    } finally {
+      setSelectionPendingId(null);
+    }
   };
   const acceptAnnouncement = (announcement: Announcement) => {
     const nextDraft = announcementDraft(announcement);
@@ -184,6 +202,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
 
   if (announcements.isPending) return <LoadingState />;
   if (announcements.isError) return <ErrorState error={announcements.error} />;
+  const items = announcements.data.pages.flatMap((page) => page.items);
 
   return (
     <div className="split-workspace announcement-workspace">
@@ -210,16 +229,18 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
             新建公告
           </button>
         </div>
-        {announcements.data.length === 0 ? (
+        {selectionError ? <ErrorNotice error={selectionError} /> : null}
+        {items.length === 0 ? (
           <EmptyState description="发布第一条公告后会显示在这里。" title="暂无公告" />
         ) : (
           <div className="managed-list">
-            {announcements.data.map((announcement) => (
+            {items.map((announcement) => (
               <button
                 className={editing?.id === announcement.id ? 'managed-row selected' : 'managed-row'}
                 key={announcement.id}
+                disabled={selectionPendingId === announcement.id}
                 onClick={() =>
-                  unsavedChanges.requestDiscard(() => selectAnnouncement(announcement))
+                  unsavedChanges.requestDiscard(() => void selectAnnouncement(announcement))
                 }
                 type="button"
               >
@@ -237,6 +258,16 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
                 </small>
               </button>
             ))}
+            {announcements.hasNextPage ? (
+              <button
+                className="button ghost small"
+                disabled={announcements.isFetchingNextPage}
+                onClick={() => void announcements.fetchNextPage()}
+                type="button"
+              >
+                {announcements.isFetchingNextPage ? '正在加载…' : '加载更早的公告'}
+              </button>
+            ) : null}
           </div>
         )}
       </section>

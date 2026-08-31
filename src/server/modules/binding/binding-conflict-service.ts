@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import { AppError } from '../../../shared/errors/app-error.js';
@@ -21,7 +21,9 @@ const requestingUsers = alias(users, 'binding_conflict_requesting_users');
 const bindingUsers = alias(users, 'binding_conflict_binding_users');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function decodeCursor(value: string): { readonly createdAt: Date; readonly id: string } {
+type BindingConflictCursor = { readonly createdAt: string; readonly id: string };
+
+function decodeCursor(value: string): BindingConflictCursor {
   try {
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
     if (!parsed || typeof parsed !== 'object') throw new Error('Invalid cursor payload.');
@@ -29,11 +31,10 @@ function decodeCursor(value: string): { readonly createdAt: Date; readonly id: s
     if (typeof record.createdAt !== 'string' || typeof record.id !== 'string') {
       throw new Error('Invalid cursor fields.');
     }
-    const createdAt = new Date(record.createdAt);
-    if (Number.isNaN(createdAt.getTime()) || !UUID.test(record.id)) {
+    if (Number.isNaN(new Date(record.createdAt).getTime()) || !UUID.test(record.id)) {
       throw new Error('Invalid cursor values.');
     }
-    return { createdAt, id: record.id };
+    return { createdAt: record.createdAt, id: record.id };
   } catch {
     throw new AppError(
       'BILIBILI_BINDING_CONFLICT_CURSOR_INVALID',
@@ -43,11 +44,10 @@ function decodeCursor(value: string): { readonly createdAt: Date; readonly id: s
   }
 }
 
-function encodeCursor(row: typeof bindingConflicts.$inferSelect): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: row.createdAt.toISOString(), id: row.id }),
-    'utf8',
-  ).toString('base64url');
+function encodeCursor(row: BindingConflictCursor): string {
+  return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: row.id }), 'utf8').toString(
+    'base64url',
+  );
 }
 
 function normalizeReason(value: string): string {
@@ -130,6 +130,7 @@ export class BindingConflictService {
         bindingUserEmail: bindingUsers.email,
         bindingUserName: bindingUsers.name,
         conflict: bindingConflicts,
+        cursorCreatedAt: sql<string>`${bindingConflicts.createdAt}::text`,
         requestingUserEmail: requestingUsers.email,
         requestingUserId: requestingUsers.id,
         requestingUserName: requestingUsers.name,
@@ -143,13 +144,7 @@ export class BindingConflictService {
         and(
           eq(bindingConflicts.status, 'OPEN'),
           cursor
-            ? or(
-                lt(bindingConflicts.createdAt, cursor.createdAt),
-                and(
-                  eq(bindingConflicts.createdAt, cursor.createdAt),
-                  lt(bindingConflicts.id, cursor.id),
-                ),
-              )
+            ? sql`(${bindingConflicts.createdAt}, ${bindingConflicts.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
             : undefined,
         ),
       )
@@ -182,7 +177,12 @@ export class BindingConflictService {
         },
         status: row.conflict.status,
       })),
-      nextCursor: hasMore ? encodeCursor(items.at(-1)!.conflict) : null,
+      nextCursor: hasMore
+        ? encodeCursor({
+            createdAt: items.at(-1)!.cursorCreatedAt,
+            id: items.at(-1)!.conflict.id,
+          })
+        : null,
     };
   }
 

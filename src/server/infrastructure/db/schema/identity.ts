@@ -41,6 +41,7 @@ export const creators = pgTable(
     uniqueIndex('creators_bilibili_uid_unique').on(table.bilibiliUid),
     uniqueIndex('creators_room_id_unique').on(table.roomId),
     index('creators_monthly_sync_enabled_idx').on(table.monthlySyncEnabled),
+    index('creators_created_id_idx').on(table.createdAt, table.id),
   ],
 );
 

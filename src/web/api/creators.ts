@@ -1,12 +1,13 @@
 import type {
   CreatorOverview,
   CreatorRecord,
+  CreatorRecordPage,
   Identity,
   UserRecord,
 } from '../../shared/contracts/creators';
 import { apiRequest } from './http';
 
-export type { CreatorRecord, UserRecord };
+export type { CreatorRecord, CreatorRecordPage, UserRecord };
 
 export function refreshCreatorProfile(): Promise<Identity['creator']> {
   return apiRequest('/api/v1/creator/profile/refresh', {
@@ -23,8 +24,17 @@ export function getAdminUsers(search = ''): Promise<readonly UserRecord[]> {
   return apiRequest(`/api/v1/admin/users?search=${encodeURIComponent(search)}`);
 }
 
-export function getAdminCreators(): Promise<readonly CreatorRecord[]> {
-  return apiRequest('/api/v1/admin/creators');
+export function getAdminCreators(
+  input: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+  } = {},
+): Promise<CreatorRecordPage> {
+  const parameters = new URLSearchParams();
+  if (input.cursor) parameters.set('cursor', input.cursor);
+  if (input.limit) parameters.set('limit', String(input.limit));
+  const query = parameters.toString();
+  return apiRequest(`/api/v1/admin/creators${query ? `?${query}` : ''}`);
 }
 
 export function createAdminCreator(input: {

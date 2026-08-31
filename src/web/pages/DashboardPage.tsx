@@ -13,16 +13,19 @@ export function DashboardPage() {
   const now = useNow();
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
   const announcements = useQuery({
-    queryFn: () => getAnnouncements(5),
+    queryFn: () => getAnnouncements({ limit: 5 }),
     queryKey: ['me', 'announcements', 5],
   });
-  const gifts = useQuery({ queryFn: () => getMyGifts(12), queryKey: ['gifts', 'mine', 12] });
+  const gifts = useQuery({
+    queryFn: () => getMyGifts({ limit: 12 }),
+    queryKey: ['gifts', 'mine', 12],
+  });
   const binding = useQuery({ queryFn: getBinding, queryKey: ['me', 'bilibili-binding'] });
   const addresses = useQuery({ queryFn: getAddresses, queryKey: ['me', 'addresses'] });
 
   if (identity.isPending) return <LoadingState label="正在准备仪表盘…" />;
   if (identity.isError) return <ErrorState error={identity.error} />;
-  const visibleGifts = gifts.data ?? [];
+  const visibleGifts = gifts.data?.items ?? [];
   const claimable = visibleGifts.filter((gift) => gift.status === 'CLAIMABLE');
   const shipped = visibleGifts.find((gift) => gift.status === 'SHIPPED');
   const urgent = claimable.find((gift) => {
@@ -76,11 +79,11 @@ export function DashboardPage() {
             retryLabel="重试资讯"
             title="近期资讯暂时无法加载"
           />
-        ) : announcements.data.length === 0 ? (
+        ) : announcements.data.items.length === 0 ? (
           <p className="quiet-line">暂时没有新公告。</p>
         ) : (
           <div className="news-list">
-            {announcements.data.map((announcement) => (
+            {announcements.data.items.map((announcement) => (
               <Link
                 key={announcement.id}
                 to={`/announcements?open=${encodeURIComponent(announcement.id)}`}
@@ -202,7 +205,7 @@ export function DashboardPage() {
             retryLabel="重试礼物单"
             title="礼物单暂时无法加载"
           />
-        ) : gifts.data.length === 0 ? (
+        ) : gifts.data.items.length === 0 ? (
           <EmptyState
             action={
               binding.data === null ? (
@@ -223,7 +226,7 @@ export function DashboardPage() {
           />
         ) : (
           <div className="gift-grid">
-            {gifts.data.slice(0, 6).map((gift) => (
+            {gifts.data.items.slice(0, 6).map((gift) => (
               <GiftCard key={gift.id} now={now} order={gift} />
             ))}
           </div>

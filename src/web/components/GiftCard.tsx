@@ -1,7 +1,7 @@
 import { ArrowRight, Gift } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import type { GiftOrder } from '../api/client';
+import type { GiftOrderSummary } from '../api/client';
 import { formatMonth, relativeDeadline, tierLabel } from '../lib/format';
 import {
   giftOrderPresentation,
@@ -10,15 +10,15 @@ import {
 } from '../lib/status-presentation';
 import { StatusBadge } from './Ui';
 
-function action(order: GiftOrder): string {
+function action(order: GiftOrderSummary): string {
   if (order.status === 'CLAIMABLE') return '现在领取';
   if (order.status === 'SHIPPED') return '查看物流';
   if (order.status === 'SUBMITTED') return '查看进度';
   return '查看详情';
 }
 
-function progress(order: GiftOrder, now: number): string {
-  const shipment = order.shipments[0];
+function progress(order: GiftOrderSummary, now: number): string {
+  const shipment = order.shipment;
   switch (order.status) {
     case 'CLAIMABLE':
       return relativeDeadline(order.release.claimDeadlineAt, now);
@@ -41,7 +41,13 @@ function progress(order: GiftOrder, now: number): string {
   }
 }
 
-export function GiftCard({ now, order }: { readonly now: number; readonly order: GiftOrder }) {
+export function GiftCard({
+  now,
+  order,
+}: {
+  readonly now: number;
+  readonly order: GiftOrderSummary;
+}) {
   return (
     <article className={`gift-card gift-${order.status.toLowerCase()}`}>
       <div className="gift-art">

@@ -43,7 +43,13 @@ export const announcements = pgTable(
       table.publishedAt,
       table.expiresAt,
     ),
-    index('announcements_creator_created_idx').on(table.creatorId, table.createdAt),
+    index('announcements_scope_status_created_idx').on(
+      table.scope,
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    index('announcements_creator_created_idx').on(table.creatorId, table.createdAt, table.id),
     check('announcements_scope_check', sql`${table.scope} in ('PLATFORM', 'CREATOR')`),
     check(
       'announcements_severity_check',

@@ -3,12 +3,17 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
 import {
+  CreatorOrderOverviewSchema,
   CreatorOrderSchema,
+  FulfillmentReleaseSummaryPageSchema,
   FulfillmentExportInputSchema,
+  GiftOrderListFilterSchema,
   GiftOrderSchema,
   GiftOrderStatusSchema,
+  GiftOrderSummaryPageSchema,
   ShipGiftSchema,
   SubmitGiftSchema,
+  type GiftOrderListFilter,
   type GiftOrderStatus,
 } from '../../../shared/contracts/gifts.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
@@ -76,19 +81,28 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
   const requireSession = createRequireSession(options.auth);
   const requireCreator = createRequireCreator(options.auth, options.database);
 
-  app.get<{ Querystring: { limit?: number } }>(
+  app.get<{
+    Querystring: { cursor?: string; filter?: GiftOrderListFilter; limit?: number };
+  }>(
     '/api/v1/me/gifts',
     {
       preHandler: requireSession,
       schema: {
         querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          filter: Type.Optional(GiftOrderListFilterSchema),
           limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
         }),
-        response: { 200: Type.Array(GiftOrderSchema) },
+        response: { 200: GiftOrderSummaryPageSchema },
         tags: ['my-gifts'],
       },
     },
-    (request) => options.service.listForUser(session(request).user.id, request.query.limit),
+    (request) =>
+      options.service.listForUser(session(request).user.id, {
+        cursor: request.query.cursor,
+        filter: request.query.filter ?? 'ALL',
+        limit: request.query.limit ?? 24,
+      }),
   );
 
   app.get<{ Params: { giftOrderId: string } }>(
@@ -127,17 +141,62 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       ),
   );
 
-  app.get<{ Querystring: { status?: GiftOrderStatus } }>(
+  app.get<{
+    Querystring: { cursor?: string; limit?: number; search?: string; status?: GiftOrderStatus };
+  }>(
     '/api/v1/creator/orders',
     {
       preHandler: requireCreator,
       schema: {
-        querystring: Type.Object({ status: Type.Optional(GiftOrderStatusSchema) }),
-        response: { 200: Type.Array(GiftOrderSchema) },
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+          search: Type.Optional(Type.String({ maxLength: 80 })),
+          status: Type.Optional(GiftOrderStatusSchema),
+        }),
+        response: { 200: GiftOrderSummaryPageSchema },
         tags: ['creator-orders'],
       },
     },
-    (request) => options.service.listForCreator(request.creatorProfile!.id, request.query.status),
+    (request) =>
+      options.service.listForCreator(request.creatorProfile!.id, {
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 50,
+        search: request.query.search,
+        status: request.query.status,
+      }),
+  );
+
+  app.get(
+    '/api/v1/creator/orders/overview',
+    {
+      preHandler: requireCreator,
+      schema: {
+        response: { 200: CreatorOrderOverviewSchema },
+        tags: ['creator-orders'],
+      },
+    },
+    (request) => options.service.overviewForCreator(request.creatorProfile!.id),
+  );
+
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
+    '/api/v1/creator/orders/fulfillment-releases',
+    {
+      preHandler: requireCreator,
+      schema: {
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+        }),
+        response: { 200: FulfillmentReleaseSummaryPageSchema },
+        tags: ['creator-orders'],
+      },
+    },
+    (request) =>
+      options.service.listFulfillmentReleases(request.creatorProfile!.id, {
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 50,
+      }),
   );
 
   app.post<{ Body: typeof FulfillmentExportInputSchema.static }>(

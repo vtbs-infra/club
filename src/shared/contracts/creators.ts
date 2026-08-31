@@ -54,6 +54,12 @@ export const CreatorRecordSchema = Type.Object({
 });
 export type CreatorRecord = Static<typeof CreatorRecordSchema>;
 
+export const CreatorRecordPageSchema = Type.Object({
+  items: Type.Array(CreatorRecordSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type CreatorRecordPage = Static<typeof CreatorRecordPageSchema>;
+
 export const CreatorInputSchema = Type.Object(
   {
     monthlySyncEnabled: Type.Optional(Type.Boolean()),
@@ -74,6 +80,10 @@ export const CreatorSettingsSchema = Type.Object(
 export const CreatorOverviewSchema = Type.Object({
   creators: Type.Integer({ minimum: 0 }),
   monthlySyncCreators: Type.Integer({ minimum: 0 }),
+  rosterAttention: Type.Object({
+    failed: Type.Integer({ minimum: 0 }),
+    pendingApproval: Type.Integer({ minimum: 0 }),
+  }),
   recent: Type.Array(
     Type.Object({
       displayName: Type.String(),

@@ -19,8 +19,10 @@ test('lands a recipient on the mobile dashboard', async ({ appUrl, page }) => {
   await mockApi(page, (request) => {
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return recipientIdentity();
-    if (pathname === '/api/v1/me/gifts') return [giftOrder()];
-    if (pathname === '/api/v1/me/announcements') return [announcement()];
+    if (pathname === '/api/v1/me/gifts') return { items: [giftOrder()], nextCursor: null };
+    if (pathname === '/api/v1/me/announcements') {
+      return { items: [announcement()], nextCursor: null };
+    }
     if (pathname === '/api/v1/me/bilibili-binding') return bilibiliBinding();
     if (pathname === '/api/v1/me/addresses') return [];
     return undefined;

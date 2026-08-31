@@ -157,6 +157,29 @@ export const GiftReleaseSchema = Type.Object({
 });
 export type GiftRelease = Static<typeof GiftReleaseSchema>;
 
+export const GiftReleaseSummarySchema = Type.Pick(GiftReleaseSchema, [
+  'claimDeadlineAt',
+  'claimStartAt',
+  'closedAt',
+  'coverObjectKey',
+  'createdAt',
+  'eligibilityMonth',
+  'id',
+  'publicVisible',
+  'publishedAt',
+  'status',
+  'title',
+  'updatedAt',
+  'version',
+]);
+export type GiftReleaseSummary = Static<typeof GiftReleaseSummarySchema>;
+
+export const GiftReleaseSummaryPageSchema = Type.Object({
+  items: Type.Array(GiftReleaseSummarySchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type GiftReleaseSummaryPage = Static<typeof GiftReleaseSummaryPageSchema>;
+
 const GiftOrderItemSchema = Type.Object({
   description: Type.String(),
   id: IdSchema,
@@ -220,6 +243,90 @@ export const GiftOrderSchema = Type.Object({
   version: Type.Integer({ minimum: 1 }),
 });
 export type GiftOrder = Static<typeof GiftOrderSchema>;
+
+export const GiftOrderListFilterSchema = Type.Union([
+  Type.Literal('ALL'),
+  Type.Literal('CLAIMABLE'),
+  Type.Literal('SUBMITTED'),
+  Type.Literal('SHIPPED'),
+  Type.Literal('COMPLETED'),
+  Type.Literal('ENDED'),
+]);
+export type GiftOrderListFilter = Static<typeof GiftOrderListFilterSchema>;
+
+export const GiftOrderSummarySchema = Type.Object({
+  biliDisplayName: Nullable(Type.String()),
+  biliUid: Type.String(),
+  creator: Type.Object({
+    displayName: Type.String(),
+    id: IdSchema,
+  }),
+  expiresAt: DateTimeSchema,
+  id: IdSchema,
+  orderNumber: Type.String(),
+  release: Type.Object({
+    claimDeadlineAt: DateTimeSchema,
+    claimStartAt: DateTimeSchema,
+    coverImageUrl: Nullable(Type.String()),
+    eligibilityMonth: Type.String({ format: 'date' }),
+    id: IdSchema,
+    title: Type.String(),
+  }),
+  shipment: Nullable(
+    Type.Object({
+      carrierName: Type.String(),
+      exceptionMessage: Nullable(Type.String()),
+      progress: ShipmentProgressSchema,
+    }),
+  ),
+  status: GiftOrderStatusSchema,
+  tier: GuardTierSchema,
+  updatedAt: DateTimeSchema,
+});
+export type GiftOrderSummary = Static<typeof GiftOrderSummarySchema>;
+
+export const GiftOrderSummaryPageSchema = Type.Object({
+  items: Type.Array(GiftOrderSummarySchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type GiftOrderSummaryPage = Static<typeof GiftOrderSummaryPageSchema>;
+
+const GiftOrderStatusCountsSchema = Type.Object({
+  cancelled: Type.Integer({ minimum: 0 }),
+  claimable: Type.Integer({ minimum: 0 }),
+  completed: Type.Integer({ minimum: 0 }),
+  expired: Type.Integer({ minimum: 0 }),
+  shipped: Type.Integer({ minimum: 0 }),
+  submitted: Type.Integer({ minimum: 0 }),
+});
+
+export const CreatorOrderOverviewSchema = Type.Object({
+  activeRelease: Nullable(
+    Type.Object({
+      counts: GiftOrderStatusCountsSchema,
+      eligibilityMonth: Type.String({ format: 'date' }),
+      id: IdSchema,
+      title: Type.String(),
+    }),
+  ),
+  counts: GiftOrderStatusCountsSchema,
+  releaseCount: Type.Integer({ minimum: 0 }),
+});
+export type CreatorOrderOverview = Static<typeof CreatorOrderOverviewSchema>;
+
+export const FulfillmentReleaseSummarySchema = Type.Object({
+  claimDeadlineAt: DateTimeSchema,
+  eligibilityMonth: Type.String({ format: 'date' }),
+  id: IdSchema,
+  submittedCount: Type.Integer({ minimum: 1 }),
+  title: Type.String(),
+});
+
+export const FulfillmentReleaseSummaryPageSchema = Type.Object({
+  items: Type.Array(FulfillmentReleaseSummarySchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type FulfillmentReleaseSummaryPage = Static<typeof FulfillmentReleaseSummaryPageSchema>;
 
 export const CreatorOrderSchema = Type.Object({
   ...GiftOrderSchema.properties,

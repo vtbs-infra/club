@@ -1,5 +1,5 @@
 {
-  "id": "e808f3a5-8816-49ab-9ce6-9cb5ab6eaac1",
+  "id": "3aa17c5d-da4e-442e-bdab-7f0df26f9ec1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -265,6 +265,39 @@
           "method": "btree",
           "with": {}
         },
+        "announcements_scope_status_created_idx": {
+          "name": "announcements_scope_status_created_idx",
+          "columns": [
+            {
+              "expression": "scope",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "announcements_creator_created_idx": {
           "name": "announcements_creator_created_idx",
           "columns": [
@@ -276,6 +309,12 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1577,8 +1616,8 @@
           "method": "btree",
           "with": {}
         },
-        "gift_orders_uid_updated_idx": {
-          "name": "gift_orders_uid_updated_idx",
+        "gift_orders_uid_number_idx": {
+          "name": "gift_orders_uid_number_idx",
           "columns": [
             {
               "expression": "bili_uid",
@@ -1587,7 +1626,7 @@
               "nulls": "last"
             },
             {
-              "expression": "updated_at",
+              "expression": "order_number",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1598,8 +1637,8 @@
           "method": "btree",
           "with": {}
         },
-        "gift_orders_user_updated_idx": {
-          "name": "gift_orders_user_updated_idx",
+        "gift_orders_user_number_idx": {
+          "name": "gift_orders_user_number_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -1608,7 +1647,7 @@
               "nulls": "last"
             },
             {
-              "expression": "updated_at",
+              "expression": "order_number",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1619,8 +1658,29 @@
           "method": "btree",
           "with": {}
         },
-        "gift_orders_creator_status_idx": {
-          "name": "gift_orders_creator_status_idx",
+        "gift_orders_creator_number_idx": {
+          "name": "gift_orders_creator_number_idx",
+          "columns": [
+            {
+              "expression": "creator_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "order_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "gift_orders_creator_status_number_idx": {
+          "name": "gift_orders_creator_status_number_idx",
           "columns": [
             {
               "expression": "creator_id",
@@ -1630,6 +1690,12 @@
             },
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "order_number",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1683,6 +1749,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "gift_orders_number_format_check": {
+          "name": "gift_orders_number_format_check",
+          "value": "\"gift_orders\".\"order_number\" ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{8}$'"
+        },
         "gift_orders_status_check": {
           "name": "gift_orders_status_check",
           "value": "\"gift_orders\".\"status\" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')"
@@ -2070,6 +2140,33 @@
             },
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "gift_releases_creator_created_idx": {
+          "name": "gift_releases_creator_created_idx",
+          "columns": [
+            {
+              "expression": "creator_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3375,6 +3472,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "creators_created_id_idx": {
+          "name": "creators_created_id_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -3803,6 +3921,10 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "snapshot_attempts_number_check": {
+          "name": "snapshot_attempts_number_check",
+          "value": "\"snapshot_attempts\".\"attempt_number\" between 1 and 3"
+        },
         "snapshot_attempts_punctuality_check": {
           "name": "snapshot_attempts_punctuality_check",
           "value": "\"snapshot_attempts\".\"punctuality\" is null or \"snapshot_attempts\".\"punctuality\" in ('ON_TIME', 'LATE')"
@@ -3891,6 +4013,33 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "snapshot_members_run_position_uid_idx": {
+          "name": "snapshot_members_run_position_uid_idx",
+          "columns": [
+            {
+              "expression": "snapshot_run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "bili_uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -4260,6 +4409,27 @@
             },
             {
               "expression": "period_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "snapshot_runs_period_id_idx": {
+          "name": "snapshot_runs_period_id_idx",
+          "columns": [
+            {
+              "expression": "period_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

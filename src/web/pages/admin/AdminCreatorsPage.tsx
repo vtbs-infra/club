@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type FormEvent } from 'react';
 
 import {
@@ -61,8 +61,14 @@ export function AdminCreatorsPage() {
   const [form, setForm] = useState<CreatorFormState>(emptyForm);
   const [baselineForm, setBaselineForm] = useState<CreatorFormState>(emptyForm);
   const unsavedChanges = useUnsavedChangesGuard(!sameForm(form, baselineForm));
-  const creators = useQuery({ queryFn: getAdminCreators, queryKey: ['admin', 'creators'] });
+  const creators = useInfiniteQuery({
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getAdminCreators({ cursor: pageParam }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    queryKey: ['admin', 'creators'],
+  });
   const users = useQuery({
+    enabled: search.trim().length > 0,
     queryFn: () => getAdminUsers(search),
     queryKey: ['admin', 'users', search],
   });
@@ -129,6 +135,7 @@ export function AdminCreatorsPage() {
 
   if (creators.isPending) return <LoadingState label="正在读取主播…" />;
   if (creators.isError) return <ErrorState error={creators.error} />;
+  const creatorItems = creators.data.pages.flatMap((page) => page.items);
   const eligibleUsers =
     users.data?.filter((user) => user.role === 'USER' && user.bilibiliBinding !== null) ?? [];
   const selectedUser = eligibleUsers.find((user) => user.id === form.userId) ?? null;
@@ -149,14 +156,14 @@ export function AdminCreatorsPage() {
           <div className="section-heading compact">
             <div>
               <h2>已注册主播</h2>
-              <p>{creators.data.length} 位主播</p>
+              <p>已加载 {creatorItems.length} 位主播</p>
             </div>
           </div>
-          {creators.data.length === 0 ? (
+          {creatorItems.length === 0 ? (
             <EmptyState description="从右侧选择一个已验证用户开始注册。" title="还没有主播" />
           ) : (
             <div className="creator-admin-list">
-              {creators.data.map((creator) => (
+              {creatorItems.map((creator) => (
                 <button
                   className={
                     editing?.id === creator.id ? 'creator-admin-row selected' : 'creator-admin-row'
@@ -177,6 +184,16 @@ export function AdminCreatorsPage() {
                   />
                 </button>
               ))}
+              {creators.hasNextPage ? (
+                <button
+                  className="button ghost small"
+                  disabled={creators.isFetchingNextPage}
+                  onClick={() => void creators.fetchNextPage()}
+                  type="button"
+                >
+                  {creators.isFetchingNextPage ? '正在加载…' : '加载更多主播'}
+                </button>
+              ) : null}
             </div>
           )}
         </section>
@@ -204,7 +221,10 @@ export function AdminCreatorsPage() {
               <label>
                 搜索已验证用户
                 <input
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setForm((current) => ({ ...current, userId: '' }));
+                  }}
                   placeholder="输入昵称、邮箱、B站昵称或 UID"
                   ref={searchInputRef}
                   value={search}
@@ -228,7 +248,13 @@ export function AdminCreatorsPage() {
                 </select>
                 <small>这里只显示已完成 B站验证的普通用户。</small>
               </label>
-              {users.isSuccess && eligibleUsers.length === 0 ? (
+              {users.isPending && search.trim() ? (
+                <p className="quiet-line">正在搜索已验证用户…</p>
+              ) : null}
+              {users.isError ? <ErrorNotice error={users.error} /> : null}
+              {!search.trim() ? (
+                <InlineNotice tone="info">输入昵称、邮箱、B站昵称或 UID 开始搜索。</InlineNotice>
+              ) : users.isSuccess && eligibleUsers.length === 0 ? (
                 <InlineNotice tone="info">没有找到可注册的已验证普通用户。</InlineNotice>
               ) : null}
               {selectedUser ? (

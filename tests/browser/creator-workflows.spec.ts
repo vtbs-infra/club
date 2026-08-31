@@ -44,7 +44,7 @@ test('publishes the creator current edits without a separate save', async ({ app
       return;
     }
     if (pathname === '/api/v1/creator/releases') {
-      await fulfillJson(route, []);
+      await fulfillJson(route, { items: [], nextCursor: null });
       return;
     }
     await route.fallback();
@@ -131,7 +131,27 @@ test('exports submitted orders by release without changing the active list filte
       return;
     }
     if (pathname === '/api/v1/creator/orders') {
-      await fulfillJson(route, [order(testId(35), 'SUBMITTED'), order(testId(36), 'SHIPPED')]);
+      const requestedStatus = new URL(request.url()).searchParams.get('status');
+      const orders = [order(testId(35), 'SUBMITTED'), order(testId(36), 'SHIPPED')];
+      await fulfillJson(route, {
+        items: requestedStatus ? orders.filter((item) => item.status === requestedStatus) : orders,
+        nextCursor: null,
+      });
+      return;
+    }
+    if (pathname === '/api/v1/creator/orders/fulfillment-releases') {
+      await fulfillJson(route, {
+        items: [
+          {
+            claimDeadlineAt: release.claimDeadlineAt,
+            eligibilityMonth: release.eligibilityMonth,
+            id: release.id,
+            submittedCount: 1,
+            title: release.title,
+          },
+        ],
+        nextCursor: null,
+      });
       return;
     }
     await route.fallback();

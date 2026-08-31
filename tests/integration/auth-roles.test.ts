@@ -240,7 +240,7 @@ integration('exclusive platform roles and creator ownership', () => {
       method: 'GET',
       url: '/api/v1/creator/releases',
     });
-    expect(ownReleases.json<unknown[]>()).toHaveLength(1);
-    expect(otherReleases.json<unknown[]>()).toHaveLength(0);
+    expect(ownReleases.json<{ items: unknown[] }>().items).toHaveLength(1);
+    expect(otherReleases.json<{ items: unknown[] }>().items).toHaveLength(0);
   });
 });

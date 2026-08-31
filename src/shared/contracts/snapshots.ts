@@ -33,8 +33,14 @@ export const SnapshotRunSchema = Type.Object({
 });
 export type SnapshotRun = Static<typeof SnapshotRunSchema>;
 
+export const SnapshotRunPageSchema = Type.Object({
+  items: Type.Array(SnapshotRunSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type SnapshotRunPage = Static<typeof SnapshotRunPageSchema>;
+
 export const SnapshotAttemptSchema = Type.Object({
-  attemptNumber: Type.Integer({ minimum: 1 }),
+  attemptNumber: Type.Integer({ maximum: SNAPSHOT_ATTEMPT_LIMIT, minimum: 1 }),
   captureCompletedAt: Nullable(DateTimeSchema),
   captureStartedAt: Nullable(DateTimeSchema),
   consistencyStatus: Type.Union([
@@ -92,8 +98,11 @@ export const SnapshotRetryPolicySchema = Type.Object({
 
 export const SnapshotDetailSchema = Type.Object({
   attempts: Type.Array(SnapshotAttemptSchema),
-  members: Type.Array(SnapshotMemberSchema),
-  pages: Type.Array(SnapshotPageSchema),
+  creator: Type.Object({ displayName: Type.String(), id: IdSchema }),
+  evidence: Type.Object({
+    memberCount: Type.Integer({ minimum: 0 }),
+    pageCount: Type.Integer({ minimum: 0 }),
+  }),
   retry: SnapshotRetryPolicySchema,
   run: SnapshotRunSchema,
 });
@@ -122,6 +131,24 @@ export const AdminSnapshotSchema = Type.Object({
 });
 export type AdminSnapshot = Static<typeof AdminSnapshotSchema>;
 
+export const AdminSnapshotPageSchema = Type.Object({
+  items: Type.Array(AdminSnapshotSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type AdminSnapshotPage = Static<typeof AdminSnapshotPageSchema>;
+
+export const SnapshotMemberPageSchema = Type.Object({
+  items: Type.Array(SnapshotMemberSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type SnapshotMemberPage = Static<typeof SnapshotMemberPageSchema>;
+
+export const SnapshotPagePageSchema = Type.Object({
+  items: Type.Array(SnapshotPageSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type SnapshotPagePage = Static<typeof SnapshotPagePageSchema>;
+
 export const SnapshotIntegrityResultSchema = Type.Object({
   objectKey: Type.String(),
   ok: Type.Boolean(),
@@ -130,3 +157,9 @@ export const SnapshotIntegrityResultSchema = Type.Object({
   snapshotPageId: IdSchema,
 });
 export type SnapshotIntegrityResult = Static<typeof SnapshotIntegrityResultSchema>;
+
+export const SnapshotIntegrityResultPageSchema = Type.Object({
+  items: Type.Array(SnapshotIntegrityResultSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type SnapshotIntegrityResultPage = Static<typeof SnapshotIntegrityResultPageSchema>;

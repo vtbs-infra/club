@@ -2,44 +2,31 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Clock3, Cloud, Gift, Plus, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import {
-  getCreatorOrders,
-  getCreatorReleases,
-  getCreatorRosters,
-  getIdentity,
-} from '../../api/client';
-import {
-  ErrorNotice,
-  ErrorState,
-  LoadingState,
-  MetricCard,
-  PageHeader,
-  StatusBadge,
-} from '../../components/Ui';
+import { getCreatorOrderOverview, getCreatorRosters, getIdentity } from '../../api/client';
+import { ErrorState, LoadingState, MetricCard, PageHeader, StatusBadge } from '../../components/Ui';
 import { formatDate, formatMonth } from '../../lib/format';
 import { giftReleasePresentation, snapshotRunPresentation } from '../../lib/status-presentation';
 
 export function CreatorOverviewPage() {
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
-  const releases = useQuery({
-    queryFn: getCreatorReleases,
-    queryKey: ['creator', 'releases'],
+  const orders = useQuery({
+    queryFn: getCreatorOrderOverview,
+    queryKey: ['creator', 'orders', 'overview'],
   });
-  const orders = useQuery({ queryFn: () => getCreatorOrders(), queryKey: ['creator', 'orders'] });
   const rosters = useQuery({
-    queryFn: getCreatorRosters,
+    queryFn: () => getCreatorRosters({ limit: 12 }),
     queryKey: ['creator', 'rosters'],
   });
-  const activeRelease = releases.data?.find((release) => release.status === 'PUBLISHED');
-  const waiting = orders.data?.filter((order) => order.status === 'SUBMITTED').length ?? 0;
-  const shipped = orders.data?.filter((order) => order.status === 'SHIPPED').length ?? 0;
-  const nextRoster = (rosters.data ?? [])
+  const activeRelease = orders.data?.activeRelease;
+  const waiting = orders.data?.counts.submitted ?? 0;
+  const shipped = orders.data?.counts.shipped ?? 0;
+  const nextRoster = (rosters.data?.items ?? [])
     .filter((roster) => roster.status === 'SCHEDULED')
     .sort(
       (left, right) =>
         new Date(left.scheduledCutoffAt).getTime() - new Date(right.scheduledCutoffAt).getTime(),
     )[0];
-  const latestRoster = [...(rosters.data ?? [])].sort((left, right) =>
+  const latestRoster = [...(rosters.data?.items ?? [])].sort((left, right) =>
     right.periodStart.localeCompare(left.periodStart),
   )[0];
 
@@ -99,16 +86,16 @@ export function CreatorOverviewPage() {
         />
         <MetricCard
           description={
-            releases.isPending
+            orders.isPending
               ? '正在读取发布数据'
-              : releases.isError
+              : orders.isError
                 ? '发布数据暂时不可用'
                 : '历史发布总数'
           }
           icon={Gift}
           label="礼物发布"
-          tone={releases.isError ? 'red' : 'blue'}
-          value={releases.data?.length ?? '—'}
+          tone={orders.isError ? 'red' : 'blue'}
+          value={orders.data?.releaseCount ?? '—'}
         />
       </section>
 
@@ -163,52 +150,32 @@ export function CreatorOverviewPage() {
               <ArrowRight aria-hidden="true" size={15} />
             </Link>
           </div>
-          {releases.isPending ? (
+          {orders.isPending ? (
             <LoadingState label="正在读取礼物发布…" />
-          ) : releases.isError ? (
-            <ErrorState error={releases.error} onRetry={() => void releases.refetch()} />
+          ) : orders.isError ? (
+            <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />
           ) : activeRelease ? (
             <div className="active-release-card">
-              <StatusBadge {...giftReleasePresentation[activeRelease.status]} />
+              <StatusBadge {...giftReleasePresentation.PUBLISHED} />
               <h3>{activeRelease.title}</h3>
               <p>{formatMonth(activeRelease.eligibilityMonth)}资格</p>
               <dl>
                 <div>
                   <dt>待领取</dt>
-                  <dd>
-                    {orders.data?.filter(
-                      (order) =>
-                        order.release.id === activeRelease.id && order.status === 'CLAIMABLE',
-                    ).length ?? '—'}
-                  </dd>
+                  <dd>{activeRelease.counts.claimable}</dd>
                 </div>
                 <div>
                   <dt>已提交</dt>
                   <dd>
-                    {orders.data?.filter(
-                      (order) =>
-                        order.release.id === activeRelease.id &&
-                        order.status !== 'CLAIMABLE' &&
-                        order.status !== 'EXPIRED',
-                    ).length ?? '—'}
+                    {activeRelease.counts.submitted +
+                      activeRelease.counts.shipped +
+                      activeRelease.counts.completed}
                   </dd>
                 </div>
               </dl>
               <Link className="button secondary" to={`/creator/releases/${activeRelease.id}`}>
                 查看发布
               </Link>
-              {orders.isError ? (
-                <div className="stack-md">
-                  <ErrorNotice error={orders.error} />
-                  <button
-                    className="button secondary small"
-                    onClick={() => void orders.refetch()}
-                    type="button"
-                  >
-                    重试礼物单数据
-                  </button>
-                </div>
-              ) : null}
             </div>
           ) : (
             <div className="calm-empty">

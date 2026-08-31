@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, lte, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 
 import type { AnnouncementContent } from '../../../shared/contracts/announcements.js';
 import { AppError } from '../../../shared/errors/app-error.js';
@@ -19,6 +19,49 @@ interface NormalizedContent {
   readonly body: string;
   readonly expiresAt: Date | null;
   readonly title: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const announcementSummaryColumns = {
+  createdAt: announcements.createdAt,
+  expiresAt: announcements.expiresAt,
+  id: announcements.id,
+  pinned: announcements.pinned,
+  publicVisible: announcements.publicVisible,
+  publishedAt: announcements.publishedAt,
+  scope: announcements.scope,
+  severity: announcements.severity,
+  status: announcements.status,
+  title: announcements.title,
+  updatedAt: announcements.updatedAt,
+  version: announcements.version,
+  withdrawnAt: announcements.withdrawnAt,
+};
+
+type AnnouncementCursor = { readonly createdAt: string; readonly id: string };
+
+function decodeCursor(value: string): AnnouncementCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    if (!parsed || typeof parsed !== 'object') throw new Error('Invalid cursor payload.');
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.createdAt !== 'string' || typeof record.id !== 'string') {
+      throw new Error('Invalid cursor fields.');
+    }
+    if (Number.isNaN(new Date(record.createdAt).getTime()) || !UUID.test(record.id)) {
+      throw new Error('Invalid cursor values.');
+    }
+    return { createdAt: record.createdAt, id: record.id };
+  } catch {
+    throw new AppError('ANNOUNCEMENT_CURSOR_INVALID', 'The announcement cursor is invalid.', 400);
+  }
+}
+
+function encodeCursor(row: AnnouncementCursor): string {
+  return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: row.id }), 'utf8').toString(
+    'base64url',
+  );
 }
 
 function normalizeContent(input: AnnouncementContent): NormalizedContent {
@@ -83,13 +126,13 @@ export class AnnouncementService {
     this.audit = new AuditService(database);
   }
 
-  public async listVisible(userId: string, limit?: number) {
+  private async visibleCondition(userId: string): Promise<SQL> {
     const [binding] = await this.database.orm
       .select({ biliUid: bilibiliBindings.biliUid })
       .from(bilibiliBindings)
       .where(and(eq(bilibiliBindings.userId, userId), isNull(bilibiliBindings.unboundAt)))
       .limit(1);
-    const accessibleOrders = await this.database.orm
+    const accessibleCreators = this.database.orm
       .selectDistinct({ creatorId: giftOrders.creatorId })
       .from(giftOrders)
       .where(
@@ -97,30 +140,46 @@ export class AnnouncementService {
           ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
           : eq(giftOrders.userId, userId),
       );
-    const creatorIds = accessibleOrders.map((row) => row.creatorId);
     const now = this.clock.now();
-    const visibility =
-      creatorIds.length === 0
-        ? eq(announcements.scope, 'PLATFORM')
-        : or(
-            eq(announcements.scope, 'PLATFORM'),
-            and(eq(announcements.scope, 'CREATOR'), inArray(announcements.creatorId, creatorIds)),
-          );
-    const query = this.database.orm
-      .select()
+    return and(
+      or(
+        eq(announcements.scope, 'PLATFORM'),
+        and(
+          eq(announcements.scope, 'CREATOR'),
+          inArray(announcements.creatorId, accessibleCreators),
+        ),
+      ),
+      eq(announcements.status, 'PUBLISHED'),
+      lte(announcements.publishedAt, now),
+      or(isNull(announcements.expiresAt), gt(announcements.expiresAt, now)),
+    )!;
+  }
+
+  public async listVisible(
+    userId: string,
+    input: { readonly cursor?: string | undefined; readonly limit: number },
+  ) {
+    const cursor = input.cursor ? decodeCursor(input.cursor) : null;
+    const rows = await this.database.orm
+      .select({
+        cursorCreatedAt: sql<string>`${announcements.createdAt}::text`,
+        summary: announcementSummaryColumns,
+      })
       .from(announcements)
       .where(
         and(
-          visibility,
-          eq(announcements.status, 'PUBLISHED'),
-          lte(announcements.publishedAt, now),
-          or(isNull(announcements.expiresAt), gt(announcements.expiresAt, now)),
+          await this.visibleCondition(userId),
+          cursor
+            ? sql`(${announcements.createdAt}, ${announcements.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+            : undefined,
         ),
       )
-      .orderBy(desc(announcements.pinned), desc(announcements.publishedAt));
-    const rows = limit === undefined ? await query : await query.limit(limit);
+      .orderBy(desc(announcements.createdAt), desc(announcements.id))
+      .limit(input.limit + 1);
+    const hasMore = rows.length > input.limit;
+    const items = rows.slice(0, input.limit);
     const reads =
-      rows.length === 0
+      items.length === 0
         ? []
         : await this.database.orm
             .select({
@@ -133,25 +192,94 @@ export class AnnouncementService {
                 eq(announcementReads.userId, userId),
                 inArray(
                   announcementReads.announcementId,
-                  rows.map((row) => row.id),
+                  items.map((row) => row.summary.id),
                 ),
               ),
             );
     const readVersions = new Set(
       reads.map((read) => `${read.announcementId}:${read.announcementVersion}`),
     );
-    return rows.map((row) => ({
-      ...row,
-      read: readVersions.has(`${row.id}:${row.version}`),
-    }));
+    return {
+      items: items.map((row) => ({
+        ...row.summary,
+        read: readVersions.has(`${row.summary.id}:${row.summary.version}`),
+      })),
+      nextCursor: hasMore
+        ? encodeCursor({
+            createdAt: items.at(-1)!.cursorCreatedAt,
+            id: items.at(-1)!.summary.id,
+          })
+        : null,
+    };
   }
 
-  public listManaged(target: AnnouncementTarget) {
-    return this.database.orm
+  public async getVisible(userId: string, announcementId: string) {
+    const [announcement] = await this.database.orm
       .select()
       .from(announcements)
-      .where(targetCondition(target))
-      .orderBy(desc(announcements.createdAt));
+      .where(and(eq(announcements.id, announcementId), await this.visibleCondition(userId)))
+      .limit(1);
+    if (!announcement) {
+      throw new AppError('ANNOUNCEMENT_NOT_FOUND', 'Announcement not found.', 404);
+    }
+    const [read] = await this.database.orm
+      .select({ announcementVersion: announcementReads.announcementVersion })
+      .from(announcementReads)
+      .where(
+        and(
+          eq(announcementReads.userId, userId),
+          eq(announcementReads.announcementId, announcementId),
+          eq(announcementReads.announcementVersion, announcement.version),
+        ),
+      )
+      .limit(1);
+    return { ...announcement, read: Boolean(read) };
+  }
+
+  public async listManaged(
+    target: AnnouncementTarget,
+    input: { readonly cursor?: string | undefined; readonly limit: number },
+  ) {
+    const cursor = input.cursor ? decodeCursor(input.cursor) : null;
+    const rows = await this.database.orm
+      .select({
+        cursorCreatedAt: sql<string>`${announcements.createdAt}::text`,
+        summary: announcementSummaryColumns,
+      })
+      .from(announcements)
+      .where(
+        and(
+          targetCondition(target),
+          cursor
+            ? sql`(${announcements.createdAt}, ${announcements.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(announcements.createdAt), desc(announcements.id))
+      .limit(input.limit + 1);
+    const hasMore = rows.length > input.limit;
+    const items = rows.slice(0, input.limit);
+    return {
+      items: items.map((row) => row.summary),
+      nextCursor: hasMore
+        ? encodeCursor({
+            createdAt: items.at(-1)!.cursorCreatedAt,
+            id: items.at(-1)!.summary.id,
+          })
+        : null,
+    };
+  }
+
+  public async getManaged(target: AnnouncementTarget, announcementId: string) {
+    const [announcement] = await this.database.orm
+      .select()
+      .from(announcements)
+      .where(and(eq(announcements.id, announcementId), targetCondition(target)))
+      .limit(1);
+    if (!announcement) {
+      throw new AppError('ANNOUNCEMENT_NOT_FOUND', 'Announcement not found.', 404);
+    }
+    return announcement;
   }
 
   private async selectForUpdate(
@@ -371,12 +499,7 @@ export class AnnouncementService {
   }
 
   public async markRead(userId: string, announcementId: string): Promise<void> {
-    const [announcement] = (await this.listVisible(userId)).filter(
-      (candidate) => candidate.id === announcementId,
-    );
-    if (!announcement) {
-      throw new AppError('ANNOUNCEMENT_NOT_FOUND', 'Announcement not found.', 404);
-    }
+    const announcement = await this.getVisible(userId, announcementId);
     await this.database.orm
       .insert(announcementReads)
       .values({

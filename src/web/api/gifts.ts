@@ -1,10 +1,17 @@
 import type { GuardTier } from '../../shared/contracts/common';
 import type {
   CreatorOrder,
+  CreatorOrderOverview,
+  FulfillmentReleaseSummaryPage,
   GiftFormField,
   GiftOrder,
+  GiftOrderListFilter,
   GiftOrderStatus,
+  GiftOrderSummary,
+  GiftOrderSummaryPage,
   GiftRelease,
+  GiftReleaseSummary,
+  GiftReleaseSummaryPage,
   ReleaseInput,
   ReleasePackageInput,
   ReleasePublishInput,
@@ -14,10 +21,17 @@ import { apiDownload, apiRequest } from './http';
 
 export type {
   CreatorOrder,
+  CreatorOrderOverview,
+  FulfillmentReleaseSummaryPage,
   GiftFormField,
   GiftOrder,
+  GiftOrderListFilter,
   GiftOrderStatus,
+  GiftOrderSummary,
+  GiftOrderSummaryPage,
   GiftRelease,
+  GiftReleaseSummary,
+  GiftReleaseSummaryPage,
   GuardTier,
   ReleaseInput,
   ReleasePackageInput,
@@ -25,8 +39,23 @@ export type {
   ReleaseUpdateInput,
 };
 
-export function getMyGifts(limit?: number): Promise<readonly GiftOrder[]> {
-  return apiRequest(`/api/v1/me/gifts${limit ? `?limit=${limit}` : ''}`);
+function queryString(values: Readonly<Record<string, number | string | undefined>>): string {
+  const parameters = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined && value !== '') parameters.set(key, String(value));
+  }
+  const query = parameters.toString();
+  return query ? `?${query}` : '';
+}
+
+export function getMyGifts(
+  input: {
+    readonly cursor?: string | undefined;
+    readonly filter?: GiftOrderListFilter | undefined;
+    readonly limit?: number | undefined;
+  } = {},
+): Promise<GiftOrderSummaryPage> {
+  return apiRequest(`/api/v1/me/gifts${queryString(input)}`);
 }
 
 export function getMyGift(giftOrderId: string): Promise<GiftOrder> {
@@ -47,8 +76,13 @@ export function submitGift(
   });
 }
 
-export function getCreatorReleases(): Promise<readonly GiftRelease[]> {
-  return apiRequest('/api/v1/creator/releases');
+export function getCreatorReleases(
+  input: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+  } = {},
+): Promise<GiftReleaseSummaryPage> {
+  return apiRequest(`/api/v1/creator/releases${queryString(input)}`);
 }
 
 export function getCreatorRelease(releaseId: string): Promise<GiftRelease> {
@@ -105,8 +139,28 @@ export function uploadCreatorReleaseCover(
   });
 }
 
-export function getCreatorOrders(status?: GiftOrderStatus): Promise<readonly GiftOrder[]> {
-  return apiRequest(`/api/v1/creator/orders${status ? `?status=${status}` : ''}`);
+export function getCreatorOrders(
+  input: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+    readonly search?: string | undefined;
+    readonly status?: GiftOrderStatus | undefined;
+  } = {},
+): Promise<GiftOrderSummaryPage> {
+  return apiRequest(`/api/v1/creator/orders${queryString(input)}`);
+}
+
+export function getCreatorOrderOverview(): Promise<CreatorOrderOverview> {
+  return apiRequest('/api/v1/creator/orders/overview');
+}
+
+export function getFulfillmentReleases(
+  input: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+  } = {},
+): Promise<FulfillmentReleaseSummaryPage> {
+  return apiRequest(`/api/v1/creator/orders/fulfillment-releases${queryString(input)}`);
 }
 
 export function getCreatorOrder(giftOrderId: string): Promise<CreatorOrder> {

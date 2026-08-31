@@ -22,7 +22,7 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
   await mockApi(page, (request) => {
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return adminIdentity();
-    if (pathname === '/api/v1/admin/creators') return [];
+    if (pathname === '/api/v1/admin/creators') return { items: [], nextCursor: null };
     if (pathname === '/api/v1/admin/users') {
       return [userRecord({ bilibiliBinding: bilibiliBinding() })];
     }
@@ -30,7 +30,7 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
       return { items: [], nextCursor: null };
     }
-    if (pathname === '/api/v1/admin/announcements') return [];
+    if (pathname === '/api/v1/admin/announcements') return { items: [], nextCursor: null };
     if (pathname === '/api/v1/admin/system') return systemStatus();
     if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
     return undefined;
@@ -133,7 +133,7 @@ test('registers a creator from verified identity without editable Bilibili field
       creators = [creator];
       return creator;
     }
-    if (pathname === '/api/v1/admin/creators') return creators;
+    if (pathname === '/api/v1/admin/creators') return { items: creators, nextCursor: null };
     if (pathname === `/api/v1/admin/creators/${creator.id}/refresh-profile`) {
       profileRefreshes += 1;
       creators = [refreshedCreator];
@@ -144,6 +144,7 @@ test('registers a creator from verified identity without editable Bilibili field
 
   await page.goto(`${appUrl}/admin/creators`);
   await page.getByRole('button', { name: '注册主播' }).click();
+  await page.getByLabel('搜索已验证用户').fill(candidate.name);
   await page.getByLabel('普通用户账号').selectOption(candidate.id);
   await expect(page.getByText('B站主播', { exact: true })).toBeVisible();
   await expect(page.locator('form').getByLabel('显示名称')).toHaveCount(0);

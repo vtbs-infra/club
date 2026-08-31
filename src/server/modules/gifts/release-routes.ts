@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
 import {
   GiftReleaseSchema,
+  GiftReleaseSummaryPageSchema,
   ReleaseInputSchema,
   ReleasePublishInputSchema,
   ReleaseUpdateInputSchema,
@@ -40,16 +41,24 @@ const giftReleaseRoutes: FastifyPluginAsync<GiftReleaseRoutesOptions> = (app, op
   const requireCreator = createRequireCreator(options.auth, options.database);
   const parameters = Type.Object({ releaseId: IdSchema });
 
-  app.get(
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
     '/api/v1/creator/releases',
     {
       preHandler: requireCreator,
       schema: {
-        response: { 200: Type.Array(GiftReleaseSchema) },
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+        }),
+        response: { 200: GiftReleaseSummaryPageSchema },
         tags: ['creator-gifts'],
       },
     },
-    (request) => options.service.list(request.creatorProfile!.id),
+    (request) =>
+      options.service.list(request.creatorProfile!.id, {
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 24,
+      }),
   );
 
   app.post<{ Body: typeof ReleaseInputSchema.static }>(

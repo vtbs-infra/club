@@ -49,6 +49,7 @@ export const snapshotRuns = pgTable(
     uniqueIndex('snapshot_runs_creator_period_unique').on(table.creatorId, table.periodStart),
     index('snapshot_runs_due_idx').on(table.status, table.scheduledCutoffAt),
     index('snapshot_runs_creator_period_idx').on(table.creatorId, table.periodStart),
+    index('snapshot_runs_period_id_idx').on(table.periodStart, table.id),
     check(
       'snapshot_runs_status_check',
       sql`${table.status} in ('SCHEDULED', 'RUNNING', 'FAILED', 'PENDING_APPROVAL', 'FINALIZED', 'REJECTED', 'CANCELLED')`,
@@ -87,6 +88,7 @@ export const snapshotAttempts = pgTable(
   (table) => [
     uniqueIndex('snapshot_attempts_run_number_unique').on(table.snapshotRunId, table.attemptNumber),
     index('snapshot_attempts_run_created_idx').on(table.snapshotRunId, table.createdAt),
+    check('snapshot_attempts_number_check', sql`${table.attemptNumber} between 1 and 3`),
     check(
       'snapshot_attempts_punctuality_check',
       sql`${table.punctuality} is null or ${table.punctuality} in ('ON_TIME', 'LATE')`,
@@ -186,6 +188,11 @@ export const snapshotMembers = pgTable(
   },
   (table) => [
     uniqueIndex('snapshot_members_run_uid_unique').on(table.snapshotRunId, table.biliUid),
+    index('snapshot_members_run_position_uid_idx').on(
+      table.snapshotRunId,
+      table.sourcePosition,
+      table.biliUid,
+    ),
     index('snapshot_members_bili_uid_idx').on(table.biliUid),
     check('snapshot_members_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
   ],

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, count, desc, eq, ne } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
-import { addresses } from '../../infrastructure/db/schema/index.js';
+import { addresses, users } from '../../infrastructure/db/schema/index.js';
 import { EncryptionError, type EncryptedValue } from '../../infrastructure/encryption/key-ring.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import { AuditService } from '../audit/audit-service.js';
@@ -20,6 +20,8 @@ export interface AddressInput {
   readonly label: string;
   readonly payload: AddressPayload;
 }
+
+export const ADDRESS_LIMIT_PER_USER = 20;
 
 function encryptedColumns(value: EncryptedValue) {
   return {
@@ -88,6 +90,24 @@ export class AddressService {
       throw new AppError('ADDRESS_LABEL_INVALID', 'Address label is invalid.', 400);
     }
     return this.database.orm.transaction(async (transaction) => {
+      const [owner] = await transaction
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1)
+        .for('update');
+      if (!owner) throw new AppError('USER_NOT_FOUND', 'User account not found.', 404);
+      const [total] = await transaction
+        .select({ value: count() })
+        .from(addresses)
+        .where(eq(addresses.userId, userId));
+      if (Number(total?.value ?? 0) >= ADDRESS_LIMIT_PER_USER) {
+        throw new AppError(
+          'ADDRESS_LIMIT_REACHED',
+          `An account can store at most ${ADDRESS_LIMIT_PER_USER} addresses.`,
+          409,
+        );
+      }
       const existing = await transaction
         .select({ id: addresses.id })
         .from(addresses)

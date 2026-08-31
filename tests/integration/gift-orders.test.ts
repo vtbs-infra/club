@@ -231,15 +231,37 @@ integration('gift order lifecycle', () => {
     expect(juneOrders).toHaveLength(2);
     const captainOrder = juneOrders.find((order) => order.biliUid === '11001')!;
     expect(captainOrder.userId).toBeNull();
-    expect(await orderService.listForUser(userOneId)).toHaveLength(1);
+    const firstCreatorPage = await orderService.listForCreator(creatorId, { limit: 1 });
+    expect(firstCreatorPage.items).toHaveLength(1);
+    expect(firstCreatorPage.nextCursor).not.toBeNull();
+    expect(firstCreatorPage.items[0]).not.toHaveProperty('items');
+    expect(firstCreatorPage.items[0]).not.toHaveProperty('shipments');
+    const secondCreatorPage = await orderService.listForCreator(creatorId, {
+      cursor: firstCreatorPage.nextCursor!,
+      limit: 1,
+    });
+    expect(secondCreatorPage.items).toHaveLength(1);
+    expect(secondCreatorPage.items[0]!.id).not.toBe(firstCreatorPage.items[0]!.id);
+    const searchedOrders = await orderService.listForCreator(creatorId, {
+      limit: 20,
+      search: captainOrder.orderNumber.slice(0, 6),
+    });
+    expect(searchedOrders.items.some((order) => order.id === captainOrder.id)).toBe(true);
+    expect(
+      (await orderService.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items,
+    ).toHaveLength(1);
 
     await database.orm
       .update(bilibiliBindings)
       .set({ unboundAt: new Date(), updatedAt: new Date() })
       .where(eq(bilibiliBindings.id, firstBindingId));
-    expect(await orderService.listForUser(userOneId)).toHaveLength(0);
+    expect(
+      (await orderService.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items,
+    ).toHaveLength(0);
     await bind(userTwoId, '11001', 'two');
-    expect(await orderService.listForUser(userTwoId)).toHaveLength(1);
+    expect(
+      (await orderService.listForUser(userTwoId, { filter: 'ALL', limit: 20 })).items,
+    ).toHaveLength(1);
 
     const address = await addressService.create(
       userTwoId,

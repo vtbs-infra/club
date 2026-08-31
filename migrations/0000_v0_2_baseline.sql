@@ -181,6 +181,7 @@ CREATE TABLE "gift_orders" (
 	"version" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "gift_orders_number_format_check" CHECK ("gift_orders"."order_number" ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{8}$'),
 	CONSTRAINT "gift_orders_status_check" CHECK ("gift_orders"."status" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')),
 	CONSTRAINT "gift_orders_tier_check" CHECK ("gift_orders"."tier" in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')),
 	CONSTRAINT "gift_orders_version_positive" CHECK ("gift_orders"."version" > 0)
@@ -397,6 +398,7 @@ CREATE TABLE "snapshot_attempts" (
 	"failure_code" text,
 	"failure_message" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "snapshot_attempts_number_check" CHECK ("snapshot_attempts"."attempt_number" between 1 and 3),
 	CONSTRAINT "snapshot_attempts_punctuality_check" CHECK ("snapshot_attempts"."punctuality" is null or "snapshot_attempts"."punctuality" in ('ON_TIME', 'LATE')),
 	CONSTRAINT "snapshot_attempts_consistency_check" CHECK ("snapshot_attempts"."consistency_status" in ('PENDING', 'CONSISTENT', 'INCONSISTENT')),
 	CONSTRAINT "snapshot_attempts_initiated_by_check" CHECK ("snapshot_attempts"."initiated_by" in ('SCHEDULER', 'ADMIN'))
@@ -504,7 +506,8 @@ ALTER TABLE "snapshot_runs" ADD CONSTRAINT "snapshot_runs_approved_by_users_id_f
 CREATE UNIQUE INDEX "announcement_reads_announcement_user_version_unique" ON "announcement_reads" USING btree ("announcement_id","user_id","announcement_version");--> statement-breakpoint
 CREATE INDEX "announcement_reads_user_read_idx" ON "announcement_reads" USING btree ("user_id","read_at");--> statement-breakpoint
 CREATE INDEX "announcements_visibility_idx" ON "announcements" USING btree ("scope","status","published_at","expires_at");--> statement-breakpoint
-CREATE INDEX "announcements_creator_created_idx" ON "announcements" USING btree ("creator_id","created_at");--> statement-breakpoint
+CREATE INDEX "announcements_scope_status_created_idx" ON "announcements" USING btree ("scope","status","created_at","id");--> statement-breakpoint
+CREATE INDEX "announcements_creator_created_idx" ON "announcements" USING btree ("creator_id","created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "accounts_provider_account_unique" ON "accounts" USING btree ("provider_id","account_id");--> statement-breakpoint
 CREATE INDEX "accounts_user_id_idx" ON "accounts" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "sessions_token_unique" ON "sessions" USING btree ("token");--> statement-breakpoint
@@ -522,14 +525,16 @@ CREATE INDEX "gift_order_status_history_order_created_idx" ON "gift_order_status
 CREATE UNIQUE INDEX "gift_orders_number_unique" ON "gift_orders" USING btree ("order_number");--> statement-breakpoint
 CREATE UNIQUE INDEX "gift_orders_release_member_unique" ON "gift_orders" USING btree ("gift_release_id","snapshot_member_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "gift_orders_release_uid_unique" ON "gift_orders" USING btree ("gift_release_id","bili_uid");--> statement-breakpoint
-CREATE INDEX "gift_orders_uid_updated_idx" ON "gift_orders" USING btree ("bili_uid","updated_at");--> statement-breakpoint
-CREATE INDEX "gift_orders_user_updated_idx" ON "gift_orders" USING btree ("user_id","updated_at");--> statement-breakpoint
-CREATE INDEX "gift_orders_creator_status_idx" ON "gift_orders" USING btree ("creator_id","status");--> statement-breakpoint
+CREATE INDEX "gift_orders_uid_number_idx" ON "gift_orders" USING btree ("bili_uid","order_number");--> statement-breakpoint
+CREATE INDEX "gift_orders_user_number_idx" ON "gift_orders" USING btree ("user_id","order_number");--> statement-breakpoint
+CREATE INDEX "gift_orders_creator_number_idx" ON "gift_orders" USING btree ("creator_id","order_number");--> statement-breakpoint
+CREATE INDEX "gift_orders_creator_status_number_idx" ON "gift_orders" USING btree ("creator_id","status","order_number");--> statement-breakpoint
 CREATE INDEX "gift_package_items_package_sort_idx" ON "gift_package_items" USING btree ("gift_package_id","sort_order");--> statement-breakpoint
 CREATE UNIQUE INDEX "gift_packages_release_name_unique" ON "gift_packages" USING btree ("gift_release_id","name");--> statement-breakpoint
 CREATE INDEX "gift_packages_release_sort_idx" ON "gift_packages" USING btree ("gift_release_id","sort_order");--> statement-breakpoint
 CREATE UNIQUE INDEX "gift_releases_creator_month_unique" ON "gift_releases" USING btree ("creator_id","eligibility_month");--> statement-breakpoint
 CREATE INDEX "gift_releases_creator_status_idx" ON "gift_releases" USING btree ("creator_id","status");--> statement-breakpoint
+CREATE INDEX "gift_releases_creator_created_idx" ON "gift_releases" USING btree ("creator_id","created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "gift_tier_rules_release_tier_unique" ON "gift_tier_rules" USING btree ("gift_release_id","tier");--> statement-breakpoint
 CREATE UNIQUE INDEX "shipments_number_unique" ON "shipments" USING btree ("shipment_number");--> statement-breakpoint
 CREATE UNIQUE INDEX "shipments_order_unique" ON "shipments" USING btree ("gift_order_id");--> statement-breakpoint
@@ -555,18 +560,21 @@ CREATE UNIQUE INDEX "creators_binding_unique" ON "creators" USING btree ("bindin
 CREATE UNIQUE INDEX "creators_bilibili_uid_unique" ON "creators" USING btree ("bilibili_uid");--> statement-breakpoint
 CREATE UNIQUE INDEX "creators_room_id_unique" ON "creators" USING btree ("room_id");--> statement-breakpoint
 CREATE INDEX "creators_monthly_sync_enabled_idx" ON "creators" USING btree ("monthly_sync_enabled");--> statement-breakpoint
+CREATE INDEX "creators_created_id_idx" ON "creators" USING btree ("created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "verification_rooms_bili_room_id_unique" ON "verification_rooms" USING btree ("bili_room_id");--> statement-breakpoint
 CREATE INDEX "verification_rooms_selection_idx" ON "verification_rooms" USING btree ("enabled","priority");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_attempt_members_attempt_uid_unique" ON "snapshot_attempt_members" USING btree ("snapshot_attempt_id","bili_uid");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_attempts_run_number_unique" ON "snapshot_attempts" USING btree ("snapshot_run_id","attempt_number");--> statement-breakpoint
 CREATE INDEX "snapshot_attempts_run_created_idx" ON "snapshot_attempts" USING btree ("snapshot_run_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_members_run_uid_unique" ON "snapshot_members" USING btree ("snapshot_run_id","bili_uid");--> statement-breakpoint
+CREATE INDEX "snapshot_members_run_position_uid_idx" ON "snapshot_members" USING btree ("snapshot_run_id","source_position","bili_uid");--> statement-breakpoint
 CREATE INDEX "snapshot_members_bili_uid_idx" ON "snapshot_members" USING btree ("bili_uid");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_pages_attempt_kind_page_unique" ON "snapshot_pages" USING btree ("snapshot_attempt_id","capture_kind","page_number");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_pages_object_key_unique" ON "snapshot_pages" USING btree ("object_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_runs_creator_period_unique" ON "snapshot_runs" USING btree ("creator_id","period_start");--> statement-breakpoint
 CREATE INDEX "snapshot_runs_due_idx" ON "snapshot_runs" USING btree ("status","scheduled_cutoff_at");--> statement-breakpoint
 CREATE INDEX "snapshot_runs_creator_period_idx" ON "snapshot_runs" USING btree ("creator_id","period_start");--> statement-breakpoint
+CREATE INDEX "snapshot_runs_period_id_idx" ON "snapshot_runs" USING btree ("period_start","id");--> statement-breakpoint
 
 -- Deployment singleton data.
 INSERT INTO "platform_appearance" ("id", "theme_preset") VALUES ('global', 'moe');--> statement-breakpoint

@@ -6,6 +6,7 @@ import {
   CreatorInputSchema,
   CreatorOverviewSchema,
   CreatorProfileSchema,
+  CreatorRecordPageSchema,
   CreatorRecordSchema,
   CreatorSettingsSchema,
   IdentitySchema,
@@ -70,13 +71,24 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     (request) => options.service.listUsers(request.query.search),
   );
 
-  app.get(
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
     '/api/v1/admin/creators',
     {
       preHandler: requireAdmin,
-      schema: { response: { 200: Type.Array(CreatorRecordSchema) }, tags: ['admin-creators'] },
+      schema: {
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+        }),
+        response: { 200: CreatorRecordPageSchema },
+        tags: ['admin-creators'],
+      },
     },
-    () => options.service.listCreators(),
+    (request) =>
+      options.service.listCreators({
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 30,
+      }),
   );
 
   app.get(

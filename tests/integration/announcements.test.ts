@@ -1,4 +1,4 @@
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
@@ -52,6 +52,7 @@ integration('announcement lifecycle', () => {
   });
 
   it('keeps publication state explicit and read state versioned across the full lifecycle', async () => {
+    const visible = async () => (await service.listVisible(recipientUserId, { limit: 20 })).items;
     const input = {
       body: '第一版内容',
       expiresAt: null,
@@ -74,7 +75,7 @@ integration('announcement lifecycle', () => {
       version: 1,
       withdrawnAt: null,
     });
-    expect(await service.listVisible(recipientUserId)).toEqual([]);
+    expect(await visible()).toEqual([]);
 
     const published = await service.publish(target, draft.id, draft.version, {
       ...context,
@@ -86,14 +87,10 @@ integration('announcement lifecycle', () => {
       version: 2,
       withdrawnAt: null,
     });
-    expect(await service.listVisible(recipientUserId)).toMatchObject([
-      { id: draft.id, read: false, version: 2 },
-    ]);
+    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 2 }]);
 
     await service.markRead(recipientUserId, draft.id);
-    expect(await service.listVisible(recipientUserId)).toMatchObject([
-      { id: draft.id, read: true, version: 2 },
-    ]);
+    expect(await visible()).toMatchObject([{ id: draft.id, read: true, version: 2 }]);
 
     clock.current = new Date('2026-08-01T01:00:00.000Z');
     const updated = await service.saveContent(
@@ -109,14 +106,10 @@ integration('announcement lifecycle', () => {
       version: 3,
       withdrawnAt: null,
     });
-    expect(await service.listVisible(recipientUserId)).toMatchObject([
-      { id: draft.id, read: false, version: 3 },
-    ]);
+    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 3 }]);
 
     await service.markRead(recipientUserId, draft.id);
-    expect(await service.listVisible(recipientUserId)).toMatchObject([
-      { id: draft.id, read: true, version: 3 },
-    ]);
+    expect(await visible()).toMatchObject([{ id: draft.id, read: true, version: 3 }]);
     expect(
       (
         await database.orm
@@ -142,7 +135,7 @@ integration('announcement lifecycle', () => {
       version: 4,
       withdrawnAt: clock.current,
     });
-    expect(await service.listVisible(recipientUserId)).toEqual([]);
+    expect(await visible()).toEqual([]);
     await expect(
       service.deleteDraft(target, draft.id, {
         ...context,
@@ -173,9 +166,10 @@ integration('announcement lifecycle', () => {
       version: 6,
       withdrawnAt: null,
     });
-    expect(await service.listVisible(recipientUserId)).toMatchObject([
-      { body: '撤下后修订的内容', id: draft.id, read: false, version: 6 },
-    ]);
+    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 6 }]);
+    expect(await service.getVisible(recipientUserId, draft.id)).toMatchObject({
+      body: '撤下后修订的内容',
+    });
 
     await expect(
       database.orm
@@ -186,5 +180,37 @@ integration('announcement lifecycle', () => {
     await expect(
       database.orm.delete(announcements).where(eq(announcements.id, draft.id)),
     ).rejects.toMatchObject({ cause: { code: 'P0001' } });
+  });
+
+  it('does not lose announcements when a cursor carries database microseconds', async () => {
+    const target = { scope: 'PLATFORM' as const };
+    const [first, second] = await database.orm
+      .insert(announcements)
+      .values([
+        {
+          body: '游标精度测试一',
+          createdAt: sql`'2030-01-01 00:00:00.123456+00'::timestamptz`,
+          createdByUserId: adminUserId,
+          scope: 'PLATFORM',
+          title: '游标精度测试一',
+        },
+        {
+          body: '游标精度测试二',
+          createdAt: sql`'2030-01-01 00:00:00.123456+00'::timestamptz`,
+          createdByUserId: adminUserId,
+          scope: 'PLATFORM',
+          title: '游标精度测试二',
+        },
+      ])
+      .returning({ id: announcements.id });
+
+    const firstPage = await service.listManaged(target, { limit: 1 });
+    const secondPage = await service.listManaged(target, {
+      cursor: firstPage.nextCursor!,
+      limit: 1,
+    });
+    expect(new Set([firstPage.items[0]!.id, secondPage.items[0]!.id])).toEqual(
+      new Set([first!.id, second!.id]),
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { ArrowRight, Gift, Info, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -8,12 +8,15 @@ import { formatDate, formatMonth } from '../../lib/format';
 import { giftReleasePresentation } from '../../lib/status-presentation';
 
 export function CreatorReleasesPage() {
-  const releases = useQuery({
-    queryFn: getCreatorReleases,
+  const releases = useInfiniteQuery({
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getCreatorReleases({ cursor: pageParam }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
     queryKey: ['creator', 'releases'],
   });
   if (releases.isPending) return <LoadingState label="正在读取礼物发布…" />;
   if (releases.isError) return <ErrorState error={releases.error} />;
+  const items = releases.data.pages.flatMap((page) => page.items);
   return (
     <div className="stack-lg">
       <PageHeader
@@ -36,7 +39,7 @@ export function CreatorReleasesPage() {
           名单仍会按月冻结，但不会产生草稿、提醒或空礼物单。
         </p>
       </div>
-      {releases.data.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           action={
             <Link className="button primary" to="/creator/releases/new">
@@ -50,7 +53,7 @@ export function CreatorReleasesPage() {
         />
       ) : (
         <div className="release-list">
-          {releases.data.map((release) => (
+          {items.map((release) => (
             <Link className="release-row" key={release.id} to={`/creator/releases/${release.id}`}>
               <div className="release-cover">
                 {release.coverObjectKey ? (
@@ -80,6 +83,18 @@ export function CreatorReleasesPage() {
           ))}
         </div>
       )}
+      {releases.hasNextPage ? (
+        <div className="list-actions">
+          <button
+            className="button secondary"
+            disabled={releases.isFetchingNextPage}
+            onClick={() => void releases.fetchNextPage()}
+            type="button"
+          >
+            {releases.isFetchingNextPage ? '正在加载…' : '加载更早的礼物发布'}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

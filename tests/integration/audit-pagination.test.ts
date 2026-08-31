@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
@@ -18,11 +19,10 @@ integration('audit log pagination', () => {
     integrationDatabase = await createIntegrationDatabase('audit_pagination');
     database = integrationDatabase.database;
     service = new AuditQueryService(database);
-    const createdAt = new Date('2026-08-28T10:00:00.000Z');
     await database.orm.insert(auditLogs).values(
       Array.from({ length: 5 }, (_, index) => ({
         action: 'test.action',
-        createdAt,
+        createdAt: sql`'2026-08-28 10:00:00.123456+00'::timestamptz`,
         id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
         targetId: String(index + 1),
         targetType: 'test',

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import { ArrowRight, ClipboardList, Download, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -6,6 +6,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   downloadFulfillmentWorkbook,
   getCreatorOrders,
+  getFulfillmentReleases,
   type GiftOrderStatus,
 } from '../../api/client';
 import {
@@ -38,13 +39,23 @@ export function CreatorOrdersPage() {
   const status = filters.some((filter) => filter.value === requestedStatus)
     ? (requestedStatus ?? undefined)
     : undefined;
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [exportOpen, setExportOpen] = useState(false);
   const [exportReleaseId, setExportReleaseId] = useState('');
   const [exportedCount, setExportedCount] = useState<number | null>(null);
-  const orders = useQuery({
-    queryFn: () => getCreatorOrders(),
-    queryKey: ['creator', 'orders', 'all'],
+  const orders = useInfiniteQuery({
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      getCreatorOrders({ cursor: pageParam, search: search || undefined, status }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    queryKey: ['creator', 'orders', status ?? 'ALL', search],
+  });
+  const fulfillmentReleases = useInfiniteQuery({
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getFulfillmentReleases({ cursor: pageParam }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    queryKey: ['creator', 'orders', 'fulfillment-releases'],
   });
   const exportWorkbook = useMutation({
     mutationFn: (releaseId: string) => downloadFulfillmentWorkbook(releaseId),
@@ -63,38 +74,20 @@ export function CreatorOrdersPage() {
   });
   if (orders.isPending) return <LoadingState label="正在读取礼物单…" />;
   if (orders.isError) return <ErrorState error={orders.error} />;
-  const waitingCounts = new Map<string, number>();
-  const waitingReleases = new Map<string, (typeof orders.data)[number]['release']>();
-  for (const order of orders.data) {
-    if (order.status !== 'SUBMITTED') continue;
-    waitingCounts.set(order.release.id, (waitingCounts.get(order.release.id) ?? 0) + 1);
-    waitingReleases.set(order.release.id, order.release);
-  }
-  const exportableReleases = Array.from(waitingReleases.values()).sort((left, right) =>
-    right.eligibilityMonth.localeCompare(left.eligibilityMonth),
-  );
+  const visible = orders.data.pages.flatMap((page) => page.items);
+  const exportableReleases = fulfillmentReleases.data?.pages.flatMap((page) => page.items) ?? [];
   const selectedRelease =
     exportableReleases.find((release) => release.id === exportReleaseId) ??
     exportableReleases[0] ??
     null;
-  const selectedCount = selectedRelease ? (waitingCounts.get(selectedRelease.id) ?? 0) : 0;
-  const term = search.trim().toLowerCase();
-  const visible = orders.data.filter(
-    (order) =>
-      (!status || order.status === status) &&
-      (!term ||
-        order.orderNumber.toLowerCase().includes(term) ||
-        (order.biliDisplayName ?? '').toLowerCase().includes(term) ||
-        order.biliUid.includes(term) ||
-        order.release.title.toLowerCase().includes(term)),
-  );
+  const selectedCount = selectedRelease?.submittedCount ?? 0;
   return (
     <div className="stack-lg">
       <PageHeader
         actions={
           <button
             className="button secondary"
-            disabled={exportableReleases.length === 0}
+            disabled={fulfillmentReleases.isPending || exportableReleases.length === 0}
             onClick={() => {
               exportWorkbook.reset();
               setExportReleaseId(selectedRelease?.id ?? '');
@@ -115,6 +108,7 @@ export function CreatorOrdersPage() {
         <InlineNotice tone="success">已导出 {exportedCount} 条待发货收货信息。</InlineNotice>
       ) : null}
       {exportWorkbook.isError ? <ErrorNotice error={exportWorkbook.error} /> : null}
+      {fulfillmentReleases.isError ? <ErrorNotice error={fulfillmentReleases.error} /> : null}
       <div className="order-toolbar">
         <div aria-label="按礼物单状态筛选" className="filter-tabs" role="group">
           {filters.map((filter) => (
@@ -131,15 +125,25 @@ export function CreatorOrdersPage() {
             </button>
           ))}
         </div>
-        <label className="search-field">
+        <form
+          className="search-field"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setSearch(searchInput.trim());
+          }}
+        >
           <span className="sr-only">搜索礼物单</span>
           <Search aria-hidden="true" size={17} />
           <input
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索昵称、UID 或礼物"
-            value={search}
+            maxLength={80}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="输入昵称、UID、单号或礼物前缀"
+            value={searchInput}
           />
-        </label>
+          <button className="sr-only" type="submit">
+            搜索
+          </button>
+        </form>
       </div>
       {visible.length === 0 ? (
         <EmptyState
@@ -148,49 +152,63 @@ export function CreatorOrdersPage() {
           title="没有符合条件的礼物单"
         />
       ) : (
-        <div className="orders-table-wrap">
-          <table className="data-table orders-table">
-            <caption className="sr-only">主播礼物单列表</caption>
-            <thead>
-              <tr>
-                <th>用户</th>
-                <th>礼物</th>
-                <th>资格</th>
-                <th>状态</th>
-                <th>最近更新</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((order) => (
-                <tr key={order.id}>
-                  <td>
-                    <strong>{order.biliDisplayName}</strong>
-                    <small>UID {order.biliUid}</small>
-                  </td>
-                  <td>
-                    <strong>{order.release.title}</strong>
-                    <small>{order.orderNumber}</small>
-                  </td>
-                  <td>
-                    <span>{formatMonth(order.release.eligibilityMonth)}</span>
-                    <small>{tierLabel[order.tier]}</small>
-                  </td>
-                  <td>
-                    <StatusBadge {...giftOrderPresentation[order.status]} />
-                  </td>
-                  <td>{formatDate(order.updatedAt, true)}</td>
-                  <td>
-                    <Link className="row-action" to={`/creator/orders/${order.id}`}>
-                      查看
-                      <ArrowRight aria-hidden="true" size={14} />
-                    </Link>
-                  </td>
+        <>
+          <div className="orders-table-wrap">
+            <table className="data-table orders-table">
+              <caption className="sr-only">主播礼物单列表</caption>
+              <thead>
+                <tr>
+                  <th>用户</th>
+                  <th>礼物</th>
+                  <th>资格</th>
+                  <th>状态</th>
+                  <th>最近更新</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {visible.map((order) => (
+                  <tr key={order.id}>
+                    <td>
+                      <strong>{order.biliDisplayName}</strong>
+                      <small>UID {order.biliUid}</small>
+                    </td>
+                    <td>
+                      <strong>{order.release.title}</strong>
+                      <small>{order.orderNumber}</small>
+                    </td>
+                    <td>
+                      <span>{formatMonth(order.release.eligibilityMonth)}</span>
+                      <small>{tierLabel[order.tier]}</small>
+                    </td>
+                    <td>
+                      <StatusBadge {...giftOrderPresentation[order.status]} />
+                    </td>
+                    <td>{formatDate(order.updatedAt, true)}</td>
+                    <td>
+                      <Link className="row-action" to={`/creator/orders/${order.id}`}>
+                        查看
+                        <ArrowRight aria-hidden="true" size={14} />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {orders.hasNextPage ? (
+            <div className="list-actions">
+              <button
+                className="button secondary"
+                disabled={orders.isFetchingNextPage}
+                onClick={() => void orders.fetchNextPage()}
+                type="button"
+              >
+                {orders.isFetchingNextPage ? '正在加载…' : '加载更多礼物单'}
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
       <ConfirmDialog
         busy={exportWorkbook.isPending}
@@ -207,11 +225,22 @@ export function CreatorOrdersPage() {
                 {exportableReleases.map((release) => (
                   <option key={release.id} value={release.id}>
                     {formatMonth(release.eligibilityMonth)} · {release.title} ·{' '}
-                    {waitingCounts.get(release.id)} 条
+                    {release.submittedCount} 条
                   </option>
                 ))}
               </select>
             </label>
+            {fulfillmentReleases.isError ? <ErrorNotice error={fulfillmentReleases.error} /> : null}
+            {fulfillmentReleases.hasNextPage ? (
+              <button
+                className="button ghost small"
+                disabled={fulfillmentReleases.isFetchingNextPage}
+                onClick={() => void fulfillmentReleases.fetchNextPage()}
+                type="button"
+              >
+                {fulfillmentReleases.isFetchingNextPage ? '正在加载…' : '加载更早的待发货发布'}
+              </button>
+            ) : null}
             <p>文件只包含该礼物发布当前处于“待发货”的礼物单，导出不会改变订单状态。</p>
             {selectedRelease && new Date(selectedRelease.claimDeadlineAt).getTime() > now ? (
               <InlineNotice tone="warning">

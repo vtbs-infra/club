@@ -247,13 +247,16 @@ integration('platform verification rooms and Bilibili UID binding', () => {
     });
     expect(stillUnbound.json()).toBeNull();
 
-    await app.inject({
+    const enablePrimary = await app.inject({
       headers: { cookie: adminCookie, origin: TEST_ORIGIN },
       method: 'PATCH',
       payload: { enabled: true },
       url: `/api/v1/admin/verification-rooms/${roomA.id}`,
     });
-    await runtime.bindings.reconcileConnections();
+    expect(enablePrimary.statusCode, enablePrimary.body).toBe(200);
+    await expect
+      .poll(() => source.activeConnectionCount(roomA.biliRoomId), { timeout: 2_000 })
+      .toBe(1);
     await source.emitMessage({
       biliDisplayName: 'Alice on Bilibili',
       biliUid: '123456789',

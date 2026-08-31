@@ -105,6 +105,9 @@ test('clears the credential form when the user signs out', async ({ appUrl, page
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return recipientIdentity({ id: testId(11) });
     if (pathname === '/api/v1/me/bilibili-binding') return null;
+    if (pathname === '/api/v1/me/gifts' || pathname === '/api/v1/me/announcements') {
+      return { items: [], nextCursor: null };
+    }
     if (pathname.startsWith('/api/v1/me/')) return [];
     return undefined;
   });

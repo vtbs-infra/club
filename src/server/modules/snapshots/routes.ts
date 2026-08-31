@@ -3,11 +3,13 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
 import {
-  AdminSnapshotSchema,
+  AdminSnapshotPageSchema,
   CreatorSnapshotDetailSchema,
   SnapshotDetailSchema,
-  SnapshotIntegrityResultSchema,
-  SnapshotRunSchema,
+  SnapshotIntegrityResultPageSchema,
+  SnapshotMemberPageSchema,
+  SnapshotPagePageSchema,
+  SnapshotRunPageSchema,
 } from '../../../shared/contracts/snapshots.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
@@ -21,6 +23,7 @@ interface SnapshotRoutesOptions {
 }
 
 const RunParameters = Type.Object({ snapshotRunId: IdSchema });
+const AttemptParameters = Type.Object({ snapshotAttemptId: IdSchema, snapshotRunId: IdSchema });
 
 function session(request: { readonly authSession: AuthSession | null }): AuthSession {
   if (!request.authSession) throw new Error('Authenticated route is missing its session.');
@@ -43,16 +46,24 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
   const requireCreator = createRequireCreator(options.auth, options.database);
   const requireAdmin = createRequirePlatformAdmin(options.auth);
 
-  app.get(
+  app.get<{ Querystring: { cursor?: string; limit?: number } }>(
     '/api/v1/creator/rosters',
     {
       preHandler: requireCreator,
       schema: {
-        response: { 200: Type.Array(SnapshotRunSchema) },
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+        }),
+        response: { 200: SnapshotRunPageSchema },
         tags: ['creator-rosters'],
       },
     },
-    (request) => options.service.queries.listForCreator(request.creatorProfile!.id),
+    (request) =>
+      options.service.queries.listForCreator(request.creatorProfile!.id, {
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 24,
+      }),
   );
 
   app.get<{ Params: { snapshotRunId: string } }>(
@@ -87,17 +98,26 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     },
   );
 
-  app.get<{ Querystring: { creatorId?: string } }>(
+  app.get<{ Querystring: { creatorId?: string; cursor?: string; limit?: number } }>(
     '/api/v1/admin/rosters',
     {
       preHandler: requireAdmin,
       schema: {
-        querystring: Type.Object({ creatorId: Type.Optional(IdSchema) }),
-        response: { 200: Type.Array(AdminSnapshotSchema) },
+        querystring: Type.Object({
+          creatorId: Type.Optional(IdSchema),
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+        }),
+        response: { 200: AdminSnapshotPageSchema },
         tags: ['admin-rosters'],
       },
     },
-    (request) => options.service.queries.listAll(request.query.creatorId),
+    (request) =>
+      options.service.queries.listAll({
+        creatorId: request.query.creatorId,
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 30,
+      }),
   );
 
   app.get<{ Params: { snapshotRunId: string } }>(
@@ -113,17 +133,80 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     (request) => options.service.queries.getDetail(request.params.snapshotRunId),
   );
 
-  app.get<{ Params: { snapshotRunId: string } }>(
-    '/api/v1/admin/rosters/:snapshotRunId/integrity',
+  app.get<{
+    Params: { snapshotRunId: string };
+    Querystring: { cursor?: string; limit?: number; search?: string };
+  }>(
+    '/api/v1/admin/rosters/:snapshotRunId/members',
     {
       preHandler: requireAdmin,
       schema: {
         params: RunParameters,
-        response: { 200: Type.Array(SnapshotIntegrityResultSchema) },
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+          search: Type.Optional(Type.String({ maxLength: 80 })),
+        }),
+        response: { 200: SnapshotMemberPageSchema },
         tags: ['admin-rosters'],
       },
     },
-    (request) => options.service.queries.checkEvidenceIntegrity(request.params.snapshotRunId),
+    (request) =>
+      options.service.queries.listMembers(request.params.snapshotRunId, {
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 50,
+        search: request.query.search,
+      }),
+  );
+
+  app.get<{
+    Params: { snapshotAttemptId: string; snapshotRunId: string };
+    Querystring: { cursor?: string; limit?: number };
+  }>(
+    '/api/v1/admin/rosters/:snapshotRunId/attempts/:snapshotAttemptId/pages',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: AttemptParameters,
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+        }),
+        response: { 200: SnapshotPagePageSchema },
+        tags: ['admin-rosters'],
+      },
+    },
+    (request) =>
+      options.service.queries.listPages(
+        request.params.snapshotRunId,
+        request.params.snapshotAttemptId,
+        { cursor: request.query.cursor, limit: request.query.limit ?? 50 },
+      ),
+  );
+
+  app.get<{
+    Params: { snapshotAttemptId: string; snapshotRunId: string };
+    Querystring: { cursor?: string; limit?: number };
+  }>(
+    '/api/v1/admin/rosters/:snapshotRunId/attempts/:snapshotAttemptId/integrity',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: AttemptParameters,
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+        }),
+        response: { 200: SnapshotIntegrityResultPageSchema },
+        tags: ['admin-rosters'],
+      },
+    },
+    (request) =>
+      options.service.queries.checkEvidenceIntegrity(
+        request.params.snapshotRunId,
+        request.params.snapshotAttemptId,
+        { cursor: request.query.cursor, limit: request.query.limit ?? 50 },
+      ),
   );
 
   app.post<{ Body: Record<string, never>; Params: { snapshotRunId: string } }>(

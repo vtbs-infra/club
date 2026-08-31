@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
@@ -8,7 +8,9 @@ const SENSITIVE_KEY =
   /authorization|password|token|secret|cookie|address|phone|recipient|tracking|csv|ciphertext|initialization|authentication/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function decodeCursor(value: string): { readonly createdAt: Date; readonly id: string } {
+type AuditCursor = { readonly createdAt: string; readonly id: string };
+
+function decodeCursor(value: string): AuditCursor {
   try {
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
     if (!parsed || typeof parsed !== 'object') throw new Error('Invalid cursor payload.');
@@ -16,21 +18,19 @@ function decodeCursor(value: string): { readonly createdAt: Date; readonly id: s
     if (typeof record.createdAt !== 'string' || typeof record.id !== 'string') {
       throw new Error('Invalid cursor fields.');
     }
-    const createdAt = new Date(record.createdAt);
-    if (Number.isNaN(createdAt.getTime()) || !UUID.test(record.id)) {
+    if (Number.isNaN(new Date(record.createdAt).getTime()) || !UUID.test(record.id)) {
       throw new Error('Invalid cursor values.');
     }
-    return { createdAt, id: record.id };
+    return { createdAt: record.createdAt, id: record.id };
   } catch {
     throw new AppError('AUDIT_CURSOR_INVALID', 'The audit log cursor is invalid.', 400);
   }
 }
 
-function encodeCursor(row: typeof auditLogs.$inferSelect): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: row.createdAt.toISOString(), id: row.id }),
-    'utf8',
-  ).toString('base64url');
+function encodeCursor(row: AuditCursor): string {
+  return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: row.id }), 'utf8').toString(
+    'base64url',
+  );
 }
 
 export function redactAuditValue(value: unknown): unknown {
@@ -78,16 +78,14 @@ export class AuditQueryService {
       .select({
         actorEmail: users.email,
         actorName: users.name,
+        cursorCreatedAt: sql<string>`${auditLogs.createdAt}::text`,
         log: auditLogs,
       })
       .from(auditLogs)
       .leftJoin(users, eq(users.id, auditLogs.actorUserId))
       .where(
         cursor
-          ? or(
-              lt(auditLogs.createdAt, cursor.createdAt),
-              and(eq(auditLogs.createdAt, cursor.createdAt), lt(auditLogs.id, cursor.id)),
-            )
+          ? sql`(${auditLogs.createdAt}, ${auditLogs.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
           : undefined,
       )
       .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
@@ -96,7 +94,12 @@ export class AuditQueryService {
     const items = rows.slice(0, input.limit);
     return {
       items: items.map(response),
-      nextCursor: hasMore ? encodeCursor(items.at(-1)!.log) : null,
+      nextCursor: hasMore
+        ? encodeCursor({
+            createdAt: items.at(-1)!.cursorCreatedAt,
+            id: items.at(-1)!.log.id,
+          })
+        : null,
     };
   }
 }

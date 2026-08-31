@@ -1,30 +1,33 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { getMyGifts, type GiftOrderStatus } from '../api/client';
+import { getMyGifts, type GiftOrderListFilter } from '../api/client';
 import { GiftCard } from '../components/GiftCard';
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '../components/Ui';
 import { useNow } from '../hooks/useNow';
 
-const filters: readonly { readonly label: string; readonly values: readonly GiftOrderStatus[] }[] =
-  [
-    { label: '全部', values: [] },
-    { label: '待领取', values: ['CLAIMABLE'] },
-    { label: '等待发货', values: ['SUBMITTED'] },
-    { label: '已发货', values: ['SHIPPED'] },
-    { label: '已完成', values: ['COMPLETED'] },
-    { label: '已结束', values: ['EXPIRED', 'CANCELLED'] },
-  ];
+const filters: readonly { readonly label: string; readonly value: GiftOrderListFilter }[] = [
+  { label: '全部', value: 'ALL' },
+  { label: '待领取', value: 'CLAIMABLE' },
+  { label: '等待发货', value: 'SUBMITTED' },
+  { label: '已发货', value: 'SHIPPED' },
+  { label: '已完成', value: 'COMPLETED' },
+  { label: '已结束', value: 'ENDED' },
+];
 
 export function GiftsPage() {
   const now = useNow();
-  const gifts = useQuery({ queryFn: () => getMyGifts(), queryKey: ['gifts', 'mine'] });
   const [active, setActive] = useState(0);
+  const filter = filters[active]!.value;
+  const gifts = useInfiniteQuery({
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getMyGifts({ cursor: pageParam, filter }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    queryKey: ['gifts', 'mine', filter],
+  });
   if (gifts.isPending) return <LoadingState label="正在读取礼物单…" />;
   if (gifts.isError) return <ErrorState error={gifts.error} />;
-  const values = filters[active]!.values;
-  const visible =
-    values.length === 0 ? gifts.data : gifts.data.filter((gift) => values.includes(gift.status));
+  const visible = gifts.data.pages.flatMap((page) => page.items);
   return (
     <div className="stack-lg">
       <PageHeader
@@ -48,11 +51,25 @@ export function GiftsPage() {
       {visible.length === 0 ? (
         <EmptyState description="这个状态下暂时没有礼物单。" title="没有匹配的礼物" />
       ) : (
-        <div className="gift-grid">
-          {visible.map((gift) => (
-            <GiftCard key={gift.id} now={now} order={gift} />
-          ))}
-        </div>
+        <>
+          <div className="gift-grid">
+            {visible.map((gift) => (
+              <GiftCard key={gift.id} now={now} order={gift} />
+            ))}
+          </div>
+          {gifts.hasNextPage ? (
+            <div className="list-actions">
+              <button
+                className="button secondary"
+                disabled={gifts.isFetchingNextPage}
+                onClick={() => void gifts.fetchNextPage()}
+                type="button"
+              >
+                {gifts.isFetchingNextPage ? '正在加载…' : '加载更早的礼物单'}
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

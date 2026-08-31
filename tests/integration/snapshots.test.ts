@@ -268,6 +268,7 @@ integration('month-end snapshot capture', () => {
     await service.capture(run.id);
 
     const detail = await service.queries.getDetail(run.id);
+    expect(detail.creator.id).toBe(creatorIds[0]);
     expect(detail.run.status).toBe('FINALIZED');
     expect(detail.attempts[0]).toMatchObject({
       consistencyStatus: 'CONSISTENT',
@@ -275,21 +276,46 @@ integration('month-end snapshot capture', () => {
       normalizedTotal: 35,
       punctuality: 'ON_TIME',
     });
-    expect(detail.pages).toHaveLength(3);
-    expect(detail.pages.map((page) => page.captureKind).sort()).toEqual([
+    const evidence = await service.queries.listPages(run.id, detail.attempts[0]!.id, {
+      limit: 10,
+    });
+    expect(evidence.items).toHaveLength(3);
+    expect(evidence.items.map((page) => page.captureKind).sort()).toEqual([
       'PAGE',
       'PAGE',
       'RECHECK',
     ]);
-    expect(detail.pages.every((page) => page.declaredTotal === 35)).toBe(true);
-    expect((await service.queries.checkEvidenceIntegrity(run.id)).every((page) => page.ok)).toBe(
-      true,
-    );
+    expect(evidence.items.every((page) => page.declaredTotal === 35)).toBe(true);
+    const firstEvidencePage = await service.queries.listPages(run.id, detail.attempts[0]!.id, {
+      limit: 1,
+    });
+    const secondEvidencePage = await service.queries.listPages(run.id, detail.attempts[0]!.id, {
+      cursor: firstEvidencePage.nextCursor!,
+      limit: 1,
+    });
+    expect(firstEvidencePage.items[0]!.id).not.toBe(secondEvidencePage.items[0]!.id);
+    expect(
+      (
+        await service.queries.checkEvidenceIntegrity(run.id, detail.attempts[0]!.id, {
+          limit: 10,
+        })
+      ).items.every((page) => page.ok),
+    ).toBe(true);
     const [total] = await database.orm
       .select({ value: count() })
       .from(snapshotMembers)
       .where(eq(snapshotMembers.snapshotRunId, run.id));
     expect(total?.value).toBe(35);
+    const firstMemberPage = await service.queries.listMembers(run.id, { limit: 20 });
+    const secondMemberPage = await service.queries.listMembers(run.id, {
+      cursor: firstMemberPage.nextCursor!,
+      limit: 20,
+    });
+    expect(firstMemberPage.items).toHaveLength(20);
+    expect(secondMemberPage.items).toHaveLength(15);
+    expect(secondMemberPage.items[0]!.sourcePosition).toBeGreaterThan(
+      firstMemberPage.items.at(-1)!.sourcePosition,
+    );
   });
 
   it('holds a consistent late attempt for approval without creating members', async () => {
@@ -353,7 +379,15 @@ integration('month-end snapshot capture', () => {
     await service.waitForIdle();
     const detail = await service.queries.getDetail(run.id);
     expect(detail.attempts.map((attempt) => attempt.attemptNumber).sort()).toEqual([1, 2]);
-    expect(new Set(detail.pages.map((page) => page.snapshotAttemptId)).size).toBe(2);
+    const attemptPages = await Promise.all(
+      detail.attempts.map((attempt) =>
+        service.queries.listPages(run.id, attempt.id, { limit: 10 }),
+      ),
+    );
+    expect(
+      new Set(attemptPages.flatMap((page) => page.items.map((item) => item.snapshotAttemptId)))
+        .size,
+    ).toBe(2);
     expect(detail.run.status).toBe('FINALIZED');
   });
 
@@ -653,7 +687,7 @@ integration('month-end snapshot capture', () => {
       consistencyStatus: 'INCONSISTENT',
       failureCode: 'PAGE_LIMIT_EXCEEDED',
     });
-    expect((await service.queries.getDetail(run!.id)).pages).toHaveLength(0);
+    expect((await service.queries.getDetail(run!.id)).evidence.pageCount).toBe(0);
   });
 
   it('records a deterministic failure when graceful shutdown cancels a capture', async () => {

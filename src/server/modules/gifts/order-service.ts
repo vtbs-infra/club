@@ -1,5 +1,6 @@
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
+import type { GiftOrderListFilter } from '../../../shared/contracts/gifts.js';
 import type { GiftOrderStatus } from '../../infrastructure/db/schema/index.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import type { AddressService } from '../addresses/address-service.js';
@@ -40,8 +41,15 @@ export class GiftOrderService {
     return this.claims.expireClaimable();
   }
 
-  public listForUser(userId: string, limit?: number) {
-    return this.queries.listForUser(userId, limit);
+  public listForUser(
+    userId: string,
+    input: {
+      readonly cursor?: string | undefined;
+      readonly filter: GiftOrderListFilter;
+      readonly limit: number;
+    },
+  ) {
+    return this.queries.listForUser(userId, input);
   }
 
   public getForUser(userId: string, orderId: string) {
@@ -62,8 +70,27 @@ export class GiftOrderService {
     return this.queries.getForUser(userId, orderId);
   }
 
-  public listForCreator(creatorId: string, status?: GiftOrderStatus) {
-    return this.queries.listForCreator(creatorId, status);
+  public listForCreator(
+    creatorId: string,
+    input: {
+      readonly cursor?: string | undefined;
+      readonly limit: number;
+      readonly search?: string | undefined;
+      readonly status?: GiftOrderStatus | undefined;
+    },
+  ) {
+    return this.queries.listForCreator(creatorId, input);
+  }
+
+  public overviewForCreator(creatorId: string) {
+    return this.queries.overviewForCreator(creatorId);
+  }
+
+  public listFulfillmentReleases(
+    creatorId: string,
+    input: { readonly cursor?: string | undefined; readonly limit: number },
+  ) {
+    return this.queries.listFulfillmentReleases(creatorId, input);
   }
 
   public getForCreator(creatorId: string, orderId: string, context: RequestAuditContext) {

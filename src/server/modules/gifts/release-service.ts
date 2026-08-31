@@ -22,7 +22,33 @@ import { AuditService, type RequestAuditContext } from '../audit/audit-service.j
 import { GiftEligibilityService } from './eligibility-service.js';
 
 const TIERS = ['CAPTAIN', 'ADMIRAL', 'GOVERNOR'] as const;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type ReleaseDraftInput = ReleaseInput;
+
+type GiftReleaseCursor = { readonly createdAt: string; readonly id: string };
+
+function decodeCursor(value: string): GiftReleaseCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    if (!parsed || typeof parsed !== 'object') throw new Error('Invalid cursor payload.');
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.createdAt !== 'string' || typeof record.id !== 'string') {
+      throw new Error('Invalid cursor fields.');
+    }
+    if (Number.isNaN(new Date(record.createdAt).getTime()) || !UUID.test(record.id)) {
+      throw new Error('Invalid cursor values.');
+    }
+    return { createdAt: record.createdAt, id: record.id };
+  } catch {
+    throw new AppError('GIFT_RELEASE_CURSOR_INVALID', 'The gift-release cursor is invalid.', 400);
+  }
+}
+
+function encodeCursor(row: GiftReleaseCursor): string {
+  return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: row.id }), 'utf8').toString(
+    'base64url',
+  );
+}
 
 function validateDraft(input: ReleaseDraftInput) {
   if (!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(input.eligibilityMonth)) {
@@ -149,12 +175,52 @@ export class GiftReleaseService {
     this.eligibility = new GiftEligibilityService(database);
   }
 
-  public list(creatorId: string) {
-    return this.database.orm
-      .select()
+  public async list(
+    creatorId: string,
+    input: { readonly cursor?: string | undefined; readonly limit: number },
+  ) {
+    const cursor = input.cursor ? decodeCursor(input.cursor) : null;
+    const rows = await this.database.orm
+      .select({
+        cursorCreatedAt: sql<string>`${giftReleases.createdAt}::text`,
+        release: {
+          claimDeadlineAt: giftReleases.claimDeadlineAt,
+          claimStartAt: giftReleases.claimStartAt,
+          closedAt: giftReleases.closedAt,
+          coverObjectKey: giftReleases.coverObjectKey,
+          createdAt: giftReleases.createdAt,
+          eligibilityMonth: giftReleases.eligibilityMonth,
+          id: giftReleases.id,
+          publicVisible: giftReleases.publicVisible,
+          publishedAt: giftReleases.publishedAt,
+          status: giftReleases.status,
+          title: giftReleases.title,
+          updatedAt: giftReleases.updatedAt,
+          version: giftReleases.version,
+        },
+      })
       .from(giftReleases)
-      .where(eq(giftReleases.creatorId, creatorId))
-      .orderBy(desc(giftReleases.eligibilityMonth));
+      .where(
+        and(
+          eq(giftReleases.creatorId, creatorId),
+          cursor
+            ? sql`(${giftReleases.createdAt}, ${giftReleases.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(giftReleases.createdAt), desc(giftReleases.id))
+      .limit(input.limit + 1);
+    const hasMore = rows.length > input.limit;
+    const items = rows.slice(0, input.limit);
+    return {
+      items: items.map((row) => row.release),
+      nextCursor: hasMore
+        ? encodeCursor({
+            createdAt: items.at(-1)!.cursorCreatedAt,
+            id: items.at(-1)!.release.id,
+          })
+        : null,
+    };
   }
 
   public async get(creatorId: string, releaseId: string) {

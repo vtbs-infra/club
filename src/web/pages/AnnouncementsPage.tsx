@@ -1,9 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, ChevronDown } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
-import { getAnnouncements, markAnnouncementRead, type Announcement } from '../api/client';
+import {
+  getAnnouncement,
+  getAnnouncements,
+  markAnnouncementRead,
+  type AnnouncementSummary,
+} from '../api/client';
 import {
   EmptyState,
   ErrorNotice,
@@ -20,9 +25,16 @@ export function AnnouncementsPage() {
   const [parameters, setParameters] = useSearchParams();
   const openId = parameters.get('open');
   const handledOpenId = useRef<string | null>(null);
-  const announcements = useQuery({
-    queryFn: () => getAnnouncements(),
+  const announcements = useInfiniteQuery({
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => getAnnouncements({ cursor: pageParam }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
     queryKey: ['me', 'announcements'],
+  });
+  const detail = useQuery({
+    enabled: Boolean(openId),
+    queryFn: () => getAnnouncement(openId!),
+    queryKey: ['me', 'announcements', 'detail', openId],
   });
   const {
     error: markReadError,
@@ -39,7 +51,9 @@ export function AnnouncementsPage() {
       return;
     }
     if (!announcements.data || handledOpenId.current === openId) return;
-    const announcement = announcements.data.find((item) => item.id === openId);
+    const announcement = announcements.data.pages
+      .flatMap((page) => page.items)
+      .find((item) => item.id === openId);
     if (!announcement) return;
 
     handledOpenId.current = openId;
@@ -49,7 +63,8 @@ export function AnnouncementsPage() {
 
   if (announcements.isPending) return <LoadingState label="正在读取公告…" />;
   if (announcements.isError) return <ErrorState error={announcements.error} />;
-  const open = (announcement: Announcement) => {
+  const items = announcements.data.pages.flatMap((page) => page.items);
+  const open = (announcement: AnnouncementSummary) => {
     const nextOpenId = openId === announcement.id ? null : announcement.id;
     handledOpenId.current = nextOpenId;
     setParameters(
@@ -71,11 +86,11 @@ export function AnnouncementsPage() {
         title="公告"
       />
       {markReadFailed ? <ErrorNotice error={markReadError} /> : null}
-      {announcements.data.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState description="有新消息时会显示在这里。" icon={Bell} title="暂无公告" />
       ) : (
         <div className="announcement-list">
-          {announcements.data.map((announcement) => {
+          {items.map((announcement) => {
             const expanded = openId === announcement.id;
             const bodyId = `announcement-${announcement.id}-body`;
             return (
@@ -107,9 +122,15 @@ export function AnnouncementsPage() {
                 </button>
                 {expanded ? (
                   <div className="announcement-body" id={bodyId}>
-                    {announcement.body.split('\n').map((paragraph, index) => (
-                      <p key={index}>{paragraph || '\u00a0'}</p>
-                    ))}
+                    {detail.isPending ? (
+                      <LoadingState label="正在读取公告正文…" />
+                    ) : detail.isError ? (
+                      <ErrorNotice error={detail.error} />
+                    ) : (
+                      detail.data.body
+                        .split('\n')
+                        .map((paragraph, index) => <p key={index}>{paragraph || '\u00a0'}</p>)
+                    )}
                   </div>
                 ) : null}
               </article>
@@ -117,6 +138,18 @@ export function AnnouncementsPage() {
           })}
         </div>
       )}
+      {announcements.hasNextPage ? (
+        <div className="list-actions">
+          <button
+            className="button secondary"
+            disabled={announcements.isFetchingNextPage}
+            onClick={() => void announcements.fetchNextPage()}
+            type="button"
+          >
+            {announcements.isFetchingNextPage ? '正在加载…' : '加载更早的公告'}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

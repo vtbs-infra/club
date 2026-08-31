@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, or } from 'drizzle-orm';
+import { and, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
@@ -31,6 +31,37 @@ export interface UpdateCreatorSettingsInput extends RequestAuditContext {
 
 export interface RefreshCreatorProfileInput extends RequestAuditContext {
   readonly creatorId: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type CreatorCursor = { readonly createdAt: string; readonly id: string };
+
+function decodeCursor(value: string): CreatorCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    if (!parsed || typeof parsed !== 'object') throw new Error('Invalid cursor payload.');
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.createdAt !== 'string' || typeof record.id !== 'string') {
+      throw new Error('Invalid cursor fields.');
+    }
+    if (Number.isNaN(new Date(record.createdAt).getTime()) || !UUID.test(record.id)) {
+      throw new Error('Invalid cursor values.');
+    }
+    return { createdAt: record.createdAt, id: record.id };
+  } catch {
+    throw new AppError('CREATOR_CURSOR_INVALID', 'The creator cursor is invalid.', 400);
+  }
+}
+
+function encodeCursor(row: CreatorCursor): string {
+  return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: row.id }), 'utf8').toString(
+    'base64url',
+  );
+}
+
+function escapedPrefix(value: string): string {
+  return `${value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
 }
 
 function uniqueViolation(error: unknown): boolean {
@@ -161,6 +192,8 @@ export class CreatorService {
 
   public async listUsers(search = '') {
     const normalized = search.trim();
+    if (!normalized) return [];
+    const prefix = escapedPrefix(normalized);
     return this.database.orm
       .select({
         bilibiliBinding: {
@@ -179,37 +212,59 @@ export class CreatorService {
         and(eq(bilibiliBindings.userId, users.id), isNull(bilibiliBindings.unboundAt)),
       )
       .where(
-        normalized
-          ? or(
-              ilike(users.email, `%${normalized}%`),
-              ilike(users.name, `%${normalized}%`),
-              ilike(bilibiliBindings.biliUid, `%${normalized}%`),
-              ilike(bilibiliBindings.biliDisplayName, `%${normalized}%`),
-            )
-          : undefined,
+        or(
+          ilike(users.email, prefix),
+          ilike(users.name, prefix),
+          ilike(bilibiliBindings.biliUid, prefix),
+          ilike(bilibiliBindings.biliDisplayName, prefix),
+        ),
       )
-      .orderBy(asc(users.name))
-      .limit(100);
+      .orderBy(users.name, users.id)
+      .limit(20);
   }
 
-  public listCreators() {
-    return this.database.orm
+  public async listCreators(input: {
+    readonly cursor?: string | undefined;
+    readonly limit: number;
+  }) {
+    const cursor = input.cursor ? decodeCursor(input.cursor) : null;
+    const rows = await this.database.orm
       .select({
-        bilibiliUid: creators.bilibiliUid,
-        createdAt: creators.createdAt,
-        displayName: creators.displayName,
-        email: users.email,
-        id: creators.id,
-        monthlySyncEnabled: creators.monthlySyncEnabled,
-        profileSyncedAt: creators.profileSyncedAt,
-        roomId: creators.roomId,
-        timezone: creators.timezone,
-        userId: creators.userId,
-        userName: users.name,
+        creator: {
+          bilibiliUid: creators.bilibiliUid,
+          createdAt: creators.createdAt,
+          displayName: creators.displayName,
+          email: users.email,
+          id: creators.id,
+          monthlySyncEnabled: creators.monthlySyncEnabled,
+          profileSyncedAt: creators.profileSyncedAt,
+          roomId: creators.roomId,
+          timezone: creators.timezone,
+          userId: creators.userId,
+          userName: users.name,
+        },
+        cursorCreatedAt: sql<string>`${creators.createdAt}::text`,
       })
       .from(creators)
       .innerJoin(users, eq(users.id, creators.userId))
-      .orderBy(asc(creators.displayName));
+      .where(
+        cursor
+          ? sql`(${creators.createdAt}, ${creators.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+          : undefined,
+      )
+      .orderBy(desc(creators.createdAt), desc(creators.id))
+      .limit(input.limit + 1);
+    const hasMore = rows.length > input.limit;
+    const items = rows.slice(0, input.limit);
+    return {
+      items: items.map((row) => row.creator),
+      nextCursor: hasMore
+        ? encodeCursor({
+            createdAt: items.at(-1)!.cursorCreatedAt,
+            id: items.at(-1)!.creator.id,
+          })
+        : null,
+    };
   }
 
   public async register(input: RegisterCreatorInput) {
@@ -499,25 +554,37 @@ export class CreatorService {
   }
 
   public async summary() {
-    const [all] = await this.database.orm.select({ value: count() }).from(creators);
-    const [monthlySync] = await this.database.orm
-      .select({ value: count() })
-      .from(creators)
-      .where(eq(creators.monthlySyncEnabled, true));
-    const recent = await this.database.orm
-      .select({
-        displayName: creators.displayName,
-        id: creators.id,
-        monthlySyncEnabled: creators.monthlySyncEnabled,
-        updatedAt: creators.updatedAt,
-      })
-      .from(creators)
-      .orderBy(desc(creators.updatedAt))
-      .limit(5);
+    const [[all], [monthlySync], [rosterAttention], recent] = await Promise.all([
+      this.database.orm.select({ value: count() }).from(creators),
+      this.database.orm
+        .select({ value: count() })
+        .from(creators)
+        .where(eq(creators.monthlySyncEnabled, true)),
+      this.database.orm
+        .select({
+          failed: sql<number>`count(*) filter (where ${snapshotRuns.status} = 'FAILED')::int`,
+          pendingApproval: sql<number>`count(*) filter (where ${snapshotRuns.status} = 'PENDING_APPROVAL')::int`,
+        })
+        .from(snapshotRuns),
+      this.database.orm
+        .select({
+          displayName: creators.displayName,
+          id: creators.id,
+          monthlySyncEnabled: creators.monthlySyncEnabled,
+          updatedAt: creators.updatedAt,
+        })
+        .from(creators)
+        .orderBy(desc(creators.updatedAt))
+        .limit(5),
+    ]);
     return {
       creators: all?.value ?? 0,
       monthlySyncCreators: monthlySync?.value ?? 0,
       recent,
+      rosterAttention: {
+        failed: Number(rosterAttention?.failed ?? 0),
+        pendingApproval: Number(rosterAttention?.pendingApproval ?? 0),
+      },
     };
   }
 }

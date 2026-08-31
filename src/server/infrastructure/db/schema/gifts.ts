@@ -51,6 +51,7 @@ export const giftReleases = pgTable(
   (table) => [
     uniqueIndex('gift_releases_creator_month_unique').on(table.creatorId, table.eligibilityMonth),
     index('gift_releases_creator_status_idx').on(table.creatorId, table.status),
+    index('gift_releases_creator_created_idx').on(table.creatorId, table.createdAt, table.id),
     check('gift_releases_status_check', sql`${table.status} in ('DRAFT', 'PUBLISHED', 'CLOSED')`),
     check(
       'gift_releases_fulfillment_mode_check',
@@ -156,9 +157,18 @@ export const giftOrders = pgTable(
       table.snapshotMemberId,
     ),
     uniqueIndex('gift_orders_release_uid_unique').on(table.giftReleaseId, table.biliUid),
-    index('gift_orders_uid_updated_idx').on(table.biliUid, table.updatedAt),
-    index('gift_orders_user_updated_idx').on(table.userId, table.updatedAt),
-    index('gift_orders_creator_status_idx').on(table.creatorId, table.status),
+    index('gift_orders_uid_number_idx').on(table.biliUid, table.orderNumber),
+    index('gift_orders_user_number_idx').on(table.userId, table.orderNumber),
+    index('gift_orders_creator_number_idx').on(table.creatorId, table.orderNumber),
+    index('gift_orders_creator_status_number_idx').on(
+      table.creatorId,
+      table.status,
+      table.orderNumber,
+    ),
+    check(
+      'gift_orders_number_format_check',
+      sql`${table.orderNumber} ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{8}$'`,
+    ),
     check(
       'gift_orders_status_check',
       sql`${table.status} in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,

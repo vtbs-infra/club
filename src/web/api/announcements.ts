@@ -1,10 +1,35 @@
-import type { Announcement, AnnouncementContent } from '../../shared/contracts/announcements';
+import type {
+  Announcement,
+  AnnouncementContent,
+  AnnouncementSummary,
+  AnnouncementSummaryPage,
+} from '../../shared/contracts/announcements';
 import { apiRequest } from './http';
 
-export type { Announcement, AnnouncementContent };
+export type { Announcement, AnnouncementContent, AnnouncementSummary, AnnouncementSummaryPage };
 
-export function getAnnouncements(limit?: number): Promise<readonly Announcement[]> {
-  return apiRequest(`/api/v1/me/announcements${limit ? `?limit=${limit}` : ''}`);
+function pageQuery(input: {
+  readonly cursor?: string | undefined;
+  readonly limit?: number | undefined;
+}) {
+  const parameters = new URLSearchParams();
+  if (input.cursor) parameters.set('cursor', input.cursor);
+  if (input.limit) parameters.set('limit', String(input.limit));
+  const query = parameters.toString();
+  return query ? `?${query}` : '';
+}
+
+export function getAnnouncements(
+  input: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+  } = {},
+): Promise<AnnouncementSummaryPage> {
+  return apiRequest(`/api/v1/me/announcements${pageQuery(input)}`);
+}
+
+export function getAnnouncement(announcementId: string): Promise<Announcement> {
+  return apiRequest(`/api/v1/me/announcements/${announcementId}`);
 }
 
 export function markAnnouncementRead(announcementId: string): Promise<void> {
@@ -16,8 +41,16 @@ export function markAnnouncementRead(announcementId: string): Promise<void> {
 
 export function getManagedAnnouncements(
   area: 'admin' | 'creator',
-): Promise<readonly Announcement[]> {
-  return apiRequest(`/api/v1/${area}/announcements`);
+  input: { readonly cursor?: string | undefined; readonly limit?: number | undefined } = {},
+): Promise<AnnouncementSummaryPage> {
+  return apiRequest(`/api/v1/${area}/announcements${pageQuery(input)}`);
+}
+
+export function getManagedAnnouncement(
+  area: 'admin' | 'creator',
+  announcementId: string,
+): Promise<Announcement> {
+  return apiRequest(`/api/v1/${area}/announcements/${announcementId}`);
 }
 
 export function createManagedAnnouncement(
