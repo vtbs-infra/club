@@ -3,6 +3,7 @@ import { platformAppearance } from './appearance.js';
 import { announcementReads, announcements } from './announcements.js';
 import {
   addresses,
+  giftCoverObjects,
   giftOrderAddresses,
   giftOrderItems,
   giftOrderOptionValues,
@@ -50,6 +51,7 @@ export const schema = {
   bindingChallenges,
   bindingConflicts,
   creators,
+  giftCoverObjects,
   giftOrderAddresses,
   giftOrderItems,
   giftOrderOptionValues,

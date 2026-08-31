@@ -14,6 +14,7 @@ import type { AppAuth } from '../auth/auth.js';
 import { createRequirePlatformAdmin } from '../auth/guards.js';
 import type { BindingRuntime } from '../binding/binding-runtime.js';
 import type { FulfillmentRuntime } from '../fulfillment/fulfillment-runtime.js';
+import type { GiftMediaRuntime } from '../gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 import { SystemStatusService } from './system-status-service.js';
 
@@ -24,6 +25,7 @@ interface SystemStatusOptions {
   readonly clock: Clock;
   readonly database: DatabaseService;
   readonly fulfillmentRuntime: FulfillmentRuntime;
+  readonly giftMediaRuntime: GiftMediaRuntime;
   readonly snapshotRuntime: SnapshotRuntime;
   readonly storage: StorageDriver;
   readonly version: string;
@@ -66,6 +68,7 @@ const systemStatusRoutes: FastifyPluginCallback<SystemStatusOptions> = (app, opt
         options.bindingRuntime.getStatus(),
         options.snapshotRuntime.getStatus(),
         options.fulfillmentRuntime.getStatus(),
+        options.giftMediaRuntime.getStatus(),
       ];
       const runtimes =
         options.backgroundRequired &&

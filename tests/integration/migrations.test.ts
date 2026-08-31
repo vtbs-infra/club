@@ -89,6 +89,7 @@ integration('database migration baseline', () => {
         'snapshot_runs',
         'snapshot_pages',
         'gift_releases',
+        'gift_cover_objects',
         'gift_orders',
         'gift_order_addresses',
         'shipments',
@@ -103,6 +104,7 @@ integration('database migration baseline', () => {
       expect(await columnExists(database, 'creators', 'active')).toBe(false);
       expect(await columnExists(database, 'creators', 'archived_at')).toBe(false);
       expect(await columnExists(database, 'gift_orders', 'processing_at')).toBe(false);
+      expect(await columnExists(database, 'gift_releases', 'cover_object_key')).toBe(false);
       expect(await columnExists(database, 'shipments', 'progress')).toBe(true);
       expect(await columnExists(database, 'shipments', 'status')).toBe(false);
       expect(await columnExists(database, 'announcement_reads', 'announcement_version')).toBe(true);
@@ -121,6 +123,7 @@ integration('database migration baseline', () => {
         'gift_order_option_values_append_only',
         'gift_order_status_history_append_only',
         'gift_orders_lifecycle',
+        'gift_cover_objects_lifecycle',
         'gift_package_items_published_immutability',
         'gift_packages_published_immutability',
         'gift_releases_lifecycle',

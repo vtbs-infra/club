@@ -41,6 +41,7 @@ const errorMessages: Readonly<Record<string, string>> = {
   GIFT_COVER_INVALID: '封面文件不是受支持的图片，或图片内容已损坏。',
   GIFT_COVER_NOT_FOUND: '这张礼物封面已不存在。',
   GIFT_COVER_REQUIRED: '请先选择一张图片作为礼物封面。',
+  GIFT_COVER_STAGE_EXPIRED: '封面上传已失效，请重新选择并上传。',
   GIFT_ORDER_CANCEL_REASON_INVALID: '取消原因需填写 3 至 500 个字符。',
   GIFT_ORDER_CLAIM_WINDOW_CLOSED: '当前不在这份礼物的领取时间内。',
   GIFT_ORDER_DECRYPTION_FAILED: '礼物单中的收货信息暂时无法读取，请联系平台管理员。',

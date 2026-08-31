@@ -12,6 +12,7 @@ export interface StoredFile {
 export interface StorageDriver {
   put(input: PutFileInput): Promise<StoredFile>;
   open(key: string): Promise<ReadableStream<Uint8Array>>;
+  /** Deletion is idempotent: a missing object must be treated as success. */
   delete(key: string): Promise<void>;
   checkHealth(): Promise<void>;
   cleanupStaleTemporaryObjects(olderThan: Date): Promise<number>;

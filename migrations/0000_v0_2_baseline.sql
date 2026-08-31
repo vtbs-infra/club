@@ -215,7 +215,6 @@ CREATE TABLE "gift_releases" (
 	"eligibility_month" date NOT NULL,
 	"title" text NOT NULL,
 	"description" text DEFAULT '' NOT NULL,
-	"cover_object_key" text,
 	"public_visible" boolean DEFAULT false NOT NULL,
 	"claim_start_at" timestamp with time zone NOT NULL,
 	"claim_deadline_at" timestamp with time zone NOT NULL,
@@ -232,6 +231,20 @@ CREATE TABLE "gift_releases" (
 	CONSTRAINT "gift_releases_fulfillment_mode_check" CHECK ("gift_releases"."fulfillment_mode" in ('HIGHEST_ONLY', 'CUMULATIVE')),
 	CONSTRAINT "gift_releases_claim_window_check" CHECK ("gift_releases"."claim_deadline_at" > "gift_releases"."claim_start_at"),
 	CONSTRAINT "gift_releases_version_positive" CHECK ("gift_releases"."version" > 0)
+);
+--> statement-breakpoint
+CREATE TABLE "gift_cover_objects" (
+	"object_key" text PRIMARY KEY NOT NULL,
+	"gift_release_id" uuid,
+	"state" text DEFAULT 'STAGED' NOT NULL,
+	"byte_length" integer NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "gift_cover_objects_state_link_check" CHECK ((
+        ("gift_cover_objects"."state" = 'ACTIVE' and "gift_cover_objects"."gift_release_id" is not null)
+        or ("gift_cover_objects"."state" in ('STAGED', 'DELETE_PENDING') and "gift_cover_objects"."gift_release_id" is null)
+      )),
+	CONSTRAINT "gift_cover_objects_byte_length_positive" CHECK ("gift_cover_objects"."byte_length" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "gift_tier_rules" (
@@ -479,6 +492,7 @@ ALTER TABLE "gift_package_items" ADD CONSTRAINT "gift_package_items_gift_package
 ALTER TABLE "gift_packages" ADD CONSTRAINT "gift_packages_gift_release_id_gift_releases_id_fk" FOREIGN KEY ("gift_release_id") REFERENCES "public"."gift_releases"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gift_releases" ADD CONSTRAINT "gift_releases_creator_id_creators_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."creators"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gift_releases" ADD CONSTRAINT "gift_releases_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "gift_cover_objects" ADD CONSTRAINT "gift_cover_objects_gift_release_id_gift_releases_id_fk" FOREIGN KEY ("gift_release_id") REFERENCES "public"."gift_releases"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gift_tier_rules" ADD CONSTRAINT "gift_tier_rules_gift_release_id_gift_releases_id_fk" FOREIGN KEY ("gift_release_id") REFERENCES "public"."gift_releases"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gift_tier_rules" ADD CONSTRAINT "gift_tier_rules_gift_package_id_gift_packages_id_fk" FOREIGN KEY ("gift_package_id") REFERENCES "public"."gift_packages"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shipments" ADD CONSTRAINT "shipments_gift_order_id_gift_orders_id_fk" FOREIGN KEY ("gift_order_id") REFERENCES "public"."gift_orders"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -535,6 +549,8 @@ CREATE INDEX "gift_packages_release_sort_idx" ON "gift_packages" USING btree ("g
 CREATE UNIQUE INDEX "gift_releases_creator_month_unique" ON "gift_releases" USING btree ("creator_id","eligibility_month");--> statement-breakpoint
 CREATE INDEX "gift_releases_creator_status_idx" ON "gift_releases" USING btree ("creator_id","status");--> statement-breakpoint
 CREATE INDEX "gift_releases_creator_created_idx" ON "gift_releases" USING btree ("creator_id","created_at","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "gift_cover_objects_release_unique" ON "gift_cover_objects" USING btree ("gift_release_id");--> statement-breakpoint
+CREATE INDEX "gift_cover_objects_cleanup_idx" ON "gift_cover_objects" USING btree ("state","updated_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "gift_tier_rules_release_tier_unique" ON "gift_tier_rules" USING btree ("gift_release_id","tier");--> statement-breakpoint
 CREATE UNIQUE INDEX "shipments_number_unique" ON "shipments" USING btree ("shipment_number");--> statement-breakpoint
 CREATE UNIQUE INDEX "shipments_order_unique" ON "shipments" USING btree ("gift_order_id");--> statement-breakpoint
@@ -716,7 +732,6 @@ BEGIN
 			OR NEW.eligibility_month IS DISTINCT FROM OLD.eligibility_month
 			OR NEW.title IS DISTINCT FROM OLD.title
 			OR NEW.description IS DISTINCT FROM OLD.description
-			OR NEW.cover_object_key IS DISTINCT FROM OLD.cover_object_key
 			OR NEW.public_visible IS DISTINCT FROM OLD.public_visible
 			OR NEW.claim_start_at IS DISTINCT FROM OLD.claim_start_at
 			OR NEW.claim_deadline_at IS DISTINCT FROM OLD.claim_deadline_at
@@ -736,6 +751,55 @@ $$ LANGUAGE plpgsql;--> statement-breakpoint
 CREATE TRIGGER gift_releases_lifecycle
 	BEFORE UPDATE OR DELETE ON "gift_releases"
 	FOR EACH ROW EXECUTE FUNCTION enforce_gift_release_lifecycle();--> statement-breakpoint
+
+CREATE FUNCTION enforce_gift_cover_object_lifecycle() RETURNS trigger AS $$
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		IF NEW.state <> 'STAGED' OR NEW.gift_release_id IS NOT NULL THEN
+			RAISE EXCEPTION 'gift cover objects must be inserted as unlinked staged objects';
+		END IF;
+		RETURN NEW;
+	END IF;
+	IF TG_OP = 'DELETE' THEN
+		IF OLD.state <> 'DELETE_PENDING' OR OLD.gift_release_id IS NOT NULL THEN
+			RAISE EXCEPTION 'only unlinked pending gift cover objects can be deleted';
+		END IF;
+		RETURN OLD;
+	END IF;
+	IF NEW.object_key IS DISTINCT FROM OLD.object_key
+		OR NEW.byte_length IS DISTINCT FROM OLD.byte_length
+		OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+		RAISE EXCEPTION 'gift cover object identity is immutable';
+	END IF;
+	IF OLD.state = 'STAGED' THEN
+		IF NEW.state = 'ACTIVE' THEN
+			IF NEW.gift_release_id IS NULL OR NOT EXISTS (
+				SELECT 1 FROM gift_releases
+				WHERE id = NEW.gift_release_id AND status = 'DRAFT'
+			) THEN
+				RAISE EXCEPTION 'gift covers can only be attached to draft releases';
+			END IF;
+		ELSIF NEW.state <> 'DELETE_PENDING' OR NEW.gift_release_id IS NOT NULL THEN
+			RAISE EXCEPTION 'invalid staged gift cover transition';
+		END IF;
+	ELSIF OLD.state = 'ACTIVE' THEN
+		IF NEW.state <> 'DELETE_PENDING'
+			OR NEW.gift_release_id IS NOT NULL
+			OR NOT EXISTS (
+				SELECT 1 FROM gift_releases
+				WHERE id = OLD.gift_release_id AND status = 'DRAFT'
+			) THEN
+			RAISE EXCEPTION 'active gift covers can only be detached from draft releases';
+		END IF;
+	ELSE
+		RAISE EXCEPTION 'pending gift cover objects are immutable';
+	END IF;
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;--> statement-breakpoint
+CREATE TRIGGER gift_cover_objects_lifecycle
+	BEFORE INSERT OR UPDATE OR DELETE ON "gift_cover_objects"
+	FOR EACH ROW EXECUTE FUNCTION enforce_gift_cover_object_lifecycle();--> statement-breakpoint
 
 CREATE FUNCTION prevent_published_gift_package_mutation() RETURNS trigger AS $$
 BEGIN

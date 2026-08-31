@@ -1,6 +1,7 @@
 import type { AppDatabase, DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import type { BindingRuntime } from '../../src/server/modules/binding/binding-runtime.js';
 import type { FulfillmentRuntime } from '../../src/server/modules/fulfillment/fulfillment-runtime.js';
+import type { GiftMediaRuntime } from '../../src/server/modules/gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../../src/server/modules/snapshots/snapshot-runtime.js';
 
 export function fakeDatabase(
@@ -55,6 +56,19 @@ export function fulfillmentRuntimeStub(
     tick: () => Promise.resolve(),
     ...overrides,
   } as unknown as FulfillmentRuntime;
+}
+
+export function giftMediaRuntimeStub(
+  overrides: Partial<Pick<GiftMediaRuntime, 'close' | 'getStatus' | 'start'>> = {},
+): GiftMediaRuntime {
+  return {
+    close: () => Promise.resolve(),
+    getStatus: () => runtimeStatus('STOPPED'),
+    service: {},
+    start: () => Promise.resolve(),
+    tick: () => Promise.resolve(),
+    ...overrides,
+  } as unknown as GiftMediaRuntime;
 }
 
 export function snapshotRuntimeStub(

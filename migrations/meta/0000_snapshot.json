@@ -1,5 +1,5 @@
 {
-  "id": "3aa17c5d-da4e-442e-bdab-7f0df26f9ec1",
+  "id": "30f44cd4-4414-474a-81b1-362c0cad7022",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -989,6 +989,114 @@
         "addresses_key_version_positive": {
           "name": "addresses_key_version_positive",
           "value": "\"addresses\".\"key_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.gift_cover_objects": {
+      "name": "gift_cover_objects",
+      "schema": "",
+      "columns": {
+        "object_key": {
+          "name": "object_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "gift_release_id": {
+          "name": "gift_release_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'STAGED'"
+        },
+        "byte_length": {
+          "name": "byte_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "gift_cover_objects_release_unique": {
+          "name": "gift_cover_objects_release_unique",
+          "columns": [
+            {
+              "expression": "gift_release_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "gift_cover_objects_cleanup_idx": {
+          "name": "gift_cover_objects_cleanup_idx",
+          "columns": [
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "gift_cover_objects_gift_release_id_gift_releases_id_fk": {
+          "name": "gift_cover_objects_gift_release_id_gift_releases_id_fk",
+          "tableFrom": "gift_cover_objects",
+          "tableTo": "gift_releases",
+          "columnsFrom": ["gift_release_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "gift_cover_objects_state_link_check": {
+          "name": "gift_cover_objects_state_link_check",
+          "value": "(\n        (\"gift_cover_objects\".\"state\" = 'ACTIVE' and \"gift_cover_objects\".\"gift_release_id\" is not null)\n        or (\"gift_cover_objects\".\"state\" in ('STAGED', 'DELETE_PENDING') and \"gift_cover_objects\".\"gift_release_id\" is null)\n      )"
+        },
+        "gift_cover_objects_byte_length_positive": {
+          "name": "gift_cover_objects_byte_length_positive",
+          "value": "\"gift_cover_objects\".\"byte_length\" > 0"
         }
       },
       "isRLSEnabled": false
@@ -2020,12 +2128,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "''"
-        },
-        "cover_object_key": {
-          "name": "cover_object_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "public_visible": {
           "name": "public_visible",

@@ -3,7 +3,12 @@ import { and, asc, desc, eq, gt, isNull, lte, or } from 'drizzle-orm';
 import type { PortalAnnouncement, PortalHome } from '../../../shared/contracts/portal.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { announcements, creators, giftReleases } from '../../infrastructure/db/schema/index.js';
+import {
+  announcements,
+  creators,
+  giftCoverObjects,
+  giftReleases,
+} from '../../infrastructure/db/schema/index.js';
 
 function summarize(value: string, maximumCharacters: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
@@ -52,7 +57,7 @@ export class PortalService {
         .select({
           claimDeadlineAt: giftReleases.claimDeadlineAt,
           claimStartAt: giftReleases.claimStartAt,
-          coverObjectKey: giftReleases.coverObjectKey,
+          coverObjectKey: giftCoverObjects.objectKey,
           creatorName: creators.displayName,
           description: giftReleases.description,
           eligibilityMonth: giftReleases.eligibilityMonth,
@@ -61,6 +66,13 @@ export class PortalService {
         })
         .from(giftReleases)
         .innerJoin(creators, eq(creators.id, giftReleases.creatorId))
+        .leftJoin(
+          giftCoverObjects,
+          and(
+            eq(giftCoverObjects.giftReleaseId, giftReleases.id),
+            eq(giftCoverObjects.state, 'ACTIVE'),
+          ),
+        )
         .where(
           and(
             eq(giftReleases.status, 'PUBLISHED'),

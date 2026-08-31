@@ -3,13 +3,12 @@ import { Gift, Upload } from 'lucide-react';
 import { ErrorNotice, InlineNotice } from '../Ui';
 
 interface CoverSectionProps {
-  readonly coverObjectKey: string | null | undefined;
+  readonly coverImageUrl: string | null | undefined;
   readonly coverPreviewUrl: string | null;
   readonly editable: boolean;
   readonly isNew: boolean;
   readonly onFileChange: (file: File | null) => void;
   readonly onUpload: () => void;
-  readonly releaseId: string;
   readonly updatedAt: string | Date | undefined;
   readonly uploadError: unknown;
   readonly uploadPending: boolean;
@@ -17,13 +16,12 @@ interface CoverSectionProps {
 }
 
 export function CoverSection({
-  coverObjectKey,
+  coverImageUrl,
   coverPreviewUrl,
   editable,
   isNew,
   onFileChange,
   onUpload,
-  releaseId,
   updatedAt,
   uploadBlocked,
   uploadError,
@@ -42,10 +40,10 @@ export function CoverSection({
         <div className="cover-preview">
           {coverPreviewUrl ? (
             <img alt="待上传封面预览" src={coverPreviewUrl} />
-          ) : coverObjectKey ? (
+          ) : coverImageUrl ? (
             <img
               alt="当前礼物封面"
-              src={`/api/v1/gift-releases/${releaseId}/cover?version=${String(updatedAt ?? '')}`}
+              src={`${coverImageUrl}?version=${encodeURIComponent(String(updatedAt ?? ''))}`}
             />
           ) : (
             <div className="gift-placeholder">

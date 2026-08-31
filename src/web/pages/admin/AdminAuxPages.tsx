@@ -1,5 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { CalendarSync, CircleCheck, Database, HardDrive, RadioTower, Truck } from 'lucide-react';
+import {
+  CalendarSync,
+  CircleCheck,
+  Database,
+  HardDrive,
+  ImageIcon,
+  RadioTower,
+  Truck,
+} from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -63,6 +71,7 @@ export function AdminAnnouncementsPage() {
 
 function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
   const bindingRuntime = runtimeStatePresentation[data.runtimes.binding.state];
+  const mediaRuntime = runtimeStatePresentation[data.runtimes.media.state];
   const rosterRuntime = runtimeStatePresentation[data.runtimes.roster.state];
   const trackingRuntime = runtimeStatePresentation[data.runtimes.tracking.state];
   return (
@@ -92,6 +101,17 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
           label="验证连接"
           tone={runtimeMetricTone(bindingRuntime.tone)}
           value={bindingRuntime.label}
+        />
+        <MetricCard
+          description={
+            data.runtimes.media.lastTickAt
+              ? `最近 ${formatDate(data.runtimes.media.lastTickAt, true)}`
+              : '尚无执行记录'
+          }
+          icon={ImageIcon}
+          label="封面回收"
+          tone={runtimeMetricTone(mediaRuntime.tone)}
+          value={mediaRuntime.label}
         />
         <MetricCard
           description={

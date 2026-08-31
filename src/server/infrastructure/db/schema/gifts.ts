@@ -33,7 +33,6 @@ export const giftReleases = pgTable(
     eligibilityMonth: date('eligibility_month', { mode: 'string' }).notNull(),
     title: text('title').notNull(),
     description: text('description').default('').notNull(),
-    coverObjectKey: text('cover_object_key'),
     publicVisible: boolean('public_visible').default(false).notNull(),
     claimStartAt: timestamp('claim_start_at', { mode: 'date', withTimezone: true }).notNull(),
     claimDeadlineAt: timestamp('claim_deadline_at', { mode: 'date', withTimezone: true }).notNull(),
@@ -62,6 +61,31 @@ export const giftReleases = pgTable(
       sql`${table.claimDeadlineAt} > ${table.claimStartAt}`,
     ),
     check('gift_releases_version_positive', sql`${table.version} > 0`),
+  ],
+);
+
+export const giftCoverObjects = pgTable(
+  'gift_cover_objects',
+  {
+    objectKey: text('object_key').primaryKey(),
+    giftReleaseId: uuid('gift_release_id').references(() => giftReleases.id, {
+      onDelete: 'restrict',
+    }),
+    state: text('state').default('STAGED').notNull(),
+    byteLength: integer('byte_length').notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex('gift_cover_objects_release_unique').on(table.giftReleaseId),
+    index('gift_cover_objects_cleanup_idx').on(table.state, table.updatedAt),
+    check(
+      'gift_cover_objects_state_link_check',
+      sql`(
+        (${table.state} = 'ACTIVE' and ${table.giftReleaseId} is not null)
+        or (${table.state} in ('STAGED', 'DELETE_PENDING') and ${table.giftReleaseId} is null)
+      )`,
+    ),
+    check('gift_cover_objects_byte_length_positive', sql`${table.byteLength} > 0`),
   ],
 );
 

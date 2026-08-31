@@ -41,7 +41,10 @@ import {
   createFulfillmentRuntime,
   type FulfillmentRuntime,
 } from './modules/fulfillment/fulfillment-runtime.js';
-import { GiftMediaService } from './modules/gifts/gift-media-service.js';
+import {
+  createGiftMediaRuntime,
+  type GiftMediaRuntime,
+} from './modules/gifts/gift-media-runtime.js';
 import giftMediaRoutes from './modules/gifts/gift-media-routes.js';
 import giftOrderRoutes from './modules/gifts/order-routes.js';
 import giftReleaseRoutes from './modules/gifts/release-routes.js';
@@ -65,6 +68,7 @@ export interface BuildAppOptions {
   readonly creatorProfileSource?: CreatorProfileSource;
   readonly database?: DatabaseService;
   readonly fulfillmentRuntime?: FulfillmentRuntime;
+  readonly giftMediaRuntime?: GiftMediaRuntime;
   readonly loggerStream?: DestinationStream;
   readonly rateLimiter?: InMemoryRateLimiter;
   readonly serveStatic?: boolean;
@@ -112,8 +116,15 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const announcementService = new AnnouncementService(database, clock);
   const appearanceService = new AppearanceService(database);
   const portalService = new PortalService(database, clock);
-  const giftMediaService = new GiftMediaService(database, storage);
   const auditQueryService = new AuditQueryService(database);
+  const giftMediaRuntime =
+    options.giftMediaRuntime ??
+    createGiftMediaRuntime({
+      clock,
+      database,
+      reportError: reportRuntimeError,
+      storage,
+    });
   const fulfillmentRuntime =
     options.fulfillmentRuntime ??
     createFulfillmentRuntime({
@@ -174,6 +185,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       () => bindingRuntime.close(),
       () => snapshotRuntime.close(),
       () => fulfillmentRuntime.close(),
+      () => giftMediaRuntime.close(),
     ];
     const results = await Promise.allSettled(
       closeRuntimes.map(async (closeRuntime) => closeRuntime()),
@@ -194,6 +206,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         ['binding', bindingRuntime.start()],
         ['snapshot', snapshotRuntime.start()],
         ['fulfillment', fulfillmentRuntime.start()],
+        ['gift-media', giftMediaRuntime.start()],
       ] as const;
       const results = await Promise.allSettled(runtimes.map(([, start]) => start));
       for (const [index, result] of results.entries()) {
@@ -258,7 +271,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     database,
     service: fulfillmentRuntime.service,
   });
-  await app.register(giftMediaRoutes, { auth, database, service: giftMediaService });
+  await app.register(giftMediaRoutes, { auth, database, service: giftMediaRuntime.service });
   await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
   await app.register(snapshotRoutes, { auth, database, service: snapshotRuntime.service });
   await app.register(announcementRoutes, {
@@ -280,6 +293,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     clock,
     database,
     fulfillmentRuntime,
+    giftMediaRuntime,
     snapshotRuntime,
     storage,
     version: APPLICATION_VERSION,

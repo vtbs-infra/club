@@ -143,7 +143,7 @@ export function giftRelease(overrides: GiftReleaseOverrides = {}): GiftRelease {
     claimDeadlineAt: testTime(30),
     claimStartAt: testTime(-30),
     closedAt: null,
-    coverObjectKey: null,
+    coverImageUrl: null,
     createdAt: testTime(-10),
     description: '七月纪念礼物',
     eligibilityMonth: '2026-07-01',
@@ -298,6 +298,7 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
     ],
     runtimes: {
       binding: runtime,
+      media: runtime,
       roster: runtime,
       tracking: { ...runtime, configured: false },
     },

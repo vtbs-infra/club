@@ -13,6 +13,7 @@ import type { AppDatabase, DatabaseService } from '../../infrastructure/db/datab
 import {
   giftPackageItems,
   giftPackages,
+  giftCoverObjects,
   giftOrders,
   giftOrderStatusHistory,
   giftReleases,
@@ -182,12 +183,12 @@ export class GiftReleaseService {
     const cursor = input.cursor ? decodeCursor(input.cursor) : null;
     const rows = await this.database.orm
       .select({
+        coverObjectKey: giftCoverObjects.objectKey,
         cursorCreatedAt: sql<string>`${giftReleases.createdAt}::text`,
         release: {
           claimDeadlineAt: giftReleases.claimDeadlineAt,
           claimStartAt: giftReleases.claimStartAt,
           closedAt: giftReleases.closedAt,
-          coverObjectKey: giftReleases.coverObjectKey,
           createdAt: giftReleases.createdAt,
           eligibilityMonth: giftReleases.eligibilityMonth,
           id: giftReleases.id,
@@ -200,6 +201,13 @@ export class GiftReleaseService {
         },
       })
       .from(giftReleases)
+      .leftJoin(
+        giftCoverObjects,
+        and(
+          eq(giftCoverObjects.giftReleaseId, giftReleases.id),
+          eq(giftCoverObjects.state, 'ACTIVE'),
+        ),
+      )
       .where(
         and(
           eq(giftReleases.creatorId, creatorId),
@@ -213,7 +221,10 @@ export class GiftReleaseService {
     const hasMore = rows.length > input.limit;
     const items = rows.slice(0, input.limit);
     return {
-      items: items.map((row) => row.release),
+      items: items.map((row) => ({
+        ...row.release,
+        coverImageUrl: row.coverObjectKey ? `/api/v1/gift-releases/${row.release.id}/cover` : null,
+      })),
       nextCursor: hasMore
         ? encodeCursor({
             createdAt: items.at(-1)!.cursorCreatedAt,
@@ -224,11 +235,19 @@ export class GiftReleaseService {
   }
 
   public async get(creatorId: string, releaseId: string) {
-    const [release] = await this.database.orm
-      .select()
+    const [selection] = await this.database.orm
+      .select({ coverObjectKey: giftCoverObjects.objectKey, release: giftReleases })
       .from(giftReleases)
+      .leftJoin(
+        giftCoverObjects,
+        and(
+          eq(giftCoverObjects.giftReleaseId, giftReleases.id),
+          eq(giftCoverObjects.state, 'ACTIVE'),
+        ),
+      )
       .where(and(eq(giftReleases.id, releaseId), eq(giftReleases.creatorId, creatorId)))
       .limit(1);
+    const release = selection?.release;
     if (!release) throw new AppError('GIFT_RELEASE_NOT_FOUND', 'Gift release not found.', 404);
     const packages = await this.database.orm
       .select()
@@ -251,6 +270,7 @@ export class GiftReleaseService {
     ]);
     return {
       ...release,
+      coverImageUrl: selection.coverObjectKey ? `/api/v1/gift-releases/${release.id}/cover` : null,
       formFields: release.formSchema,
       packages: packages.map((package_) => ({
         ...package_,
@@ -537,7 +557,7 @@ export class GiftReleaseService {
   }
 
   public async close(creatorId: string, releaseId: string, context: RequestAuditContext) {
-    return this.database.orm.transaction(async (transaction) => {
+    await this.database.orm.transaction(async (transaction) => {
       const [before] = await transaction
         .select()
         .from(giftReleases)
@@ -548,7 +568,7 @@ export class GiftReleaseService {
         throw new AppError('GIFT_RELEASE_NOT_CLOSABLE', 'Published gift release not found.', 409);
       }
       const now = this.clock.now();
-      const [release] = await transaction
+      await transaction
         .update(giftReleases)
         .set({
           closedAt: now,
@@ -556,8 +576,7 @@ export class GiftReleaseService {
           updatedAt: now,
           version: before.version + 1,
         })
-        .where(eq(giftReleases.id, before.id))
-        .returning();
+        .where(eq(giftReleases.id, before.id));
       const expired = await transaction
         .update(giftOrders)
         .set({
@@ -592,8 +611,8 @@ export class GiftReleaseService {
         },
         transaction,
       );
-      return release!;
     });
+    return this.get(creatorId, releaseId);
   }
 
   public async removeDraft(
@@ -602,8 +621,10 @@ export class GiftReleaseService {
     context: RequestAuditContext,
   ): Promise<void> {
     await this.database.orm.transaction(async (transaction) => {
-      const [deleted] = await transaction
-        .delete(giftReleases)
+      const now = this.clock.now();
+      const [release] = await transaction
+        .select({ id: giftReleases.id })
+        .from(giftReleases)
         .where(
           and(
             eq(giftReleases.id, releaseId),
@@ -611,8 +632,20 @@ export class GiftReleaseService {
             eq(giftReleases.status, 'DRAFT'),
           ),
         )
+        .limit(1)
+        .for('update');
+      if (!release) throw new AppError('GIFT_RELEASE_NOT_DELETABLE', 'Draft not found.', 404);
+      await transaction
+        .update(giftCoverObjects)
+        .set({ giftReleaseId: null, state: 'DELETE_PENDING', updatedAt: now })
+        .where(
+          and(eq(giftCoverObjects.giftReleaseId, release.id), eq(giftCoverObjects.state, 'ACTIVE')),
+        );
+      const [deleted] = await transaction
+        .delete(giftReleases)
+        .where(eq(giftReleases.id, release.id))
         .returning({ id: giftReleases.id });
-      if (!deleted) throw new AppError('GIFT_RELEASE_NOT_DELETABLE', 'Draft not found.', 404);
+      if (!deleted) throw new Error('Locked gift release disappeared before deletion.');
       await this.audit.record(
         {
           action: 'gift-release.deleted',

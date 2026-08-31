@@ -51,6 +51,7 @@ export const SystemStatusSchema = Type.Object({
   ),
   runtimes: Type.Object({
     binding: RuntimeStatusSchema,
+    media: RuntimeStatusSchema,
     roster: RuntimeStatusSchema,
     tracking: Type.Object({
       ...RuntimeStatusSchema.properties,

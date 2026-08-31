@@ -351,13 +351,12 @@ export function ReleaseEditorPage() {
           title={title}
         />
         <CoverSection
-          coverObjectKey={release.data?.coverObjectKey}
+          coverImageUrl={release.data?.coverImageUrl}
           coverPreviewUrl={coverPreviewUrl}
           editable={editable}
           isNew={isNew}
           onFileChange={setCoverFile}
           onUpload={() => upload.mutate()}
-          releaseId={releaseId}
           updatedAt={release.data?.updatedAt}
           uploadBlocked={upload.isPending || save.isPending || publish.isPending}
           uploadError={upload.error}

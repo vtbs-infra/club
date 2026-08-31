@@ -19,6 +19,7 @@ import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   bilibiliBindings,
   creators,
+  giftCoverObjects,
   giftOrderAddresses,
   giftOrderItems,
   giftOrderOptionValues,
@@ -160,7 +161,7 @@ export class GiftOrderQueryService {
         release: {
           claimDeadlineAt: giftReleases.claimDeadlineAt,
           claimStartAt: giftReleases.claimStartAt,
-          coverObjectKey: giftReleases.coverObjectKey,
+          coverObjectKey: giftCoverObjects.objectKey,
           eligibilityMonth: giftReleases.eligibilityMonth,
           id: giftReleases.id,
           title: giftReleases.title,
@@ -174,6 +175,13 @@ export class GiftOrderQueryService {
       .from(giftOrders)
       .innerJoin(giftReleases, eq(giftReleases.id, giftOrders.giftReleaseId))
       .innerJoin(creators, eq(creators.id, giftOrders.creatorId))
+      .leftJoin(
+        giftCoverObjects,
+        and(
+          eq(giftCoverObjects.giftReleaseId, giftReleases.id),
+          eq(giftCoverObjects.state, 'ACTIVE'),
+        ),
+      )
       .leftJoin(shipments, eq(shipments.giftOrderId, giftOrders.id))
       .where(
         and(input.condition, cursor ? lt(giftOrders.orderNumber, cursor.orderNumber) : undefined),
@@ -371,7 +379,7 @@ export class GiftOrderQueryService {
         release: {
           claimDeadlineAt: giftReleases.claimDeadlineAt,
           claimStartAt: giftReleases.claimStartAt,
-          coverObjectKey: giftReleases.coverObjectKey,
+          coverObjectKey: giftCoverObjects.objectKey,
           description: giftReleases.description,
           eligibilityMonth: giftReleases.eligibilityMonth,
           formFields: giftReleases.formSchema,
@@ -382,6 +390,13 @@ export class GiftOrderQueryService {
       .from(giftOrders)
       .innerJoin(giftReleases, eq(giftReleases.id, giftOrders.giftReleaseId))
       .innerJoin(creators, eq(creators.id, giftOrders.creatorId))
+      .leftJoin(
+        giftCoverObjects,
+        and(
+          eq(giftCoverObjects.giftReleaseId, giftReleases.id),
+          eq(giftCoverObjects.state, 'ACTIVE'),
+        ),
+      )
       .where(condition)
       .limit(1);
   }

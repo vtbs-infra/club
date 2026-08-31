@@ -7,6 +7,7 @@ import {
   bindingRuntimeStub,
   fakeDatabase,
   fulfillmentRuntimeStub,
+  giftMediaRuntimeStub,
   runtimeStatus,
   snapshotRuntimeStub,
 } from '../helpers/app-stubs.js';
@@ -18,6 +19,7 @@ describe('application runtime lifecycle', () => {
     const bindingClose = vi.fn(() => Promise.resolve());
     const snapshotClose = vi.fn();
     const fulfillmentClose = vi.fn();
+    const giftMediaClose = vi.fn();
     const databaseClose = vi.fn(() => Promise.resolve());
     const database = fakeDatabase();
     const app = await buildApp({
@@ -25,6 +27,7 @@ describe('application runtime lifecycle', () => {
       config: createTestConfig(),
       database: { ...database, close: databaseClose },
       fulfillmentRuntime: fulfillmentRuntimeStub({ close: fulfillmentClose }),
+      giftMediaRuntime: giftMediaRuntimeStub({ close: giftMediaClose }),
       snapshotRuntime: snapshotRuntimeStub({ close: snapshotClose }),
       startBackground: false,
       storage: storage.driver,
@@ -34,6 +37,7 @@ describe('application runtime lifecycle', () => {
     expect(bindingClose).toHaveBeenCalledOnce();
     expect(snapshotClose).toHaveBeenCalledOnce();
     expect(fulfillmentClose).toHaveBeenCalledOnce();
+    expect(giftMediaClose).toHaveBeenCalledOnce();
     expect(databaseClose).not.toHaveBeenCalled();
     await storage.cleanup();
   });
@@ -43,6 +47,7 @@ describe('application runtime lifecycle', () => {
     const bindingStart = vi.fn(() => Promise.reject(new Error('binding startup failed')));
     const snapshotStart = vi.fn(() => Promise.resolve());
     const fulfillmentStart = vi.fn(() => Promise.resolve());
+    const giftMediaStart = vi.fn(() => Promise.resolve());
     const app = await buildApp({
       bindingRuntime: bindingRuntimeStub({
         getStatus: () => runtimeStatus('DEGRADED'),
@@ -53,6 +58,10 @@ describe('application runtime lifecycle', () => {
       fulfillmentRuntime: fulfillmentRuntimeStub({
         getStatus: () => ({ ...runtimeStatus('RUNNING'), configured: false }),
         start: fulfillmentStart,
+      }),
+      giftMediaRuntime: giftMediaRuntimeStub({
+        getStatus: () => runtimeStatus('RUNNING'),
+        start: giftMediaStart,
       }),
       snapshotRuntime: snapshotRuntimeStub({
         getStatus: () => runtimeStatus('RUNNING'),
@@ -66,6 +75,7 @@ describe('application runtime lifecycle', () => {
       expect(bindingStart).toHaveBeenCalledOnce();
       expect(snapshotStart).toHaveBeenCalledOnce();
       expect(fulfillmentStart).toHaveBeenCalledOnce();
+      expect(giftMediaStart).toHaveBeenCalledOnce();
       const ready = await app.inject({ method: 'GET', url: '/health/ready' });
       expect(ready.statusCode).toBe(503);
       expect(ready.json<ReadinessResponse>().checks.runtimes).toBe('down');

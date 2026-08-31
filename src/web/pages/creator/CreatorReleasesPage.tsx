@@ -56,8 +56,11 @@ export function CreatorReleasesPage() {
           {items.map((release) => (
             <Link className="release-row" key={release.id} to={`/creator/releases/${release.id}`}>
               <div className="release-cover">
-                {release.coverObjectKey ? (
-                  <img alt="" src={`/api/v1/gift-releases/${release.id}/cover`} />
+                {release.coverImageUrl ? (
+                  <img
+                    alt=""
+                    src={`${release.coverImageUrl}?version=${encodeURIComponent(String(release.updatedAt))}`}
+                  />
                 ) : (
                   <Gift aria-hidden="true" size={28} strokeWidth={1.55} />
                 )}

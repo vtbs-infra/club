@@ -14,6 +14,7 @@ import type { StorageDriver } from '../../infrastructure/storage/storage-driver.
 import type { BindingRuntime } from '../binding/binding-runtime.js';
 import type { FulfillmentRuntime } from '../fulfillment/fulfillment-runtime.js';
 import { trackingRefreshDueCondition } from '../fulfillment/tracking-refresh-policy.js';
+import type { GiftMediaRuntime } from '../gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 
 interface SystemStatusServiceOptions {
@@ -21,6 +22,7 @@ interface SystemStatusServiceOptions {
   readonly database: DatabaseService;
   readonly bindingRuntime: BindingRuntime;
   readonly fulfillmentRuntime: FulfillmentRuntime;
+  readonly giftMediaRuntime: GiftMediaRuntime;
   readonly snapshotRuntime: SnapshotRuntime;
   readonly storage: StorageDriver;
   readonly version: string;
@@ -47,6 +49,7 @@ export class SystemStatusService {
     const bindingRuntime = this.options.bindingRuntime.getStatus();
     const snapshotRuntime = this.options.snapshotRuntime.getStatus();
     const fulfillmentRuntime = this.options.fulfillmentRuntime.getStatus();
+    const giftMediaRuntime = this.options.giftMediaRuntime.getStatus();
     if (checks.database === 'down') {
       return {
         checks,
@@ -55,6 +58,7 @@ export class SystemStatusService {
         rooms: [],
         runtimes: {
           binding: bindingRuntime,
+          media: giftMediaRuntime,
           roster: snapshotRuntime,
           tracking: fulfillmentRuntime,
         },
@@ -152,6 +156,7 @@ export class SystemStatusService {
       rooms,
       runtimes: {
         binding: bindingRuntime,
+        media: giftMediaRuntime,
         roster: snapshotRuntime,
         tracking: fulfillmentRuntime,
       },
@@ -161,7 +166,7 @@ export class SystemStatusService {
         checks.schema === 'down' ||
         checks.storage === 'down' ||
         integrityWarnings.length > 0 ||
-        [bindingRuntime, snapshotRuntime, fulfillmentRuntime].some(
+        [bindingRuntime, giftMediaRuntime, snapshotRuntime, fulfillmentRuntime].some(
           (runtime) => runtime.state !== 'RUNNING',
         ) ||
         rooms.some((room) => room.enabled && room.healthStatus === 'UNHEALTHY')
