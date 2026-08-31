@@ -98,7 +98,7 @@ A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.
 
 The supported deployment runs one Club application instance. The application
 process serves the web interface and API and owns the roster, Bilibili-room,
-and tracking background runtimes.
+tracking, and gift-cover cleanup background runtimes.
 
 ## License
 

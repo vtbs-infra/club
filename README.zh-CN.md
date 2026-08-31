@@ -90,7 +90,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 - Docker Compose
 
 支持的部署方式使用一个 Club 应用实例。该进程同时提供 Web 与 API，并运行名单调度、
-B站直播间连接和物流刷新任务。
+B站直播间连接、物流刷新和礼物封面回收任务。
 
 ## 许可证
 

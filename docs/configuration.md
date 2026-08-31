@@ -170,7 +170,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 
 ## 测试连接
 
-PostgreSQL 集成测试只在设置 `TEST_DATABASE_URL` 时运行：
+PostgreSQL 集成测试必须设置 `TEST_DATABASE_URL`：
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgres://club:password@localhost:55432/postgres'
@@ -178,3 +178,4 @@ pnpm test:integration
 ```
 
 该账号需要创建和删除临时数据库的权限。测试套件不会把业务数据库作为 Fixture 库。
+未设置该变量时，`pnpm test:integration` 会立即失败，不会把数据库测试标记为跳过。

@@ -18,6 +18,7 @@ Application process
   -> binding runtime
   -> monthly snapshot runtime
   -> fulfillment runtime
+  -> gift cover cleanup runtime
 ```
 
 同一 Node.js 进程提供 React 静态资源、JSON API、OpenAPI 和后台 Runtime。支持的部署
@@ -41,7 +42,7 @@ src/server/
     auth/                       会话与身份守卫
     binding/                    验证码和 B站 UID 绑定
     snapshots/                  月末名单任务、证据、定稿和查询
-    gifts/                      发布、资格、领取、查询和履约
+    gifts/                      发布、资格、领取、查询、履约和封面生命周期
     fulfillment/                物流 Provider 与刷新 Runtime
     announcements/              平台和主播公告
     appearance/                 部署级主题读取、更新与审计
@@ -199,6 +200,20 @@ Attempt 成员表。系统随后校验分页元数据、重复 UID、等级和�
 关闭发布在一个事务中阻止后续资格匹配，并把仍处于 `CLAIMABLE` 的礼物单推进到
 `EXPIRED`。已经提交或进入履约流程的礼物单不被回退。
 
+### 封面对象生命周期
+
+封面文件先完成类型校验、解码、缩放和 WebP 转换，再建立持久对象记录：
+
+```text
+STAGED -> ACTIVE -> DELETE_PENDING -> 删除
+```
+
+`STAGED` 表示数据库已经记录、但尚未绑定草稿的对象；它可能尚未写入存储，也可能已经写入
+并等待激活。只有草稿可以关联一张 `ACTIVE` 封面。替换、移除封面或删除草稿会在同一
+数据库事务中把旧对象转为 `DELETE_PENDING`。清理 Runtime 在安全窗口后处理 `STAGED`，
+也处理未被礼物引用的 `DELETE_PENDING`。对象不存在视为幂等成功，存储删除成功后才删除
+数据库记录；存储失败会保留待处理记录供后续 Tick 重试。
+
 ## 领取与加密数据
 
 地址簿中的完整地址以 AES-256-GCM 加密保存。密钥环由版本号和 Base64 32 字节密钥
@@ -263,7 +278,7 @@ DRAFT -> PUBLISHED -> WITHDRAWN
 
 ## Runtime 与健康状态
 
-三个后台 Runtime 统一报告：
+四个后台 Runtime 统一报告：
 
 ```text
 state: STARTING | RUNNING | DEGRADED | STOPPED
@@ -311,21 +326,26 @@ nextRetryAt
 
 Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请求 ID。
 
+持续增长的操作集合按领域使用稳定游标和摘要响应，包括礼物单、礼物发布、公告、名单任务、
+名单成员、分页证据、主播、绑定冲突和审计日志。名单 Attempt 最多三条，作为详情中的硬上限
+子集合直接返回；地址和验证直播间分别限制为最多 20 条，作为配置集合直接返回。用户候选
+搜索固定最多返回 20 条。不同领域使用自己的不可变排序键，不共享通用分页框架。
+
 公开的 `GET /api/v1/appearance` 返回当前部署使用的主题预设，无需登录。只有平台管理员
 可以通过 `PUT /api/v1/admin/appearance` 更新该值；重复应用当前主题是无副作用操作。
 
 ## 数据域
 
-| 领域       | 主要表                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------ |
-| 认证       | `users`, `sessions`, `accounts`, `verifications`                                                       |
-| 主播与绑定 | `creators`, `verification_rooms`, `binding_challenges`, `bilibili_bindings`, `binding_conflicts`       |
-| 名单       | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`, `snapshot_members` |
-| 礼物       | `gift_releases`, `gift_packages`, `gift_package_items`, `gift_tier_rules`, `gift_orders`               |
-| 领取       | `gift_order_items`, `addresses`, `gift_order_addresses`, `gift_order_option_values`                    |
-| 状态与物流 | `gift_order_status_history`, `shipments`, `tracking_events`                                            |
-| 公告与审计 | `announcements`, `announcement_reads`, `audit_logs`                                                    |
-| 平台外观   | `platform_appearance`                                                                                  |
+| 领域       | 主要表                                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| 认证       | `users`, `sessions`, `accounts`, `verifications`                                                               |
+| 主播与绑定 | `creators`, `verification_rooms`, `binding_challenges`, `bilibili_bindings`, `binding_conflicts`               |
+| 名单       | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`, `snapshot_members`         |
+| 礼物       | `gift_releases`, `gift_cover_objects`, `gift_packages`, `gift_package_items`, `gift_tier_rules`, `gift_orders` |
+| 领取       | `gift_order_items`, `addresses`, `gift_order_addresses`, `gift_order_option_values`                            |
+| 状态与物流 | `gift_order_status_history`, `shipments`, `tracking_events`                                                    |
+| 公告与审计 | `announcements`, `announcement_reads`, `audit_logs`                                                            |
+| 平台外观   | `platform_appearance`                                                                                          |
 
 礼物发布和平台公告分别保存显式的 `public_visible` 标记。匿名门户只查询已发布、明确公开且
 仍在有效期内的内容；发布操作本身不会隐式改变门户可见性。

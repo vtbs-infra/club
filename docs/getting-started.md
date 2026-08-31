@@ -165,7 +165,8 @@ docker compose logs --tail 200 app
 docker compose logs --tail 100 postgres
 ```
 
-管理后台 `/admin/system` 展示数据库、存储、验证直播间、名单调度和物流刷新状态。
+管理后台 `/admin/system` 展示数据库、存储、验证直播间、名单调度、物流刷新和礼物封面
+回收状态。
 
 ## 下一步
 

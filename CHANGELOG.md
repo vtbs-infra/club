@@ -6,41 +6,55 @@ All notable Club changes are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-08-28
+## [0.2.0] - 2026-09-01
 
 ### Added
 
-- Authoritative Bilibili creator-profile lookup resolves the verified UID to its current display
-  name and canonical live room, with explicit refresh actions for creators and administrators.
-- Monthly roster attempts record whether the scheduler or an administrator initiated them, retain
-  complete initial and recheck page evidence, and expose the accepted attempt provenance.
-- Stable audit pagination, version-aware announcement reads, and database-backed lifecycle
-  invariants cover the operational and historical boundaries introduced in this release.
+- An administrator binding-conflict inbox records the exact challenge and original binding observed
+  when a UID conflict occurs, then supports an audited resolve or dismiss decision without touching
+  a later binding for the same UID.
+- Gift cover objects now have a recoverable staged, active, and pending-deletion lifecycle. Failed
+  uploads or storage deletions remain visible to a bounded background cleanup runtime instead of
+  becoming untracked files.
+- Announcement drafts, published announcements, and withdrawn announcements have explicit states
+  and actions. Version-aware read records make edited or republished content unread again.
+- System diagnostics include cover cleanup, runtime health, roster evidence integrity, conflict
+  attention, and tracking work that is actually eligible for refresh.
 
 ### Changed
 
-- Creator registration now promotes an ordinary user with an active verified Bilibili binding.
-  Bilibili UID, display name, and room are read-only profile facts; administrators only configure
-  the settlement timezone and whether future monthly roster synchronization runs.
-- Creator accounts retain recipient access, while a binding used as creator identity cannot be
-  removed or replaced.
-- Roster capture starts at most four tasks concurrently, tracks background work through shutdown,
-  and keeps retries within the same auditable attempt model.
-- Closing a gift release now expires every still-claimable order atomically. Submitted, shipped,
-  completed, cancelled, and already expired orders retain their historical state.
-- Tracking progress is monotonic outside explicit exception recovery, and confirmed delivery
-  completes the corresponding gift order in the same workflow.
-- Operational reads use bounded database aggregates and opaque cursors; gift and portal GET routes
-  no longer perform expiry writes, and authenticated web areas load lazily.
-- The public hero artwork and roster-sync wording were simplified to match the application-wide
-  visual and product language.
+- Creator registration promotes an ordinary user with an active verified Bilibili binding. UID,
+  display name, and canonical live room come from Bilibili and can be refreshed but not overridden;
+  administrators only configure settlement timezone and future monthly synchronization.
+- The scheduler performs only the first roster attempt. Failed or rejected work requires an
+  explicit administrator retry, shares the three-attempt budget, and becomes late when retried
+  outside the on-time window.
+- Roster intake rejects excessive page, member, or response bounds before fetching later pages and
+  applies one cancellation boundary to cookie initialization, pagination, and recheck.
+- Shipment progress is monotonic from label creation through delivery. A current provider exception
+  is stored independently, so stale provider data cannot erase progress or make refresh fail by
+  attempting a backward transition.
+- Gift orders, gift releases, announcements, roster history, roster members, evidence, creators,
+  binding conflicts, and audit logs use bounded domain reads. Addresses and verification rooms
+  remain direct configuration collections with enforced limits.
+- List responses carry summaries while packages, frozen claim data, shipment events, roster attempts,
+  and evidence details are loaded only from their owning detail workflows. Overview counts are
+  calculated in PostgreSQL instead of loading complete collections.
+- Closing a gift release expires still-claimable orders atomically. Manually completing an order
+  stops future tracking refresh without inventing a delivered carrier event.
 
-### Fixed
+### Reliability
 
-- Announcement content updates make the new version unread until a recipient opens it again.
-- Default-address changes preserve one deterministic default without transiently clearing it.
-- Published gift content, frozen order data, snapshot evidence, and announcement history now share
-  consistent transaction and immutability rules.
+- Graceful shutdown stops new work, aborts active roster requests, records normal cancellation while
+  PostgreSQL is available, and waits for registered tasks before releasing database and storage
+  resources.
+- Business state changes and their audit records share transactions across late-roster decisions,
+  verification-room tests, binding-conflict handling, announcement commands, and fulfillment.
+- Readiness compares the ordered migration timestamps and SHA-256 hashes expected by the running
+  application. Release validation additionally requires the code manifest, SQL files, Drizzle
+  journal, and expected metadata snapshot filenames to agree on the migration sequence.
+- PostgreSQL integration tests now fail immediately when `TEST_DATABASE_URL` is missing and cannot
+  pass a release gate by silently skipping every database test.
 
 ### Breaking changes
 
@@ -48,6 +62,9 @@ All notable Club changes are documented here. The format follows
   PostgreSQL database and does not provide an in-place upgrade from v0.1.
 - Readiness requires the database migration set to match the application exactly; a database from
   another Club version is rejected instead of being treated as partially compatible.
+- Operational list APIs now return cursor pages and separate summaries from details. Gift releases
+  expose a cover URL rather than an internal object key; shipments expose monotonic `progress` and
+  an independent `exceptionMessage`; announcement mutation uses explicit lifecycle commands.
 
 ## [0.1.0] - 2026-08-27
 
