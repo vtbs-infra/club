@@ -632,7 +632,7 @@ integration('gift order lifecycle', () => {
           .from(shipments)
           .where(eq(shipments.giftOrderId, captainOrder.id))
       )[0],
-    ).toMatchObject({ exceptionMessage: null, progress: 'OUT_FOR_DELIVERY' });
+    ).toMatchObject({ exceptionMessage: '包裹暂时滞留', progress: 'OUT_FOR_DELIVERY' });
     await database.orm
       .update(shipments)
       .set({ nextTrackingRefreshAt: new Date(0) })
@@ -659,6 +659,14 @@ integration('gift order lifecycle', () => {
     );
     expect(await deliveredTrackingService.refreshDue()).toBe(1);
     expect((await orderService.getForUser(userTwoId, captainOrder.id)).status).toBe('COMPLETED');
+    expect(
+      (
+        await database.orm
+          .select({ exceptionMessage: shipments.exceptionMessage })
+          .from(shipments)
+          .where(eq(shipments.giftOrderId, captainOrder.id))
+      )[0]?.exceptionMessage,
+    ).toBeNull();
     expect(await deliveredTrackingService.refreshDue()).toBe(0);
     expect(
       (

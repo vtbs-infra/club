@@ -51,12 +51,20 @@ function requireHttpUrl(value: string | null | undefined): string | null {
   return value;
 }
 
-function activeExceptionMessage(result: TrackingResult): string | null {
-  if (result.status !== 'EXCEPTION') return null;
-  return (
-    result.events.findLast((event) => event.status === 'EXCEPTION')?.description ??
-    'Tracking exception'
-  ).slice(0, 500);
+function nextExceptionMessage(
+  currentProgress: ShipmentProgress,
+  currentMessage: string | null,
+  result: TrackingResult,
+): string | null {
+  if (result.status === 'EXCEPTION') {
+    return (
+      result.events.findLast((event) => event.status === 'EXCEPTION')?.description ??
+      'Tracking exception'
+    ).slice(0, 500);
+  }
+  return TRACKING_PROGRESS[result.status] >= TRACKING_PROGRESS[currentProgress]
+    ? null
+    : currentMessage;
 }
 
 type ShipmentRow = typeof shipments.$inferSelect;
@@ -137,12 +145,17 @@ export class TrackingRefreshService {
       }
 
       const now = this.clock.now();
-      const progress = stableProgress(shipmentProgress(shipment.progress), result.status);
+      const currentProgress = shipmentProgress(shipment.progress);
+      const progress = stableProgress(currentProgress, result.status);
       await transaction
         .update(shipments)
         .set({
           deliveredAt: progress === 'DELIVERED' ? now : null,
-          exceptionMessage: activeExceptionMessage(result),
+          exceptionMessage: nextExceptionMessage(
+            currentProgress,
+            shipment.exceptionMessage,
+            result,
+          ),
           lastTrackingError: null,
           lastTrackingRefreshAt: now,
           nextTrackingRefreshAt: progress === 'DELIVERED' ? null : result.nextRefreshAt,
