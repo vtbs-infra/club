@@ -173,7 +173,7 @@ export class GiftReleaseService {
     private readonly clock: Clock,
   ) {
     this.audit = new AuditService(database);
-    this.eligibility = new GiftEligibilityService(database);
+    this.eligibility = new GiftEligibilityService();
   }
 
   public async list(

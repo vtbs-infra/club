@@ -4,6 +4,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
+import { databaseWriteBatches } from '../../src/server/infrastructure/db/write-batches.js';
 import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
 import {
   bilibiliBindings,
@@ -149,16 +150,17 @@ integration('gift order lifecycle', () => {
       })
       .returning({ id: snapshotRuns.id });
     if (members.length > 0) {
-      await database.orm.insert(snapshotMembers).values(
-        members.map((member, index) => ({
-          biliUid: member.biliUid,
-          displayNameAtSnapshot: `Member ${member.biliUid}`,
-          rawTier: member.tier === 'GOVERNOR' ? '1' : member.tier === 'ADMIRAL' ? '2' : '3',
-          snapshotRunId: run!.id,
-          sourcePosition: index + 1,
-          tier: member.tier,
-        })),
-      );
+      const rows = members.map((member, index) => ({
+        biliUid: member.biliUid,
+        displayNameAtSnapshot: `Member ${member.biliUid}`,
+        rawTier: member.tier === 'GOVERNOR' ? '1' : member.tier === 'ADMIRAL' ? '2' : '3',
+        snapshotRunId: run!.id,
+        sourcePosition: index + 1,
+        tier: member.tier,
+      }));
+      for (const batch of databaseWriteBatches(rows)) {
+        await database.orm.insert(snapshotMembers).values(batch);
+      }
     }
     await database.orm
       .update(snapshotRuns)
@@ -811,5 +813,43 @@ integration('gift order lifecycle', () => {
         requestContext(creatorUserId, 'duplicate-july'),
       ),
     ).rejects.toMatchObject({ code: 'GIFT_RELEASE_MONTH_CONFLICT' });
+  });
+
+  it('creates gift orders and package snapshots beyond the PostgreSQL parameter limit', async () => {
+    const eligibilityMonth = '2027-01-01';
+    const expectedOrders = 7_000;
+    await finalizeSnapshot(
+      eligibilityMonth,
+      Array.from({ length: expectedOrders }, (_, index) => ({
+        biliUid: String(20_000_000 + index),
+        tier: 'GOVERNOR' as const,
+      })),
+    );
+    const draft = createReleaseDraft(eligibilityMonth);
+    const release = await releaseService.create(
+      creatorId,
+      draft,
+      requestContext(creatorUserId, 'create-large-release'),
+    );
+
+    const published = await releaseService.publish(
+      creatorId,
+      release.id,
+      { ...draft, expectedVersion: release.version },
+      requestContext(creatorUserId, 'publish-large-release'),
+    );
+
+    expect(published.status).toBe('PUBLISHED');
+    const [orderCount] = await database.orm
+      .select({ value: count() })
+      .from(giftOrders)
+      .where(eq(giftOrders.giftReleaseId, release.id));
+    const [itemCount] = await database.orm
+      .select({ value: count() })
+      .from(giftOrderItems)
+      .innerJoin(giftOrders, eq(giftOrders.id, giftOrderItems.giftOrderId))
+      .where(eq(giftOrders.giftReleaseId, release.id));
+    expect(orderCount?.value).toBe(expectedOrders);
+    expect(itemCount?.value).toBe(expectedOrders * 3);
   });
 });

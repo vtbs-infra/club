@@ -196,7 +196,8 @@ UID、等级和首页复核；一致结果在同一事务中分块写入 Attempt
 6. 写入审计日志。
 
 名单后定稿时调用同一个匹配服务。`gift_release_id + snapshot_member_id` 和
-`gift_release_id + bili_uid` 唯一约束保证每位成员只有一张礼物单。
+`gift_release_id + bili_uid` 唯一约束保证每位成员只有一张礼物单。匹配在调用方事务中
+按有界成员批次生成礼物单和礼包快照，不依赖单条批量 SQL 承载整个月度名单。
 
 关闭发布在一个事务中阻止后续资格匹配，并把仍处于 `CLAIMABLE` 的礼物单推进到
 `EXPIRED`。已经提交或进入履约流程的礼物单不被回退。

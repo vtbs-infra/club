@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { and, asc, eq, inArray } from 'drizzle-orm';
 
-import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
+import type { AppDatabase } from '../../infrastructure/db/database.js';
+import { databaseWriteBatches } from '../../infrastructure/db/write-batches.js';
 import {
   giftOrderItems,
   giftOrders,
@@ -24,8 +25,6 @@ const TIER_INDEX: Readonly<Record<GuardTier, number>> = {
 };
 
 export class GiftEligibilityService {
-  public constructor(private readonly database: DatabaseService) {}
-
   public async reconcileSnapshot(runId: string, executor: AppDatabase): Promise<number> {
     const [run] = await executor
       .select({
@@ -51,10 +50,7 @@ export class GiftEligibilityService {
     return release ? this.reconcileRelease(release.id, executor) : 0;
   }
 
-  public async reconcileRelease(
-    releaseId: string,
-    executor: AppDatabase = this.database.orm,
-  ): Promise<number> {
+  public async reconcileRelease(releaseId: string, executor: AppDatabase): Promise<number> {
     const [release] = await executor
       .select()
       .from(giftReleases)
@@ -113,53 +109,57 @@ export class GiftEligibilityService {
         },
       ]),
     );
-    const candidates = members.map((member) => ({
-      biliDisplayName: member.displayNameAtSnapshot,
-      biliUid: member.biliUid,
-      creatorId: release.creatorId,
-      expiresAt: release.claimDeadlineAt,
-      giftReleaseId: release.id,
-      id: randomUUID(),
-      orderNumber: `G${release.eligibilityMonth.slice(0, 7).replace('-', '')}-${randomUUID()
-        .slice(0, 8)
-        .toUpperCase()}`,
-      snapshotMemberId: member.id,
-      tier: member.tier,
-      userId: null,
-    }));
-    const inserted = await executor
-      .insert(giftOrders)
-      .values(candidates)
-      .onConflictDoNothing()
-      .returning({
-        id: giftOrders.id,
-        snapshotMemberId: giftOrders.snapshotMemberId,
-        tier: giftOrders.tier,
+    let insertedCount = 0;
+    for (const memberBatch of databaseWriteBatches(members)) {
+      const memberById = new Map(memberBatch.map((member) => [member.id, member] as const));
+      const candidates = memberBatch.map((member) => ({
+        biliDisplayName: member.displayNameAtSnapshot,
+        biliUid: member.biliUid,
+        creatorId: release.creatorId,
+        expiresAt: release.claimDeadlineAt,
+        giftReleaseId: release.id,
+        id: randomUUID(),
+        orderNumber: `G${release.eligibilityMonth.slice(0, 7).replace('-', '')}-${randomUUID()
+          .slice(0, 8)
+          .toUpperCase()}`,
+        snapshotMemberId: member.id,
+        tier: member.tier,
+        userId: null,
+      }));
+      const inserted = await executor
+        .insert(giftOrders)
+        .values(candidates)
+        .onConflictDoNothing()
+        .returning({
+          id: giftOrders.id,
+          snapshotMemberId: giftOrders.snapshotMemberId,
+        });
+      insertedCount += inserted.length;
+      const orderItems = inserted.flatMap((order) => {
+        const member = memberById.get(order.snapshotMemberId);
+        if (!member) throw new Error('Inserted gift order lost its snapshot member.');
+        const tier = member.tier as GuardTier;
+        const eligibleTiers =
+          release.fulfillmentMode === 'CUMULATIVE' ? TIERS.slice(0, TIER_INDEX[tier] + 1) : [tier];
+        const eligiblePackageIds = [
+          ...new Set(eligibleTiers.map((eligibleTier) => ruleByTier.get(eligibleTier))),
+        ].filter((id): id is string => Boolean(id));
+        return eligiblePackageIds.map((giftPackageId, index) => {
+          if (!packageById.has(giftPackageId) || !packageSnapshot.has(giftPackageId)) {
+            throw new Error('Published release contains an invalid tier package.');
+          }
+          return {
+            giftOrderId: order.id,
+            giftPackageId,
+            packageSnapshot: packageSnapshot.get(giftPackageId)!,
+            sortOrder: index,
+          };
+        });
       });
-    if (inserted.length === 0) return 0;
-    const candidateByMember = new Map(members.map((member) => [member.id, member] as const));
-    const orderItems = inserted.flatMap((order) => {
-      const member = candidateByMember.get(order.snapshotMemberId);
-      if (!member) throw new Error('Inserted gift order lost its snapshot member.');
-      const tier = member.tier as GuardTier;
-      const eligibleTiers =
-        release.fulfillmentMode === 'CUMULATIVE' ? TIERS.slice(0, TIER_INDEX[tier] + 1) : [tier];
-      const eligiblePackageIds = [
-        ...new Set(eligibleTiers.map((eligibleTier) => ruleByTier.get(eligibleTier))),
-      ].filter((id): id is string => Boolean(id));
-      return eligiblePackageIds.map((giftPackageId, index) => {
-        if (!packageById.has(giftPackageId) || !packageSnapshot.has(giftPackageId)) {
-          throw new Error('Published release contains an invalid tier package.');
-        }
-        return {
-          giftOrderId: order.id,
-          giftPackageId,
-          packageSnapshot: packageSnapshot.get(giftPackageId)!,
-          sortOrder: index,
-        };
-      });
-    });
-    if (orderItems.length > 0) await executor.insert(giftOrderItems).values(orderItems);
-    return inserted.length;
+      for (const batch of databaseWriteBatches(orderItems)) {
+        await executor.insert(giftOrderItems).values(batch);
+      }
+    }
+    return insertedCount;
   }
 }
