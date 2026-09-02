@@ -8,6 +8,7 @@ import { AppError } from '../../../shared/errors/app-error.js';
 import { SNAPSHOT_ATTEMPT_LIMIT } from '../../../shared/contracts/snapshots.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
+import { databaseWriteBatches } from '../../infrastructure/db/write-batches.js';
 import {
   creators,
   snapshotAttemptMembers,
@@ -36,6 +37,7 @@ const gzipAsync = promisify(gzip);
 const PAGE_SIZE = 30;
 const MAX_PAGES = 1_000;
 const MAX_MEMBERS = MAX_PAGES * PAGE_SIZE;
+const MAX_ATTEMPT_RESPONSE_BYTES = 64 * 1024 * 1024;
 const SCHEDULER_CONCURRENCY = 4;
 class CaptureFailure extends Error {
   public constructor(
@@ -60,7 +62,20 @@ interface AttemptRequest {
   readonly initiatedBy: 'ADMIN' | 'SCHEDULER';
 }
 
-function fingerprint(page: GuardRosterPage): string {
+type CapturedRosterPage = Omit<GuardRosterPage, 'rawBytes'>;
+type CapturedRosterMember = GuardRosterMember & { readonly sourcePage: number };
+
+function retainNormalizedPage(page: GuardRosterPage): CapturedRosterPage {
+  return {
+    declaredPageCount: page.declaredPageCount,
+    declaredTotal: page.declaredTotal,
+    fetchedAt: page.fetchedAt,
+    members: page.members,
+    pageNumber: page.pageNumber,
+  };
+}
+
+function fingerprint(page: Pick<GuardRosterPage, 'members'>): string {
   return page.members
     .map((member) => `${member.biliUid}:${member.rawTier}:${member.sourcePosition}`)
     .join('|');
@@ -314,7 +329,12 @@ export class SnapshotService {
     }
   }
 
-  private validatePages(pages: readonly GuardRosterPage[], recheck: GuardRosterPage) {
+  private validatePages(
+    pages: readonly CapturedRosterPage[],
+    recheck: CapturedRosterPage,
+  ): readonly (CapturedRosterMember & {
+    readonly tier: NonNullable<GuardRosterMember['tier']>;
+  })[] {
     const first = pages[0];
     if (!first) throw new CaptureFailure('MISSING_PAGE', 'The first roster page is missing.');
     if (first.declaredPageCount > MAX_PAGES) {
@@ -339,7 +359,12 @@ export class SnapshotService {
     ) {
       throw new CaptureFailure('FIRST_PAGE_DRIFT', 'The first roster page changed during capture.');
     }
-    const members = pages.flatMap((page) => [...page.members]);
+    const members = pages
+      .flatMap((page) => page.members.map((member) => ({ ...member, sourcePage: page.pageNumber })))
+      .map((member, index) => ({
+        ...member,
+        sourcePosition: member.sourcePosition || index + 1,
+      }));
     if (members.some((member) => member.tier === null)) {
       throw new CaptureFailure('UNKNOWN_TIER', 'The provider returned an unknown guard tier.');
     }
@@ -349,9 +374,26 @@ export class SnapshotService {
     if (members.length !== first.declaredTotal) {
       throw new CaptureFailure('COUNT_MISMATCH', 'The normalized roster did not match its total.');
     }
-    return members as readonly (GuardRosterMember & {
+    return members as readonly (CapturedRosterMember & {
       tier: NonNullable<GuardRosterMember['tier']>;
     })[];
+  }
+
+  private addResponseBytes(current: number, pages: readonly GuardRosterPage[]): number {
+    let next = current;
+    for (const page of pages) {
+      if (page.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
+        throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
+      }
+      next += page.rawBytes.length;
+    }
+    if (next > MAX_ATTEMPT_RESPONSE_BYTES) {
+      throw new CaptureFailure(
+        'ATTEMPT_SIZE_EXCEEDED',
+        'The roster capture exceeded its total response-size limit.',
+      );
+    }
+    return next;
   }
 
   private validateFirstPage(first: GuardRosterPage): void {
@@ -363,9 +405,6 @@ export class SnapshotService {
     }
     if (first.declaredTotal > MAX_MEMBERS) {
       throw new CaptureFailure('MEMBER_LIMIT_EXCEEDED', 'The provider declared too many members.');
-    }
-    if (first.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
-      throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
     }
   }
 
@@ -394,11 +433,14 @@ export class SnapshotService {
           roomId: run.creatorRoomId,
           signal,
         });
-      const first = await fetch(1);
-      this.validateFirstPage(first);
+      let firstResponse: GuardRosterPage | null = await fetch(1);
+      let responseBytes = this.addResponseBytes(0, [firstResponse]);
+      this.validateFirstPage(firstResponse);
       signal.throwIfAborted();
-      await this.persistPage(run.id, attemptId, first, 'PAGE');
-      const pages: GuardRosterPage[] = [first];
+      await this.persistPage(run.id, attemptId, firstResponse, 'PAGE');
+      const first = retainNormalizedPage(firstResponse);
+      firstResponse = null;
+      const pages: CapturedRosterPage[] = [first];
       for (let start = 2; start <= first.declaredPageCount; start += 4) {
         const numbers = Array.from(
           { length: Math.min(4, first.declaredPageCount - start + 1) },
@@ -406,36 +448,35 @@ export class SnapshotService {
         );
         const chunk = await Promise.all(numbers.map(fetch));
         signal.throwIfAborted();
+        responseBytes = this.addResponseBytes(responseBytes, chunk);
         for (const page of chunk) {
-          if (page.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
-            throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
-          }
           await this.persistPage(run.id, attemptId, page, 'PAGE');
         }
-        pages.push(...chunk);
+        pages.push(...chunk.map(retainNormalizedPage));
       }
-      const recheck = await fetch(1);
+      let recheckResponse: GuardRosterPage | null = await fetch(1);
       signal.throwIfAborted();
-      if (recheck.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
-        throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
-      }
-      await this.persistPage(run.id, attemptId, recheck, 'RECHECK');
+      this.addResponseBytes(responseBytes, [recheckResponse]);
+      await this.persistPage(run.id, attemptId, recheckResponse, 'RECHECK');
+      const recheck = retainNormalizedPage(recheckResponse);
+      recheckResponse = null;
       const members = this.validatePages(pages, recheck);
       signal.throwIfAborted();
       const completedAt = this.clock.now();
       await this.database.orm.transaction(async (transaction) => {
         if (members.length > 0) {
-          await transaction.insert(snapshotAttemptMembers).values(
-            members.map((member, index) => ({
-              biliUid: member.biliUid,
-              displayNameAtCapture: member.displayName,
-              rawTier: member.rawTier,
-              snapshotAttemptId: attemptId,
-              sourcePage: pages.find((page) => page.members.includes(member))?.pageNumber ?? 1,
-              sourcePosition: member.sourcePosition || index + 1,
-              tier: member.tier,
-            })),
-          );
+          const rows = members.map((member) => ({
+            biliUid: member.biliUid,
+            displayNameAtCapture: member.displayName,
+            rawTier: member.rawTier,
+            snapshotAttemptId: attemptId,
+            sourcePage: member.sourcePage,
+            sourcePosition: member.sourcePosition,
+            tier: member.tier,
+          }));
+          for (const batch of databaseWriteBatches(rows)) {
+            await transaction.insert(snapshotAttemptMembers).values(batch);
+          }
         }
         await transaction
           .update(snapshotAttempts)
@@ -448,16 +489,17 @@ export class SnapshotService {
           .where(eq(snapshotAttempts.id, attemptId));
         if (punctuality === 'ON_TIME') {
           if (members.length > 0) {
-            await transaction.insert(snapshotMembers).values(
-              members.map((member) => ({
-                biliUid: member.biliUid,
-                displayNameAtSnapshot: member.displayName,
-                rawTier: member.rawTier,
-                snapshotRunId: run.id,
-                sourcePosition: member.sourcePosition,
-                tier: member.tier,
-              })),
-            );
+            const rows = members.map((member) => ({
+              biliUid: member.biliUid,
+              displayNameAtSnapshot: member.displayName,
+              rawTier: member.rawTier,
+              snapshotRunId: run.id,
+              sourcePosition: member.sourcePosition,
+              tier: member.tier,
+            }));
+            for (const batch of databaseWriteBatches(rows)) {
+              await transaction.insert(snapshotMembers).values(batch);
+            }
           }
           await transaction
             .update(snapshotRuns)
@@ -584,16 +626,17 @@ export class SnapshotService {
         .from(snapshotAttemptMembers)
         .where(eq(snapshotAttemptMembers.snapshotAttemptId, attempt.id));
       if (candidates.length > 0) {
-        await transaction.insert(snapshotMembers).values(
-          candidates.map((member) => ({
-            biliUid: member.biliUid,
-            displayNameAtSnapshot: member.displayNameAtCapture,
-            rawTier: member.rawTier,
-            snapshotRunId: run.id,
-            sourcePosition: member.sourcePosition,
-            tier: member.tier,
-          })),
-        );
+        const rows = candidates.map((member) => ({
+          biliUid: member.biliUid,
+          displayNameAtSnapshot: member.displayNameAtCapture,
+          rawTier: member.rawTier,
+          snapshotRunId: run.id,
+          sourcePosition: member.sourcePosition,
+          tier: member.tier,
+        }));
+        for (const batch of databaseWriteBatches(rows)) {
+          await transaction.insert(snapshotMembers).values(batch);
+        }
       }
       const now = this.clock.now();
       await transaction

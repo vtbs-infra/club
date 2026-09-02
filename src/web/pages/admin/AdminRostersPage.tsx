@@ -30,6 +30,7 @@ import {
 } from '../../lib/status-presentation';
 
 const failureLabel: Readonly<Record<string, string>> = {
+  ATTEMPT_SIZE_EXCEEDED: '整次名单抓取的返回数据超过安全上限',
   CAPTURE_TIMEOUT: '名单抓取超过时间限制',
   COUNT_DRIFT: '分页期间名单总数发生变化',
   COUNT_MISMATCH: '分页汇总人数与来源声明不一致',

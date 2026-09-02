@@ -120,6 +120,32 @@ class ConcurrentEmptySource implements GuardRosterSource {
   }
 }
 
+class FixedResponseSizeSource implements GuardRosterSource {
+  public readonly name = 'fixed-response-size-fake';
+  public readonly version = '1';
+  public requests = 0;
+  private readonly bytes: Uint8Array;
+
+  public constructor(
+    private readonly pageCount: number,
+    responseBytes: number,
+  ) {
+    this.bytes = new Uint8Array(responseBytes);
+  }
+
+  public fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage> {
+    this.requests += 1;
+    return Promise.resolve({
+      declaredPageCount: this.pageCount,
+      declaredTotal: 0,
+      fetchedAt: new Date('2026-07-31T15:59:00.000Z'),
+      members: [],
+      pageNumber: input.pageNumber,
+      rawBytes: this.bytes,
+    });
+  }
+}
+
 class BlockingEmptySource implements GuardRosterSource {
   public readonly name = 'blocking-fake';
   public readonly version = '1';
@@ -237,6 +263,16 @@ integration('month-end snapshot capture', () => {
     return run!;
   }
 
+  async function augustRun(creatorId: string) {
+    const [run] = await database.orm
+      .select()
+      .from(snapshotRuns)
+      .where(
+        and(eq(snapshotRuns.creatorId, creatorId), eq(snapshotRuns.periodStart, '2026-08-01')),
+      );
+    return run!;
+  }
+
   it('pre-creates current and next runs and freezes exact cutoff fields', async () => {
     const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));
     const source = new FakeGuardRosterSource();
@@ -343,6 +379,41 @@ integration('month-end snapshot capture', () => {
       .from(auditLogs)
       .where(eq(auditLogs.action, 'snapshot.late-approved'));
     expect(audit?.action).toBe('snapshot.late-approved');
+  });
+
+  it('persists and approves a late roster beyond the PostgreSQL parameter limit', async () => {
+    const clock = new MutableClock(new Date('2026-08-31T16:00:00.000Z'));
+    const source = new FakeGuardRosterSource();
+    const expectedMembers = 10_000;
+    source.setScenario(
+      buildFakeRosterScenario(
+        Array.from({ length: expectedMembers }, (_, index) =>
+          member(String(10_000_000 + index), index + 1),
+        ),
+      ),
+    );
+    const service = new SnapshotService(database, storage.driver, source, clock);
+    const run = await augustRun(creatorIds[15]!);
+
+    await service.capture(run.id);
+    const pending = await service.queries.getDetail(run.id);
+    expect(pending.run.status).toBe('PENDING_APPROVAL');
+    const [attemptCount] = await database.orm
+      .select({ value: count() })
+      .from(snapshotAttemptMembers)
+      .where(eq(snapshotAttemptMembers.snapshotAttemptId, pending.attempts[0]!.id));
+    expect(attemptCount?.value).toBe(expectedMembers);
+
+    await service.approveLate(run.id, {
+      actorUserId: ownerId,
+      ipAddress: '127.0.0.1',
+      requestId: 'large-late-approval-test',
+    });
+    const [finalCount] = await database.orm
+      .select({ value: count() })
+      .from(snapshotMembers)
+      .where(eq(snapshotMembers.snapshotRunId, run.id));
+    expect(finalCount?.value).toBe(expectedMembers);
   });
 
   it('keeps failed attempts separate and never persists candidates before consistency', async () => {
@@ -688,6 +759,24 @@ integration('month-end snapshot capture', () => {
       failureCode: 'PAGE_LIMIT_EXCEEDED',
     });
     expect((await service.queries.getDetail(run!.id)).evidence.pageCount).toBe(0);
+  });
+
+  it('bounds total response bytes across an entire attempt', async () => {
+    const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
+    const source = new FixedResponseSizeSource(33, 2 * 1024 * 1024);
+    const service = new SnapshotService(database, storage.driver, source, clock);
+    const run = await augustRun(creatorIds[14]!);
+
+    await service.capture(run.id);
+
+    const detail = await service.queries.getDetail(run.id);
+    expect(detail.attempts[0]).toMatchObject({
+      consistencyStatus: 'INCONSISTENT',
+      failureCode: 'ATTEMPT_SIZE_EXCEEDED',
+    });
+    expect(source.requests).toBe(33);
+    expect(detail.evidence.pageCount).toBeGreaterThan(0);
+    expect(detail.evidence.pageCount).toBeLessThan(33);
   });
 
   it('records a deterministic failure when graceful shutdown cancels a capture', async () => {
