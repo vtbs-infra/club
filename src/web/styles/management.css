@@ -553,6 +553,18 @@
   min-width: 860px;
 }
 
+.active-binding-table {
+  min-width: 720px;
+}
+
+.binding-search-form {
+  justify-content: flex-end;
+}
+
+.binding-search-form .search-field {
+  min-width: min(320px, 42vw);
+}
+
 .conflict-actions {
   display: flex;
   flex-wrap: wrap;

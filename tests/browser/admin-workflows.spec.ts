@@ -1,4 +1,5 @@
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';
+import type { AdminBilibiliBindingPage } from '../../src/shared/contracts/binding.js';
 import type {
   AdminSnapshotPage,
   SnapshotAttemptMemberPage,
@@ -35,6 +36,9 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
       return { items: [], nextCursor: null };
     }
+    if (pathname === '/api/v1/admin/bilibili-bindings') {
+      return { items: [], nextCursor: null };
+    }
     if (pathname === '/api/v1/admin/announcements') return { items: [], nextCursor: null };
     if (pathname === '/api/v1/admin/system') return systemStatus();
     if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
@@ -69,6 +73,23 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
 
 test('resolves the exact binding recorded by a UID conflict', async ({ appUrl, page }) => {
   const conflict = bindingConflict();
+  const activeBindings = {
+    items: [
+      {
+        biliDisplayName: '当前B站用户',
+        biliUid: '77889900',
+        boundAt: testTime(-4),
+        id: testId(70),
+        user: {
+          email: 'owner@example.com',
+          id: testId(71),
+          name: '当前归属用户',
+          role: 'USER',
+        },
+      },
+    ],
+    nextCursor: null,
+  } satisfies AdminBilibiliBindingPage;
   let openConflicts = [conflict];
   let resolutionPayload: Record<string, unknown> | null = null;
   await mockApi(page, (request) => {
@@ -78,6 +99,7 @@ test('resolves the exact binding recorded by a UID conflict', async ({ appUrl, p
     if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
       return { items: openConflicts, nextCursor: null };
     }
+    if (pathname === '/api/v1/admin/bilibili-bindings') return activeBindings;
     if (
       pathname === `/api/v1/admin/bilibili-binding-conflicts/${conflict.id}/resolve` &&
       request.method() === 'POST'
@@ -90,6 +112,9 @@ test('resolves the exact binding recorded by a UID conflict', async ({ appUrl, p
   });
 
   await page.goto(`${appUrl}/admin/verification`);
+  await expect(page.getByRole('heading', { name: '有效的 B站 UID 归属' })).toBeVisible();
+  await expect(page.getByText('当前归属用户')).toBeVisible();
+  await expect(page.getByText('UID 77889900')).toBeVisible();
   await expect(page.getByText('申请用户', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '解除原绑定' }).click();
   const dialog = page.getByRole('dialog', { name: '解决这项 UID 冲突？' });

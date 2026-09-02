@@ -3,7 +3,10 @@ import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/server/app.js';
-import type { BindingConflictPage } from '../../src/shared/contracts/binding.js';
+import type {
+  AdminBilibiliBindingPage,
+  BindingConflictPage,
+} from '../../src/shared/contracts/binding.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
   auditLogs,
@@ -605,6 +608,74 @@ integration('platform verification rooms and Bilibili UID binding', () => {
         },
       ]),
     );
+  });
+
+  it('lets administrators page and search active binding ownership', async () => {
+    for (const [name, email, biliUid, remoteAddress, eventId] of [
+      ['Henry', 'henry@example.com', '777777771', '192.0.2.61', 'active-binding-list-henry'],
+      ['Ivy', 'ivy@example.com', '777777772', '192.0.2.62', 'active-binding-list-ivy'],
+    ] as const) {
+      await registerTestUser({ app, database, email, name });
+      const cookie = await signInTestUser({ app, email });
+      const issued = await issue(cookie, remoteAddress);
+      expect(issued.statusCode, issued.body).toBe(201);
+      const challenge = issued.json<ChallengeResponse>();
+      await source.emitMessage({
+        biliDisplayName: `${name} on Bilibili`,
+        biliUid,
+        eventId,
+        message: challenge.code,
+        roomId: challenge.room.link.split('/').at(-1)!,
+      });
+    }
+
+    const forbidden = await app.inject({
+      headers: { cookie: aliceCookie },
+      method: 'GET',
+      url: '/api/v1/admin/bilibili-bindings',
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const firstResponse = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: '/api/v1/admin/bilibili-bindings?limit=1',
+    });
+    expect(firstResponse.statusCode, firstResponse.body).toBe(200);
+    const firstPage = firstResponse.json<AdminBilibiliBindingPage>();
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.nextCursor).toBeTypeOf('string');
+
+    const secondResponse = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: `/api/v1/admin/bilibili-bindings?limit=1&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+    });
+    expect(secondResponse.statusCode, secondResponse.body).toBe(200);
+    const secondPage = secondResponse.json<AdminBilibiliBindingPage>();
+    expect(secondPage.items).toHaveLength(1);
+    expect(secondPage.items[0]?.id).not.toBe(firstPage.items[0]?.id);
+
+    const searchResponse = await app.inject({
+      headers: { cookie: adminCookie },
+      method: 'GET',
+      url: '/api/v1/admin/bilibili-bindings?search=henry%40example.com',
+    });
+    expect(searchResponse.statusCode, searchResponse.body).toBe(200);
+    expect(searchResponse.json<AdminBilibiliBindingPage>()).toMatchObject({
+      items: [
+        {
+          biliDisplayName: 'Henry on Bilibili',
+          biliUid: '777777771',
+          user: {
+            email: 'henry@example.com',
+            name: 'Henry',
+            role: 'USER',
+          },
+        },
+      ],
+      nextCursor: null,
+    });
   });
 
   it('throttles challenge creation independently by account and IP', async () => {

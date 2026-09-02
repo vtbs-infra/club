@@ -564,6 +564,7 @@ CREATE INDEX "audit_logs_actor_created_idx" ON "audit_logs" USING btree ("actor_
 CREATE UNIQUE INDEX "bilibili_bindings_challenge_unique" ON "bilibili_bindings" USING btree ("challenge_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "bilibili_bindings_active_user_unique" ON "bilibili_bindings" USING btree ("user_id") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "bilibili_bindings_active_uid_unique" ON "bilibili_bindings" USING btree ("bili_uid") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
+CREATE INDEX "bilibili_bindings_active_bound_id_idx" ON "bilibili_bindings" USING btree ("bound_at","id") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
 CREATE INDEX "bilibili_bindings_user_history_idx" ON "bilibili_bindings" USING btree ("user_id","bound_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "binding_conflicts_challenge_unique" ON "binding_conflicts" USING btree ("challenge_id");--> statement-breakpoint
 CREATE INDEX "binding_conflicts_open_created_idx" ON "binding_conflicts" USING btree ("status","created_at","id");--> statement-breakpoint

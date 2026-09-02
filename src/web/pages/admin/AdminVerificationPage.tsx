@@ -8,6 +8,7 @@ import {
   updateVerificationRoom,
   type VerificationRoom,
 } from '../../api/client';
+import { ActiveBindingList } from '../../components/ActiveBindingList';
 import { BindingConflictManager } from '../../components/BindingConflictManager';
 import {
   EmptyState,
@@ -121,10 +122,11 @@ export function AdminVerificationPage() {
           ) : undefined
         }
         eyebrow="B站验证"
-        intro="处理 UID 归属冲突，并维护平台用于一次性验证码验证的固定直播间。"
+        intro="核对当前 UID 归属、处理绑定冲突，并维护平台用于一次性验证码验证的固定直播间。"
         title="B站验证"
       />
       <BindingConflictManager />
+      <ActiveBindingList />
       {rooms.isPending ? (
         <section className="panel">
           <LoadingState label="正在读取验证直播间…" />

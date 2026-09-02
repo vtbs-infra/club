@@ -1,4 +1,5 @@
 import type {
+  AdminBilibiliBindingPage,
   BilibiliBinding,
   BilibiliChallenge,
   BindingConflictPage,
@@ -8,6 +9,8 @@ import type {
 import { apiRequest } from './http';
 
 export type {
+  AdminBilibiliBinding,
+  AdminBilibiliBindingPage,
   BilibiliBinding,
   BilibiliChallenge,
   BindingConflict,
@@ -38,6 +41,20 @@ export function getAdminBindingConflicts(cursor?: string): Promise<BindingConfli
   const parameters = new URLSearchParams({ limit: '20' });
   if (cursor) parameters.set('cursor', cursor);
   return apiRequest(`/api/v1/admin/bilibili-binding-conflicts?${parameters.toString()}`);
+}
+
+export function getAdminBilibiliBindings(
+  input: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+    readonly search?: string | undefined;
+  } = {},
+): Promise<AdminBilibiliBindingPage> {
+  const parameters = new URLSearchParams();
+  parameters.set('limit', String(input.limit ?? 50));
+  if (input.cursor) parameters.set('cursor', input.cursor);
+  if (input.search) parameters.set('search', input.search);
+  return apiRequest(`/api/v1/admin/bilibili-bindings?${parameters.toString()}`);
 }
 
 export function resolveAdminBindingConflict(

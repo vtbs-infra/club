@@ -1,6 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-import { DateTimeSchema, IdSchema, Nullable } from './common.js';
+import { AccountRoleSchema, DateTimeSchema, IdSchema, Nullable } from './common.js';
 
 export const BilibiliBindingSchema = Type.Object({
   biliDisplayName: Nullable(Type.String()),
@@ -9,6 +9,26 @@ export const BilibiliBindingSchema = Type.Object({
   id: IdSchema,
 });
 export type BilibiliBinding = Static<typeof BilibiliBindingSchema>;
+
+export const AdminBilibiliBindingSchema = Type.Object({
+  biliDisplayName: Nullable(Type.String()),
+  biliUid: Type.String(),
+  boundAt: DateTimeSchema,
+  id: IdSchema,
+  user: Type.Object({
+    email: Type.String({ format: 'email' }),
+    id: IdSchema,
+    name: Type.String(),
+    role: AccountRoleSchema,
+  }),
+});
+export type AdminBilibiliBinding = Static<typeof AdminBilibiliBindingSchema>;
+
+export const AdminBilibiliBindingPageSchema = Type.Object({
+  items: Type.Array(AdminBilibiliBindingSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type AdminBilibiliBindingPage = Static<typeof AdminBilibiliBindingPageSchema>;
 
 export const BindingConflictStatusSchema = Type.Union([
   Type.Literal('OPEN'),

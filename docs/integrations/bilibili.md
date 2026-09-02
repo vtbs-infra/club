@@ -36,6 +36,9 @@ BILIBILI_ROSTER_SOURCE=public-web
 观察到的原 Binding ID，而不是指向“该 UID 当前绑定”的活动查询。管理员只能解决或驳回
 这项记录；解决时即使原绑定已经独立解除，也不会改为操作后来建立的其他绑定。
 
+管理员可以通过有界、只读的活动绑定列表按 UID、B站昵称或平台账号前缀核对当前归属。
+该查询不提供独立的管理员解绑命令，避免绕过用户解绑、主播身份和冲突处理的不变量。
+
 ### 直播消息连接
 
 `PublicWebLiveMessageSource` 使用 `bilibili-live-danmaku` 0.7.16 完成：

@@ -151,6 +151,9 @@ export const bilibiliBindings = pgTable(
     uniqueIndex('bilibili_bindings_active_uid_unique')
       .on(table.biliUid)
       .where(sql`${table.unboundAt} is null`),
+    index('bilibili_bindings_active_bound_id_idx')
+      .on(table.boundAt, table.id)
+      .where(sql`${table.unboundAt} is null`),
     index('bilibili_bindings_user_history_idx').on(table.userId, table.boundAt),
   ],
 );

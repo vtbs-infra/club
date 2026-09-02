@@ -3035,6 +3035,28 @@
           "method": "btree",
           "with": {}
         },
+        "bilibili_bindings_active_bound_id_idx": {
+          "name": "bilibili_bindings_active_bound_id_idx",
+          "columns": [
+            {
+              "expression": "bound_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"bilibili_bindings\".\"unbound_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "bilibili_bindings_user_history_idx": {
           "name": "bilibili_bindings_user_history_idx",
           "columns": [

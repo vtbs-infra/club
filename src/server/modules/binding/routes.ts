@@ -2,6 +2,7 @@ import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync, preHandlerHookHandler } from 'fastify';
 
 import {
+  AdminBilibiliBindingPageSchema,
   BilibiliBindingSchema,
   BilibiliChallengeSchema,
   BindingConflictPageSchema,
@@ -146,6 +147,33 @@ const bindingRoutes: FastifyPluginAsync<BindingRoutesOptions> = (app, options) =
       options.conflicts.listOpen({
         ...(request.query.cursor ? { cursor: request.query.cursor } : {}),
         limit: request.query.limit ?? 50,
+      }),
+  );
+
+  app.get<{
+    Querystring: { cursor?: string; limit?: number; search?: string };
+  }>(
+    '/api/v1/admin/bilibili-bindings',
+    {
+      preHandler: requirePlatformAdmin,
+      schema: {
+        querystring: Type.Object(
+          {
+            cursor: Type.Optional(Type.String({ maxLength: 512, minLength: 1 })),
+            limit: Type.Optional(Type.Integer({ default: 50, maximum: 100, minimum: 1 })),
+            search: Type.Optional(Type.String({ maxLength: 100 })),
+          },
+          { additionalProperties: false },
+        ),
+        response: { 200: AdminBilibiliBindingPageSchema },
+        tags: ['bilibili-binding'],
+      },
+    },
+    (request) =>
+      options.service.listActive({
+        cursor: request.query.cursor,
+        limit: request.query.limit ?? 50,
+        search: request.query.search,
       }),
   );
 

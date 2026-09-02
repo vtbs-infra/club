@@ -19,6 +19,9 @@ test('loads a server-selected theme across public, shell, dropdown, and dialog s
     if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
       return { items: [], nextCursor: null };
     }
+    if (pathname === '/api/v1/admin/bilibili-bindings') {
+      return { items: [], nextCursor: null };
+    }
     if (pathname === '/api/v1/admin/system') return systemStatus();
     if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
     return undefined;

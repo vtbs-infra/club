@@ -1,6 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
 
-import { and, asc, desc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
@@ -10,6 +10,7 @@ import {
   bindingChallenges,
   bindingConflicts,
   creators,
+  users,
   verificationRooms,
 } from '../../infrastructure/db/schema/index.js';
 import { AuditService } from '../audit/audit-service.js';
@@ -20,6 +21,40 @@ import type { BindingConflictService } from './binding-conflict-service.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CHALLENGE_LIFETIME_MS = 10 * 60 * 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type ActiveBindingCursor = { readonly boundAt: string; readonly id: string };
+
+function decodeActiveBindingCursor(value: string): ActiveBindingCursor {
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    if (!parsed || typeof parsed !== 'object') throw new Error('Invalid cursor payload.');
+    const record = parsed as Record<string, unknown>;
+    if (
+      typeof record.boundAt !== 'string' ||
+      Number.isNaN(new Date(record.boundAt).getTime()) ||
+      typeof record.id !== 'string' ||
+      !UUID.test(record.id)
+    ) {
+      throw new Error('Invalid cursor values.');
+    }
+    return { boundAt: record.boundAt, id: record.id };
+  } catch {
+    throw new AppError(
+      'BILIBILI_BINDING_CURSOR_INVALID',
+      'The Bilibili binding cursor is invalid.',
+      400,
+    );
+  }
+}
+
+function encodeActiveBindingCursor(cursor: ActiveBindingCursor): string {
+  return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+}
+
+function escapedPrefix(value: string): string {
+  return `${value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
+}
 
 export function generateBindingCode(): string {
   const bytes = randomBytes(6);
@@ -207,6 +242,70 @@ export class BindingService {
     return {
       binding: binding ?? null,
       challenge: projectedChallenge,
+    };
+  }
+
+  public async listActive(input: {
+    readonly cursor?: string | undefined;
+    readonly limit: number;
+    readonly search?: string | undefined;
+  }) {
+    const cursor = input.cursor ? decodeActiveBindingCursor(input.cursor) : null;
+    const search = input.search?.trim();
+    const prefix = search ? escapedPrefix(search) : null;
+    const rows = await this.database.orm
+      .select({
+        biliDisplayName: bilibiliBindings.biliDisplayName,
+        biliUid: bilibiliBindings.biliUid,
+        boundAt: bilibiliBindings.boundAt,
+        cursorBoundAt: sql<string>`${bilibiliBindings.boundAt}::text`,
+        id: bilibiliBindings.id,
+        userEmail: users.email,
+        userId: users.id,
+        userName: users.name,
+        userRole: users.role,
+      })
+      .from(bilibiliBindings)
+      .innerJoin(users, eq(users.id, bilibiliBindings.userId))
+      .where(
+        and(
+          isNull(bilibiliBindings.unboundAt),
+          prefix
+            ? or(
+                ilike(bilibiliBindings.biliUid, prefix),
+                ilike(bilibiliBindings.biliDisplayName, prefix),
+                ilike(users.name, prefix),
+                ilike(users.email, prefix),
+              )
+            : undefined,
+          cursor
+            ? sql`(${bilibiliBindings.boundAt}, ${bilibiliBindings.id}) < (${cursor.boundAt}::timestamptz, ${cursor.id}::uuid)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(bilibiliBindings.boundAt), desc(bilibiliBindings.id))
+      .limit(input.limit + 1);
+    const hasMore = rows.length > input.limit;
+    const items = rows.slice(0, input.limit);
+    return {
+      items: items.map((row) => ({
+        biliDisplayName: row.biliDisplayName,
+        biliUid: row.biliUid,
+        boundAt: row.boundAt,
+        id: row.id,
+        user: {
+          email: row.userEmail,
+          id: row.userId,
+          name: row.userName,
+          role: row.userRole,
+        },
+      })),
+      nextCursor: hasMore
+        ? encodeActiveBindingCursor({
+            boundAt: items.at(-1)!.cursorBoundAt,
+            id: items.at(-1)!.id,
+          })
+        : null,
     };
   }
 

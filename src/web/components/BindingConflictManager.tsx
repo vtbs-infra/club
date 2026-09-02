@@ -41,6 +41,7 @@ export function BindingConflictManager() {
       closeDialog();
       setCursor(undefined);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'bilibili-bindings'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'binding-conflicts'] }),
         queryClient.invalidateQueries({ queryKey: ['admin', 'audit'] }),
       ]);
