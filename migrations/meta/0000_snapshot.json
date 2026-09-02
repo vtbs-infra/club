@@ -3820,6 +3820,33 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "snapshot_attempt_members_attempt_position_uid_idx": {
+          "name": "snapshot_attempt_members_attempt_position_uid_idx",
+          "columns": [
+            {
+              "expression": "snapshot_attempt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "bili_uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {

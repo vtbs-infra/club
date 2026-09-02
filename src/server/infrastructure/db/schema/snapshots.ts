@@ -165,6 +165,11 @@ export const snapshotAttemptMembers = pgTable(
       table.snapshotAttemptId,
       table.biliUid,
     ),
+    index('snapshot_attempt_members_attempt_position_uid_idx').on(
+      table.snapshotAttemptId,
+      table.sourcePosition,
+      table.biliUid,
+    ),
     check(
       'snapshot_attempt_members_tier_check',
       sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`,

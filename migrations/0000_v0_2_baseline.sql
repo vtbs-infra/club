@@ -580,6 +580,7 @@ CREATE INDEX "creators_created_id_idx" ON "creators" USING btree ("created_at","
 CREATE UNIQUE INDEX "verification_rooms_bili_room_id_unique" ON "verification_rooms" USING btree ("bili_room_id");--> statement-breakpoint
 CREATE INDEX "verification_rooms_selection_idx" ON "verification_rooms" USING btree ("enabled","priority");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_attempt_members_attempt_uid_unique" ON "snapshot_attempt_members" USING btree ("snapshot_attempt_id","bili_uid");--> statement-breakpoint
+CREATE INDEX "snapshot_attempt_members_attempt_position_uid_idx" ON "snapshot_attempt_members" USING btree ("snapshot_attempt_id","source_position","bili_uid");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_attempts_run_number_unique" ON "snapshot_attempts" USING btree ("snapshot_run_id","attempt_number");--> statement-breakpoint
 CREATE INDEX "snapshot_attempts_run_created_idx" ON "snapshot_attempts" USING btree ("snapshot_run_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_members_run_uid_unique" ON "snapshot_members" USING btree ("snapshot_run_id","bili_uid");--> statement-breakpoint

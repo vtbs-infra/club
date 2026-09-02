@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   approveAdminRoster,
   getAdminRoster,
+  getAdminRosterAttemptMembers,
   getAdminRosterIntegrity,
   getAdminRosterMembers,
   getAdminRosterPages,
@@ -78,8 +79,14 @@ export function AdminRostersPage() {
     attemptId && detail.data?.attempts.some((attempt) => attempt.id === attemptId)
       ? attemptId
       : (detail.data?.attempts[0]?.id ?? null);
+  const approvalAttempt =
+    detail.data?.run.status === 'PENDING_APPROVAL'
+      ? (detail.data.attempts.find(
+          (attempt) => attempt.consistencyStatus === 'CONSISTENT' && attempt.punctuality === 'LATE',
+        ) ?? null)
+      : null;
   const members = useInfiniteQuery({
-    enabled: Boolean(runId),
+    enabled: Boolean(runId && detail.data && detail.data.evidence.memberCount > 0),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       getAdminRosterMembers(runId!, {
@@ -89,8 +96,21 @@ export function AdminRostersPage() {
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     queryKey: ['admin', 'rosters', runId, 'members', memberSearch],
   });
+  const approvalMembers = useInfiniteQuery({
+    enabled: Boolean(runId && approvalAttempt),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      getAdminRosterAttemptMembers(runId!, approvalAttempt!.id, {
+        cursor: pageParam,
+        search: memberSearch || undefined,
+      }),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    queryKey: ['admin', 'rosters', runId, 'attempts', approvalAttempt?.id, 'members', memberSearch],
+  });
   const pages = useInfiniteQuery({
-    enabled: Boolean(runId && selectedAttemptId),
+    enabled: Boolean(
+      runId && selectedAttemptId && detail.data && detail.data.evidence.pageCount > 0,
+    ),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       getAdminRosterPages(runId!, selectedAttemptId!, { cursor: pageParam }),
@@ -143,7 +163,23 @@ export function AdminRostersPage() {
     },
   });
   const rosterItems = rosters.data?.pages.flatMap((page) => page.items) ?? [];
-  const memberItems = members.data?.pages.flatMap((page) => page.items) ?? [];
+  const finalizedMemberItems =
+    members.data?.pages.flatMap((page) =>
+      page.items.map((member) => ({
+        ...member,
+        displayName: member.displayNameAtSnapshot,
+      })),
+    ) ?? [];
+  const approvalMemberItems =
+    approvalMembers.data?.pages.flatMap((page) =>
+      page.items.map((member) => ({
+        ...member,
+        displayName: member.displayNameAtCapture,
+      })),
+    ) ?? [];
+  const showingApprovalMembers = approvalAttempt !== null;
+  const memberItems = showingApprovalMembers ? approvalMemberItems : finalizedMemberItems;
+  const memberQuery = showingApprovalMembers ? approvalMembers : members;
   const evidencePages = pages.data?.pages.flatMap((page) => page.items) ?? [];
   const selectRun = (id: string) => {
     retry.reset();
@@ -263,13 +299,18 @@ export function AdminRostersPage() {
                   <div>
                     <strong>这是一次迟到但一致的抓取</strong>
                     <p>
-                      确认后，该次返回名单将成为不可变的月度资格快照，并触发已发布礼物的礼物单生成。
+                      请先核对下方的待确认成员。确认后，该次返回名单将成为不可变的月度资格快照，并触发已发布礼物的礼物单生成。
                     </p>
                   </div>
                   <div>
                     <button
                       className="button primary"
-                      disabled={decisionPending}
+                      disabled={
+                        decisionPending ||
+                        !approvalAttempt ||
+                        approvalMembers.isPending ||
+                        approvalMembers.isError
+                      }
                       onClick={() => {
                         approve.reset();
                         reject.reset();
@@ -380,12 +421,16 @@ export function AdminRostersPage() {
                   )}
                 </div>
               </div>
-              {detail.data.evidence.memberCount > 0 ? (
+              {showingApprovalMembers || detail.data.evidence.memberCount > 0 ? (
                 <div className="stack-md">
                   <div className="section-heading compact">
                     <div>
-                      <h3>定稿成员</h3>
-                      <p>{detail.data.evidence.memberCount} 个不可变资格成员</p>
+                      <h3>{showingApprovalMembers ? '待确认成员' : '定稿成员'}</h3>
+                      <p>
+                        {showingApprovalMembers
+                          ? `第 ${approvalAttempt.attemptNumber} 次抓取的 ${approvalAttempt.normalizedTotal ?? 0} 个候选资格成员`
+                          : `${detail.data.evidence.memberCount} 个不可变资格成员`}
+                      </p>
                     </div>
                     <form
                       className="compact-search"
@@ -407,17 +452,19 @@ export function AdminRostersPage() {
                       </button>
                     </form>
                   </div>
-                  {members.isPending ? (
+                  {memberQuery.isPending ? (
                     <LoadingState label="正在读取名单成员…" />
-                  ) : members.isError ? (
-                    <ErrorNotice error={members.error} />
+                  ) : memberQuery.isError ? (
+                    <ErrorNotice error={memberQuery.error} />
                   ) : memberItems.length === 0 ? (
                     <p className="quiet-line">没有符合当前搜索条件的成员。</p>
                   ) : (
                     <>
                       <div className="table-scroll">
                         <table className="data-table">
-                          <caption className="sr-only">月度名单定稿成员</caption>
+                          <caption className="sr-only">
+                            {showingApprovalMembers ? '月度名单待确认成员' : '月度名单定稿成员'}
+                          </caption>
                           <thead>
                             <tr>
                               <th>序号</th>
@@ -433,7 +480,7 @@ export function AdminRostersPage() {
                                 <td>
                                   <code>{member.biliUid}</code>
                                 </td>
-                                <td>{member.displayNameAtSnapshot ?? '—'}</td>
+                                <td>{member.displayName || '—'}</td>
                                 <td>
                                   {member.tier === 'CAPTAIN'
                                     ? '舰长'
@@ -446,15 +493,15 @@ export function AdminRostersPage() {
                           </tbody>
                         </table>
                       </div>
-                      {members.hasNextPage ? (
+                      {memberQuery.hasNextPage ? (
                         <div className="list-actions">
                           <button
                             className="button secondary"
-                            disabled={members.isFetchingNextPage}
-                            onClick={() => void members.fetchNextPage()}
+                            disabled={memberQuery.isFetchingNextPage}
+                            onClick={() => void memberQuery.fetchNextPage()}
                             type="button"
                           >
-                            {members.isFetchingNextPage ? '正在加载…' : '加载更多成员'}
+                            {memberQuery.isFetchingNextPage ? '正在加载…' : '加载更多成员'}
                           </button>
                         </div>
                       ) : null}

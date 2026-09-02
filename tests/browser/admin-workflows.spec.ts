@@ -1,4 +1,9 @@
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';
+import type {
+  AdminSnapshotPage,
+  SnapshotAttemptMemberPage,
+  SnapshotDetail,
+} from '../../src/shared/contracts/snapshots.js';
 
 import { mockApi, requestJsonObject, requestPath } from './support/api.js';
 import {
@@ -93,6 +98,92 @@ test('resolves the exact binding recorded by a UID conflict', async ({ appUrl, p
 
   await expect.poll(() => resolutionPayload).toEqual({ reason: '已核对 UID 归属证明' });
   await expect(page.getByText('当前没有待处理的绑定冲突。')).toBeVisible();
+});
+
+test('shows the exact late-attempt members before approval', async ({ appUrl, page }) => {
+  const creatorId = testId(60);
+  const runId = testId(61);
+  const attemptId = testId(62);
+  const run = {
+    acceptedAttemptId: null,
+    approvedAt: null,
+    approvedBy: null,
+    createdAt: testTime(-2),
+    creatorBilibiliUid: '90001',
+    creatorId,
+    creatorRoomId: '80001',
+    cutoffTimezone: 'Asia/Shanghai',
+    finalizedAt: null,
+    id: runId,
+    onTimeWindowEndAt: testTime(-1),
+    periodStart: '2026-08-01',
+    scheduledCutoffAt: testTime(-1),
+    status: 'PENDING_APPROVAL' as const,
+    updatedAt: testTime(),
+  };
+  const attempt = {
+    attemptNumber: 1,
+    captureCompletedAt: testTime(),
+    captureStartedAt: testTime(),
+    consistencyStatus: 'CONSISTENT' as const,
+    createdAt: testTime(),
+    declaredTotal: 1,
+    failureCode: null,
+    failureMessage: null,
+    id: attemptId,
+    initiatedBy: 'SCHEDULER' as const,
+    normalizedTotal: 1,
+    punctuality: 'LATE' as const,
+    requestedByUserId: null,
+    schedulerStartedAt: testTime(),
+    snapshotRunId: runId,
+    sourceName: 'test',
+    sourceVersion: '1',
+  };
+  const rosterPage = {
+    items: [{ creator: { displayName: '候选主播', id: creatorId }, run }],
+    nextCursor: null,
+  } satisfies AdminSnapshotPage;
+  const detail = {
+    attempts: [attempt],
+    creator: { displayName: '候选主播', id: creatorId },
+    evidence: { memberCount: 0, pageCount: 0 },
+    retry: { canRetry: false, remainingAttempts: 2 },
+    run,
+  } satisfies SnapshotDetail;
+  const candidates = {
+    items: [
+      {
+        biliUid: '10001',
+        createdAt: testTime(),
+        displayNameAtCapture: '待确认舰长',
+        id: testId(63),
+        rawTier: '3',
+        snapshotAttemptId: attemptId,
+        sourcePage: 1,
+        sourcePosition: 1,
+        tier: 'CAPTAIN',
+      },
+    ],
+    nextCursor: null,
+  } satisfies SnapshotAttemptMemberPage;
+  await mockApi(page, (request) => {
+    const pathname = requestPath(request);
+    if (pathname === '/api/v1/me') return adminIdentity();
+    if (pathname === '/api/v1/admin/rosters') return rosterPage;
+    if (pathname === `/api/v1/admin/rosters/${runId}`) return detail;
+    if (pathname === `/api/v1/admin/rosters/${runId}/attempts/${attemptId}/members`) {
+      return candidates;
+    }
+    return undefined;
+  });
+
+  await page.goto(`${appUrl}/admin/rosters`);
+  await page.getByRole('button', { name: /候选主播/ }).click();
+  await expect(page.getByRole('heading', { name: '待确认成员' })).toBeVisible();
+  await expect(page.getByText('待确认舰长')).toBeVisible();
+  await page.getByRole('button', { name: '确认并冻结' }).click();
+  await expect(page.getByRole('dialog', { name: '确认冻结这次迟到名单？' })).toBeVisible();
 });
 
 test('registers a creator from verified identity without editable Bilibili fields', async ({

@@ -5,6 +5,7 @@ import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
 import {
   AdminSnapshotPageSchema,
   CreatorSnapshotDetailSchema,
+  SnapshotAttemptMemberPageSchema,
   SnapshotDetailSchema,
   SnapshotIntegrityResultPageSchema,
   SnapshotMemberPageSchema,
@@ -157,6 +158,36 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
         limit: request.query.limit ?? 50,
         search: request.query.search,
       }),
+  );
+
+  app.get<{
+    Params: { snapshotAttemptId: string; snapshotRunId: string };
+    Querystring: { cursor?: string; limit?: number; search?: string };
+  }>(
+    '/api/v1/admin/rosters/:snapshotRunId/attempts/:snapshotAttemptId/members',
+    {
+      preHandler: requireAdmin,
+      schema: {
+        params: AttemptParameters,
+        querystring: Type.Object({
+          cursor: Type.Optional(Type.String({ maxLength: 1_000 })),
+          limit: Type.Optional(Type.Integer({ maximum: 100, minimum: 1 })),
+          search: Type.Optional(Type.String({ maxLength: 80 })),
+        }),
+        response: { 200: SnapshotAttemptMemberPageSchema },
+        tags: ['admin-rosters'],
+      },
+    },
+    (request) =>
+      options.service.queries.listAttemptMembers(
+        request.params.snapshotRunId,
+        request.params.snapshotAttemptId,
+        {
+          cursor: request.query.cursor,
+          limit: request.query.limit ?? 50,
+          search: request.query.search,
+        },
+      ),
   );
 
   app.get<{

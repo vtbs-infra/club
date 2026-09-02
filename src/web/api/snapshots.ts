@@ -1,6 +1,7 @@
 import type {
   AdminSnapshot,
   AdminSnapshotPage,
+  SnapshotAttemptMemberPage,
   SnapshotDetail,
   SnapshotIntegrityResult,
   SnapshotIntegrityResultPage,
@@ -14,6 +15,7 @@ import { apiRequest } from './http';
 export type {
   AdminSnapshot,
   AdminSnapshotPage,
+  SnapshotAttemptMemberPage,
   SnapshotDetail,
   SnapshotIntegrityResult,
   SnapshotIntegrityResultPage,
@@ -73,6 +75,20 @@ export function getAdminRosterPages(
 ): Promise<SnapshotPagePage> {
   return apiRequest(
     `/api/v1/admin/rosters/${snapshotRunId}/attempts/${snapshotAttemptId}/pages${pageQuery(input)}`,
+  );
+}
+
+export function getAdminRosterAttemptMembers(
+  snapshotRunId: string,
+  snapshotAttemptId: string,
+  input: {
+    readonly cursor?: string | undefined;
+    readonly limit?: number | undefined;
+    readonly search?: string | undefined;
+  } = {},
+): Promise<SnapshotAttemptMemberPage> {
+  return apiRequest(
+    `/api/v1/admin/rosters/${snapshotRunId}/attempts/${snapshotAttemptId}/members${pageQuery(input)}`,
   );
 }
 

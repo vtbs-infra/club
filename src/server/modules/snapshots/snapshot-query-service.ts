@@ -10,6 +10,7 @@ import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   creators,
+  snapshotAttemptMembers,
   snapshotAttempts,
   snapshotMembers,
   snapshotPages,
@@ -352,6 +353,57 @@ export class SnapshotQueryService {
       .limit(1);
     if (!attempt)
       throw new AppError('SNAPSHOT_ATTEMPT_NOT_FOUND', 'Snapshot attempt not found.', 404);
+  }
+
+  public async listAttemptMembers(
+    runId: string,
+    attemptId: string,
+    input: {
+      readonly cursor?: string | undefined;
+      readonly limit: number;
+      readonly search?: string | undefined;
+    },
+  ) {
+    await this.assertAttempt(runId, attemptId);
+    const cursor = input.cursor ? decodeMemberCursor(input.cursor) : null;
+    const search = input.search?.trim();
+    const prefix = search ? escapedPrefix(search) : null;
+    const rows = await this.database.orm
+      .select()
+      .from(snapshotAttemptMembers)
+      .where(
+        and(
+          eq(snapshotAttemptMembers.snapshotAttemptId, attemptId),
+          prefix
+            ? or(
+                ilike(snapshotAttemptMembers.biliUid, prefix),
+                ilike(snapshotAttemptMembers.displayNameAtCapture, prefix),
+              )
+            : undefined,
+          cursor
+            ? or(
+                gt(snapshotAttemptMembers.sourcePosition, cursor.sourcePosition),
+                and(
+                  eq(snapshotAttemptMembers.sourcePosition, cursor.sourcePosition),
+                  gt(snapshotAttemptMembers.biliUid, cursor.biliUid),
+                ),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(asc(snapshotAttemptMembers.sourcePosition), asc(snapshotAttemptMembers.biliUid))
+      .limit(input.limit + 1);
+    const hasMore = rows.length > input.limit;
+    const items = rows.slice(0, input.limit);
+    return {
+      items,
+      nextCursor: hasMore
+        ? encodeCursor({
+            biliUid: items.at(-1)!.biliUid,
+            sourcePosition: items.at(-1)!.sourcePosition,
+          })
+        : null,
+    };
   }
 
   public async listPages(

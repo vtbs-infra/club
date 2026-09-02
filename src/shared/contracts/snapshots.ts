@@ -91,6 +91,18 @@ export const SnapshotMemberSchema = Type.Object({
   tier: GuardTierSchema,
 });
 
+export const SnapshotAttemptMemberSchema = Type.Object({
+  biliUid: Type.String(),
+  createdAt: DateTimeSchema,
+  displayNameAtCapture: Type.String(),
+  id: IdSchema,
+  rawTier: Type.String(),
+  snapshotAttemptId: IdSchema,
+  sourcePage: Type.Integer({ minimum: 1 }),
+  sourcePosition: Type.Integer({ minimum: 1 }),
+  tier: GuardTierSchema,
+});
+
 export const SnapshotRetryPolicySchema = Type.Object({
   canRetry: Type.Boolean(),
   remainingAttempts: Type.Integer({ maximum: SNAPSHOT_ATTEMPT_LIMIT, minimum: 0 }),
@@ -142,6 +154,12 @@ export const SnapshotMemberPageSchema = Type.Object({
   nextCursor: Nullable(Type.String()),
 });
 export type SnapshotMemberPage = Static<typeof SnapshotMemberPageSchema>;
+
+export const SnapshotAttemptMemberPageSchema = Type.Object({
+  items: Type.Array(SnapshotAttemptMemberSchema),
+  nextCursor: Nullable(Type.String()),
+});
+export type SnapshotAttemptMemberPage = Static<typeof SnapshotAttemptMemberPageSchema>;
 
 export const SnapshotPagePageSchema = Type.Object({
   items: Type.Array(SnapshotPageSchema),

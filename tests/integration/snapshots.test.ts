@@ -403,6 +403,26 @@ integration('month-end snapshot capture', () => {
       .from(snapshotAttemptMembers)
       .where(eq(snapshotAttemptMembers.snapshotAttemptId, pending.attempts[0]!.id));
     expect(attemptCount?.value).toBe(expectedMembers);
+    const firstCandidates = await service.queries.listAttemptMembers(
+      run.id,
+      pending.attempts[0]!.id,
+      { limit: 100 },
+    );
+    const secondCandidates = await service.queries.listAttemptMembers(
+      run.id,
+      pending.attempts[0]!.id,
+      { cursor: firstCandidates.nextCursor!, limit: 100 },
+    );
+    expect(firstCandidates.items).toHaveLength(100);
+    expect(secondCandidates.items[0]!.sourcePosition).toBeGreaterThan(
+      firstCandidates.items.at(-1)!.sourcePosition,
+    );
+    const searchedCandidates = await service.queries.listAttemptMembers(
+      run.id,
+      pending.attempts[0]!.id,
+      { limit: 100, search: '10000042' },
+    );
+    expect(searchedCandidates.items.map((candidate) => candidate.biliUid)).toEqual(['10000042']);
 
     await service.approveLate(run.id, {
       actorUserId: ownerId,
