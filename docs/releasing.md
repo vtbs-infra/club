@@ -22,8 +22,8 @@ Club 使用语义化版本，Git Tag 格式为 `vMAJOR.MINOR.PATCH`。`package.j
 替代备份记录中的版本或 Digest。
 
 GHCR Package 必须设置为 Public，并关联 `vtbs-infra/club` 仓库。首次创建 Package 后需要
-在 GitHub Package 设置中确认公开可见性，并在未登录状态执行一次 `docker pull`；发布
-Token 不负责更改组织的 Package 可见性。
+在 GitHub Package 设置中确认公开可见性，并在未登录状态使用 `docker pull` 或
+`podman pull` 验证；发布 Token 不负责更改组织的 Package 可见性。
 
 ## 发布准备
 
@@ -53,7 +53,12 @@ pnpm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 pnpm test:browser
+
+# Docker
 docker compose build --no-cache app
+
+# Podman
+podman compose build --no-cache app
 ```
 
 必须确认：

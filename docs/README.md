@@ -28,4 +28,7 @@
 应用进程同时提供 Web、API、B站直播间连接、月度名单任务和物流刷新 Runtime。部署多个活动
 应用实例、外部对象存储和第三方主题不属于当前支持范围。
 
+容器部署同时支持 Docker Compose v2 与 Podman Compose；两种运行时共用仓库根目录的
+`compose.yaml`，但同一实例不得混用运行时。
+
 运行中的实例在 `/openapi.json` 提供 OpenAPI 3.1 文档。

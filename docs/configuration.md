@@ -1,7 +1,8 @@
 # Club 配置参考
 
 Club 从进程环境变量读取配置。本地开发时 `src/server/config/load-local-env.ts` 会加载
-仓库根目录的 `.env`；Docker Compose 同样读取 `.env` 并显式传入容器。
+仓库根目录的 `.env`；Docker Compose 与 Podman Compose 同样读取 `.env` 并显式传入
+容器。
 
 复制模板：
 
@@ -42,7 +43,12 @@ Better Auth 会拒绝请求并返回 `Invalid origin`。
 生产迁移：
 
 ```powershell
+# Docker
 docker compose run --rm app `
+  node dist/server/server/infrastructure/db/migrate.js
+
+# Podman
+podman compose run --rm app `
   node dist/server/server/infrastructure/db/migrate.js
 ```
 
@@ -146,7 +152,7 @@ COMPOSE_DATABASE_URL=postgres://club:...@postgres:5432/club
 ```
 
 `CLUB_IMAGE` 应使用精确版本 Tag 或 Digest。删除该变量后，开发者可以通过
-`docker compose build app` 构建当前检出的源码。
+`docker compose build app` 或 `podman compose build app` 构建当前检出的源码。
 
 应用容器固定使用 `NODE_ENV=production`、`HOST=0.0.0.0`、
 `STORAGE_DRIVER=local` 和 `/data/club`。
@@ -160,7 +166,14 @@ COMPOSE_DATABASE_URL=postgres://club:...@postgres:5432/club
 | `CLUB_ADMIN_PASSWORD` | 管理员初始密码 |
 
 ```powershell
+# Docker
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
+  node dist/server/server/cli.js admin:create `
+  --email admin@example.com `
+  --name Admin
+
+# Podman
+podman compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
   node dist/server/server/cli.js admin:create `
   --email admin@example.com `
   --name Admin
