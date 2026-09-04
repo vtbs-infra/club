@@ -181,7 +181,7 @@ CREATE TABLE "gift_orders" (
 	"version" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "gift_orders_number_format_check" CHECK ("gift_orders"."order_number" ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{8}$'),
+	CONSTRAINT "gift_orders_number_format_check" CHECK ("gift_orders"."order_number" ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{32}$'),
 	CONSTRAINT "gift_orders_status_check" CHECK ("gift_orders"."status" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')),
 	CONSTRAINT "gift_orders_tier_check" CHECK ("gift_orders"."tier" in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')),
 	CONSTRAINT "gift_orders_version_positive" CHECK ("gift_orders"."version" > 0)

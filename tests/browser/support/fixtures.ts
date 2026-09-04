@@ -110,7 +110,7 @@ export function giftOrder(overrides: GiftOrderOverrides = {}): GiftOrder {
         name: '舰长礼物',
       },
     ],
-    orderNumber: 'G202607-TEST0001',
+    orderNumber: 'G202607-00000000000000000000000000000001',
     release: {
       claimDeadlineAt: testTime(30),
       claimStartAt: testTime(-30),

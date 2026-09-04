@@ -849,7 +849,18 @@ integration('gift order lifecycle', () => {
       .from(giftOrderItems)
       .innerJoin(giftOrders, eq(giftOrders.id, giftOrderItems.giftOrderId))
       .where(eq(giftOrders.giftReleaseId, release.id));
+    const [sampleOrder] = await database.orm
+      .select({ id: giftOrders.id, orderNumber: giftOrders.orderNumber })
+      .from(giftOrders)
+      .where(eq(giftOrders.giftReleaseId, release.id))
+      .limit(1);
     expect(orderCount?.value).toBe(expectedOrders);
     expect(itemCount?.value).toBe(expectedOrders * 3);
+    if (!sampleOrder) throw new Error('Expected a generated gift order.');
+    expect(sampleOrder.orderNumber).toBe(
+      `G${eligibilityMonth.slice(0, 7).replace('-', '')}-${sampleOrder.id
+        .replaceAll('-', '')
+        .toUpperCase()}`,
+    );
   });
 });

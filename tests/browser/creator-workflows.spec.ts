@@ -94,7 +94,10 @@ test('exports submitted orders by release without changing the active list filte
       creator: { id: testId(32) },
       id,
       items: [],
-      orderNumber: status === 'SUBMITTED' ? 'G-SUBMITTED' : 'G-SHIPPED',
+      orderNumber:
+        status === 'SUBMITTED'
+          ? 'G202607-00000000000000000000000000000003'
+          : 'G202607-00000000000000000000000000000004',
       release: {
         claimDeadlineAt: release.claimDeadlineAt,
         claimStartAt: release.claimStartAt,

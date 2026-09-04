@@ -112,24 +112,29 @@ export class GiftEligibilityService {
     let insertedCount = 0;
     for (const memberBatch of databaseWriteBatches(members)) {
       const memberById = new Map(memberBatch.map((member) => [member.id, member] as const));
-      const candidates = memberBatch.map((member) => ({
-        biliDisplayName: member.displayNameAtSnapshot,
-        biliUid: member.biliUid,
-        creatorId: release.creatorId,
-        expiresAt: release.claimDeadlineAt,
-        giftReleaseId: release.id,
-        id: randomUUID(),
-        orderNumber: `G${release.eligibilityMonth.slice(0, 7).replace('-', '')}-${randomUUID()
-          .slice(0, 8)
-          .toUpperCase()}`,
-        snapshotMemberId: member.id,
-        tier: member.tier,
-        userId: null,
-      }));
+      const candidates = memberBatch.map((member) => {
+        const id = randomUUID();
+        return {
+          biliDisplayName: member.displayNameAtSnapshot,
+          biliUid: member.biliUid,
+          creatorId: release.creatorId,
+          expiresAt: release.claimDeadlineAt,
+          giftReleaseId: release.id,
+          id,
+          orderNumber: `G${release.eligibilityMonth.slice(0, 7).replace('-', '')}-${id
+            .replaceAll('-', '')
+            .toUpperCase()}`,
+          snapshotMemberId: member.id,
+          tier: member.tier,
+          userId: null,
+        };
+      });
       const inserted = await executor
         .insert(giftOrders)
         .values(candidates)
-        .onConflictDoNothing()
+        .onConflictDoNothing({
+          target: [giftOrders.giftReleaseId, giftOrders.snapshotMemberId],
+        })
         .returning({
           id: giftOrders.id,
           snapshotMemberId: giftOrders.snapshotMemberId,

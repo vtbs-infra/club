@@ -365,9 +365,14 @@
   align-items: center;
   color: var(--muted);
   display: flex;
+  flex-wrap: wrap;
   font-size: 0.78rem;
   gap: 0.65rem;
   margin-bottom: 1rem;
+}
+
+.detail-status-row > span {
+  overflow-wrap: anywhere;
 }
 
 .detail-copy h1 {
@@ -405,6 +410,7 @@
 .detail-grid dd {
   font-size: 0.86rem;
   font-weight: 750;
+  overflow-wrap: anywhere;
 }
 
 .package-list {

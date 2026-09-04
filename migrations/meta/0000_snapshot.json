@@ -1859,7 +1859,7 @@
       "checkConstraints": {
         "gift_orders_number_format_check": {
           "name": "gift_orders_number_format_check",
-          "value": "\"gift_orders\".\"order_number\" ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{8}$'"
+          "value": "\"gift_orders\".\"order_number\" ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{32}$'"
         },
         "gift_orders_status_check": {
           "name": "gift_orders_status_check",

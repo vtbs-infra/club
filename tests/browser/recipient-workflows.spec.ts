@@ -72,7 +72,7 @@ test('uses the default address and real radio choice when claiming a gift', asyn
   const currentGift = () =>
     giftOrder({
       id: giftOrderId,
-      orderNumber: 'G202607-CLAIM001',
+      orderNumber: 'G202607-00000000000000000000000000000002',
       release: {
         description: '默认地址领取测试',
         formFields: [

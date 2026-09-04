@@ -41,7 +41,7 @@ type GiftOrderCursor = { readonly orderNumber: string };
 type FulfillmentReleaseCursor = { readonly eligibilityMonth: string; readonly id: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const GIFT_ORDER_NUMBER = /^G\d{4}(0[1-9]|1[0-2])-[0-9A-F]{8}$/;
+const GIFT_ORDER_NUMBER = /^G\d{4}(0[1-9]|1[0-2])-[0-9A-F]{32}$/;
 const ELIGIBILITY_MONTH = /^\d{4}-(0[1-9]|1[0-2])-01$/;
 
 function decodeGiftOrderCursor(value: string, code: string): GiftOrderCursor {

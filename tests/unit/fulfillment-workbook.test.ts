@@ -39,7 +39,7 @@ describe('fulfillment workbook', () => {
           biliDisplayName: '@昵称',
           biliUid: '0011001',
           optionValues: { color: '蓝色', signed: true },
-          orderNumber: 'G-00001',
+          orderNumber: 'G202607-00000000000000000000000000000005',
           packages: [
             {
               items: [{ name: '徽章', quantity: 1 }],
