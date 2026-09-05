@@ -5,7 +5,7 @@ import type { GiftOrderStatus } from '../../infrastructure/db/schema/index.js';
 import type { EncryptionKeyRing } from '../../infrastructure/encryption/key-ring.js';
 import type { AddressService } from '../addresses/address-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
-import type { TrackingProvider } from '../fulfillment/tracking-provider.js';
+import type { ShipGiftInput, CorrectShippingInput } from '../../../shared/contracts/gifts.js';
 import { GiftClaimService } from './claim-service.js';
 import { GiftFulfillmentExportService } from './fulfillment-export-service.js';
 import { GiftFulfillmentService } from './fulfillment-service.js';
@@ -28,12 +28,11 @@ export class GiftOrderService {
     database: DatabaseService,
     encryption: EncryptionKeyRing,
     addresses: AddressService,
-    trackingProvider: TrackingProvider | null,
     clock: Clock,
   ) {
     this.claims = new GiftClaimService(database, encryption, addresses, clock);
     this.exporter = new GiftFulfillmentExportService(database, encryption, clock);
-    this.fulfillment = new GiftFulfillmentService(database, trackingProvider, clock);
+    this.fulfillment = new GiftFulfillmentService(database, clock);
     this.queries = new GiftOrderQueryService(database, encryption, clock);
   }
 
@@ -105,10 +104,6 @@ export class GiftOrderService {
     return this.exporter.exportRelease(creator, releaseId, context);
   }
 
-  public complete(creatorId: string, orderId: string, context: RequestAuditContext) {
-    return this.fulfillment.complete(creatorId, orderId, context);
-  }
-
   public cancel(creatorId: string, orderId: string, reason: string, context: RequestAuditContext) {
     return this.fulfillment.cancel(creatorId, orderId, reason, context);
   }
@@ -116,15 +111,19 @@ export class GiftOrderService {
   public async ship(
     creatorId: string,
     orderId: string,
-    input: {
-      readonly carrierCode: string;
-      readonly carrierName: string;
-      readonly trackingNumber: string;
-      readonly trackingUrl?: string | null;
-    },
+    input: ShipGiftInput,
     context: RequestAuditContext,
   ) {
     await this.fulfillment.ship(creatorId, orderId, input, context);
+    return this.queries.getForCreator(creatorId, orderId, context);
+  }
+  public async correctShipping(
+    creatorId: string,
+    orderId: string,
+    input: CorrectShippingInput,
+    context: RequestAuditContext,
+  ) {
+    await this.fulfillment.correctShipping(creatorId, orderId, input, context);
     return this.queries.getForCreator(creatorId, orderId, context);
   }
 }

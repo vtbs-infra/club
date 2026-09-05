@@ -1,10 +1,8 @@
-import { and, count, desc, eq, isNotNull } from 'drizzle-orm';
+import { count, desc, eq, isNotNull } from 'drizzle-orm';
 
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
-  giftOrders,
-  shipments,
   snapshotAttempts,
   snapshotPages,
   snapshotRuns,
@@ -12,8 +10,6 @@ import {
 } from '../../infrastructure/db/schema/index.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import type { BindingRuntime } from '../binding/binding-runtime.js';
-import type { FulfillmentRuntime } from '../fulfillment/fulfillment-runtime.js';
-import { trackingRefreshDueCondition } from '../fulfillment/tracking-refresh-policy.js';
 import type { GiftMediaRuntime } from '../gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 
@@ -21,7 +17,6 @@ interface SystemStatusServiceOptions {
   readonly clock: Clock;
   readonly database: DatabaseService;
   readonly bindingRuntime: BindingRuntime;
-  readonly fulfillmentRuntime: FulfillmentRuntime;
   readonly giftMediaRuntime: GiftMediaRuntime;
   readonly snapshotRuntime: SnapshotRuntime;
   readonly storage: StorageDriver;
@@ -48,7 +43,6 @@ export class SystemStatusService {
     };
     const bindingRuntime = this.options.bindingRuntime.getStatus();
     const snapshotRuntime = this.options.snapshotRuntime.getStatus();
-    const fulfillmentRuntime = this.options.fulfillmentRuntime.getStatus();
     const giftMediaRuntime = this.options.giftMediaRuntime.getStatus();
     if (checks.database === 'down') {
       return {
@@ -60,44 +54,17 @@ export class SystemStatusService {
           binding: bindingRuntime,
           media: giftMediaRuntime,
           roster: snapshotRuntime,
-          tracking: fulfillmentRuntime,
         },
-        shipmentProgressCounts: {},
         snapshotRunCounts: {},
         status: 'degraded' as const,
-        trackingDueCount: 0,
-        trackingExceptionCount: 0,
         version: this.options.version,
       };
     }
-    const now = this.options.clock.now();
-    const [
-      runCounts,
-      shipmentProgressCounts,
-      trackingDue,
-      trackingExceptions,
-      failures,
-      rooms,
-      pageRows,
-    ] = await Promise.all([
+    const [runCounts, failures, rooms, pageRows] = await Promise.all([
       this.options.database.orm
         .select({ status: snapshotRuns.status, value: count() })
         .from(snapshotRuns)
         .groupBy(snapshotRuns.status),
-      this.options.database.orm
-        .select({ status: shipments.progress, value: count() })
-        .from(shipments)
-        .groupBy(shipments.progress),
-      this.options.database.orm
-        .select({ value: count() })
-        .from(shipments)
-        .innerJoin(giftOrders, eq(giftOrders.id, shipments.giftOrderId))
-        .where(trackingRefreshDueCondition(now)),
-      this.options.database.orm
-        .select({ value: count() })
-        .from(shipments)
-        .innerJoin(giftOrders, eq(giftOrders.id, shipments.giftOrderId))
-        .where(and(eq(giftOrders.status, 'SHIPPED'), isNotNull(shipments.exceptionMessage))),
       this.options.database.orm
         .select({
           createdAt: snapshotAttempts.createdAt,
@@ -158,15 +125,13 @@ export class SystemStatusService {
         binding: bindingRuntime,
         media: giftMediaRuntime,
         roster: snapshotRuntime,
-        tracking: fulfillmentRuntime,
       },
-      shipmentProgressCounts: countRecord(shipmentProgressCounts),
       snapshotRunCounts: countRecord(runCounts),
       status:
         checks.schema === 'down' ||
         checks.storage === 'down' ||
         integrityWarnings.length > 0 ||
-        [bindingRuntime, giftMediaRuntime, snapshotRuntime, fulfillmentRuntime].some(
+        [bindingRuntime, giftMediaRuntime, snapshotRuntime].some(
           (runtime) => runtime.state !== 'RUNNING',
         ) ||
         rooms.some((room) => room.enabled && room.healthStatus === 'UNHEALTHY')
@@ -174,8 +139,6 @@ export class SystemStatusService {
           : rooms.every((room) => !room.enabled)
             ? ('needs_setup' as const)
             : ('ok' as const),
-      trackingDueCount: trackingDue[0]?.value ?? 0,
-      trackingExceptionCount: trackingExceptions[0]?.value ?? 0,
       version: this.options.version,
     };
   }

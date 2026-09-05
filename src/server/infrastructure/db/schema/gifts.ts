@@ -15,12 +15,7 @@ import {
 
 import { users } from './auth.js';
 import { creators } from './identity.js';
-import {
-  encryptedColumns,
-  type GiftOrderPackageSnapshot,
-  type GiftReleaseField,
-  timestamps,
-} from './shared.js';
+import { encryptedColumns, type GiftReleaseField, timestamps } from './shared.js';
 import { snapshotAttemptMembers } from './snapshots.js';
 
 export const giftReleases = pgTable(
@@ -166,7 +161,11 @@ export const giftOrders = pgTable(
     status: text('status').default('UNCLAIMED').notNull(),
     submittedAt: timestamp('submitted_at', { mode: 'date', withTimezone: true }),
     shippedAt: timestamp('shipped_at', { mode: 'date', withTimezone: true }),
-    completedAt: timestamp('completed_at', { mode: 'date', withTimezone: true }),
+    carrierName: text('carrier_name'),
+    trackingNumber: text('tracking_number'),
+    shippedByUserId: uuid('shipped_by_user_id').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
     cancelledAt: timestamp('cancelled_at', { mode: 'date', withTimezone: true }),
     cancelReason: text('cancel_reason'),
     version: integer('version').default(1).notNull(),
@@ -193,7 +192,7 @@ export const giftOrders = pgTable(
     ),
     check(
       'gift_orders_status_check',
-      sql`${table.status} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
+      sql`${table.status} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'CANCELLED')`,
     ),
     check('gift_orders_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
     check('gift_orders_version_positive', sql`${table.version} > 0`),
@@ -210,7 +209,6 @@ export const giftOrderItems = pgTable(
     giftPackageId: uuid('gift_package_id')
       .notNull()
       .references(() => giftPackages.id, { onDelete: 'restrict' }),
-    packageSnapshot: jsonb('package_snapshot').$type<GiftOrderPackageSnapshot>().notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   },
@@ -293,91 +291,11 @@ export const giftOrderStatusHistory = pgTable(
     index('gift_order_status_history_order_created_idx').on(table.giftOrderId, table.createdAt),
     check(
       'gift_order_status_history_from_check',
-      sql`${table.fromStatus} is null or ${table.fromStatus} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
+      sql`${table.fromStatus} is null or ${table.fromStatus} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'CANCELLED')`,
     ),
     check(
       'gift_order_status_history_to_check',
-      sql`${table.toStatus} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
-    ),
-  ],
-);
-
-export const shipments = pgTable(
-  'shipments',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    shipmentNumber: text('shipment_number').notNull(),
-    giftOrderId: uuid('gift_order_id')
-      .notNull()
-      .references(() => giftOrders.id, { onDelete: 'restrict' }),
-    creatorId: uuid('creator_id')
-      .notNull()
-      .references(() => creators.id, { onDelete: 'restrict' }),
-    carrierCode: text('carrier_code').notNull(),
-    carrierName: text('carrier_name').notNull(),
-    trackingNumber: text('tracking_number').notNull(),
-    trackingUrl: text('tracking_url'),
-    progress: text('progress').default('LABEL_CREATED').notNull(),
-    deliveredAt: timestamp('delivered_at', { mode: 'date', withTimezone: true }),
-    lastTrackingRefreshAt: timestamp('last_tracking_refresh_at', {
-      mode: 'date',
-      withTimezone: true,
-    }),
-    nextTrackingRefreshAt: timestamp('next_tracking_refresh_at', {
-      mode: 'date',
-      withTimezone: true,
-    }),
-    exceptionMessage: text('exception_message'),
-    trackingFailureCount: integer('tracking_failure_count').default(0).notNull(),
-    lastTrackingError: text('last_tracking_error'),
-    ...timestamps,
-  },
-  (table) => [
-    uniqueIndex('shipments_number_unique').on(table.shipmentNumber),
-    uniqueIndex('shipments_order_unique').on(table.giftOrderId),
-    index('shipments_creator_progress_idx').on(table.creatorId, table.progress),
-    index('shipments_tracking_due_idx').on(table.nextTrackingRefreshAt),
-    check(
-      'shipments_progress_check',
-      sql`${table.progress} in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED')`,
-    ),
-    check(
-      'shipments_delivery_check',
-      sql`(
-        (${table.progress} = 'DELIVERED' and ${table.deliveredAt} is not null and ${table.nextTrackingRefreshAt} is null)
-        or (${table.progress} <> 'DELIVERED' and ${table.deliveredAt} is null)
-      )`,
-    ),
-    check(
-      'shipments_tracking_identity_check',
-      sql`length(${table.carrierCode}) between 1 and 80 and length(${table.trackingNumber}) between 1 and 160`,
-    ),
-  ],
-);
-
-export const trackingEvents = pgTable(
-  'tracking_events',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    shipmentId: uuid('shipment_id')
-      .notNull()
-      .references(() => shipments.id, { onDelete: 'restrict' }),
-    providerEventId: text('provider_event_id').notNull(),
-    status: text('status').notNull(),
-    description: text('description').notNull(),
-    location: text('location'),
-    occurredAt: timestamp('occurred_at', { mode: 'date', withTimezone: true }).notNull(),
-    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex('tracking_events_shipment_provider_unique').on(
-      table.shipmentId,
-      table.providerEventId,
-    ),
-    index('tracking_events_shipment_occurred_idx').on(table.shipmentId, table.occurredAt),
-    check(
-      'tracking_events_status_check',
-      sql`${table.status} in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION')`,
+      sql`${table.toStatus} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'CANCELLED')`,
     ),
   ],
 );

@@ -1,19 +1,17 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 
 import type { AppDatabase } from '../../infrastructure/db/database.js';
 import { databaseWriteBatches } from '../../infrastructure/db/write-batches.js';
 import {
   giftOrderItems,
   giftOrders,
-  giftPackageItems,
   giftPackages,
   giftReleases,
   giftTierRules,
   snapshotAttemptMembers,
   snapshotRuns,
-  type GiftOrderPackageSnapshot,
   type GuardTier,
 } from '../../infrastructure/db/schema/index.js';
 
@@ -81,34 +79,13 @@ export class GiftEligibilityService {
       .from(giftPackages)
       .where(eq(giftPackages.giftReleaseId, release.id))
       .orderBy(asc(giftPackages.sortOrder));
-    const packageIds = packages.map((package_) => package_.id);
-    const [items, rules] = await Promise.all([
-      executor
-        .select()
-        .from(giftPackageItems)
-        .where(inArray(giftPackageItems.giftPackageId, packageIds))
-        .orderBy(asc(giftPackageItems.sortOrder)),
-      executor.select().from(giftTierRules).where(eq(giftTierRules.giftReleaseId, release.id)),
-    ]);
+    const rules = await executor
+      .select()
+      .from(giftTierRules)
+      .where(eq(giftTierRules.giftReleaseId, release.id));
     const packageById = new Map(packages.map((package_) => [package_.id, package_]));
     const ruleByTier = new Map(
       rules.map((rule) => [rule.tier as GuardTier, rule.giftPackageId] as const),
-    );
-    const packageSnapshot = new Map<string, GiftOrderPackageSnapshot>(
-      packages.map((package_) => [
-        package_.id,
-        {
-          description: package_.description,
-          items: items
-            .filter((item) => item.giftPackageId === package_.id)
-            .map((item) => ({
-              description: item.description,
-              name: item.name,
-              quantity: item.quantity,
-            })),
-          name: package_.name,
-        },
-      ]),
     );
     let insertedCount = 0;
     for (const memberBatch of databaseWriteBatches(members)) {
@@ -156,13 +133,12 @@ export class GiftEligibilityService {
           ),
         ];
         return eligiblePackageIds.map((giftPackageId, index) => {
-          if (!packageById.has(giftPackageId) || !packageSnapshot.has(giftPackageId)) {
+          if (!packageById.has(giftPackageId)) {
             throw new Error('Published release contains an invalid tier package.');
           }
           return {
             giftOrderId: order.id,
             giftPackageId,
-            packageSnapshot: packageSnapshot.get(giftPackageId)!,
             sortOrder: index,
           };
         });

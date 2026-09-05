@@ -1,7 +1,7 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
-import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
+import { IdSchema } from '../../../shared/contracts/common.js';
 import {
   CreatorOrderOverviewSchema,
   UserOrderOverviewSchema,
@@ -13,6 +13,7 @@ import {
   GiftOrderStatusSchema,
   GiftOrderSummaryPageSchema,
   ShipGiftSchema,
+  CorrectShippingSchema,
   SubmitGiftSchema,
   type GiftOrderListFilter,
   type GiftOrderStatus,
@@ -281,29 +282,24 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       ),
   );
 
-  app.post<{ Body: Record<string, never>; Params: { giftOrderId: string } }>(
-    '/api/v1/creator/orders/:giftOrderId/complete',
+  app.patch<{ Body: typeof CorrectShippingSchema.static; Params: { giftOrderId: string } }>(
+    '/api/v1/creator/orders/:giftOrderId/shipping',
     {
       preHandler: requireCreator,
       schema: {
-        body: EmptyBodySchema,
+        body: CorrectShippingSchema,
         params: Parameters,
         response: { 200: CreatorOrderSchema },
         tags: ['creator-orders'],
       },
     },
-    async (request) => {
-      await options.service.complete(
+    (request) =>
+      options.service.correctShipping(
         request.creatorProfile!.id,
         request.params.giftOrderId,
+        request.body,
         context(request),
-      );
-      return options.service.getForCreator(
-        request.creatorProfile!.id,
-        request.params.giftOrderId,
-        context(request),
-      );
-    },
+      ),
   );
 
   app.post<{ Body: { reason: string }; Params: { giftOrderId: string } }>(

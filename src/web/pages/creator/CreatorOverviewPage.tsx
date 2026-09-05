@@ -166,11 +166,7 @@ export function CreatorOverviewPage() {
                 </div>
                 <div>
                   <dt>已提交</dt>
-                  <dd>
-                    {activeRelease.counts.submitted +
-                      activeRelease.counts.shipped +
-                      activeRelease.counts.completed}
-                  </dd>
+                  <dd>{activeRelease.counts.submitted + activeRelease.counts.shipped}</dd>
                 </div>
               </dl>
               <Link className="button secondary" to={`/creator/releases/${activeRelease.id}`}>

@@ -1,12 +1,18 @@
+import { randomUUID } from 'node:crypto';
+
+import ExcelJS from 'exceljs';
 import { and, count, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import {
   giftOrderItems,
+  giftOrderAddresses,
+  giftOrderOptionValues,
   giftOrderStatusHistory,
   giftOrders,
   users,
 } from '../../src/server/infrastructure/db/schema/index.js';
+import { databaseWriteBatches } from '../../src/server/infrastructure/db/write-batches.js';
 import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/key-ring.js';
 import {
   createTemporaryStorage,
@@ -38,6 +44,7 @@ integration('claim windows and capacity', () => {
   let snapshots: SnapshotService;
   let orders: GiftOrderService;
   let addresses: AddressService;
+  let encryption: EncryptionKeyRing;
   let current = new Date('2026-09-01T00:00:00Z');
   const clock = { now: () => current };
   const context = () => ({ actorUserId, ipAddress: '127.0.0.1', requestId: 'claim-window' });
@@ -67,7 +74,7 @@ integration('claim windows and capacity', () => {
       biliUid: '100001',
       biliDisplayName: 'Recipient',
     });
-    const encryption = new EncryptionKeyRing({
+    encryption = new EncryptionKeyRing({
       addressEncryptionActiveKeyVersion: 1,
       addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
@@ -101,7 +108,7 @@ integration('claim windows and capacity', () => {
       clock,
       releases.eligibility,
     );
-    orders = new GiftOrderService(fixture.database, encryption, addresses, null, clock);
+    orders = new GiftOrderService(fixture.database, encryption, addresses, clock);
   });
 
   afterAll(async () => {
@@ -300,4 +307,75 @@ integration('claim windows and capacity', () => {
         .where(eq(giftOrders.giftReleaseId, releaseId)),
     ).toEqual([{ value: 0 }]);
   }, 60_000);
+  it('exports all 30,000 frozen claims and their allocated packages after closure', async () => {
+    const { releaseId } = await publish('2029-02-01', {}, 30_000);
+    const database = fixture.database.orm;
+    const records = await database
+      .select({ id: giftOrders.id })
+      .from(giftOrders)
+      .where(eq(giftOrders.giftReleaseId, releaseId));
+    const address = await addresses.getPlaintext(recipientId, addressId);
+    // Seed bulk submitted facts; individual authorized claims and encryption are tested above.
+    await database.transaction(async (transaction) => {
+      for (const batch of databaseWriteBatches(records)) {
+        await transaction.insert(giftOrderAddresses).values(
+          batch.map((order) => {
+            const id = randomUUID();
+            return {
+              id,
+              giftOrderId: order.id,
+              sourceAddressId: addressId,
+              ...encryption.encrypt(address.payload, 'gift-order-address:' + id),
+            };
+          }),
+        );
+        await transaction.insert(giftOrderOptionValues).values(
+          batch.map((order) => {
+            const id = randomUUID();
+            return {
+              id,
+              giftOrderId: order.id,
+              fieldKey: 'color',
+              fieldLabel: '颜色',
+              ...encryption.encrypt('蓝色', 'gift-order-option:' + id),
+            };
+          }),
+        );
+      }
+      await transaction
+        .update(giftOrders)
+        .set({ status: 'SUBMITTED', submittedAt: current, userId: recipientId, version: 2 })
+        .where(eq(giftOrders.giftReleaseId, releaseId));
+    });
+    await releases.close(creatorId, releaseId, context());
+    const exported = await orders.exportFulfillment(
+      { id: creatorId, displayName: 'Creator', timezone: 'Asia/Shanghai' },
+      releaseId,
+      context(),
+    );
+    expect(exported.rowCount).toBe(30_000);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(
+      exported.content as unknown as Parameters<typeof workbook.xlsx.load>[0],
+    );
+    const sheet = workbook.getWorksheet('待发货清单');
+    expect(sheet?.rowCount).toBe(30_001);
+    for (const row of [2, 30_001]) {
+      expect(sheet?.getCell('B' + row).value).toBe('测试用户');
+      expect(sheet?.getCell('O' + row).value).toContain('总督纪念盒 × 1');
+      expect(sheet?.getCell('R' + row).value).toBe('蓝色');
+    }
+    expect(
+      await database
+        .select({ value: count() })
+        .from(giftOrders)
+        .where(
+          and(
+            eq(giftOrders.giftReleaseId, releaseId),
+            eq(giftOrders.status, 'SUBMITTED'),
+            eq(giftOrders.version, 2),
+          ),
+        ),
+    ).toEqual([{ value: 30_000 }]);
+  }, 90_000);
 });

@@ -20,6 +20,11 @@ test('lands a recipient on the mobile dashboard', async ({ appUrl, page }) => {
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return recipientIdentity();
     if (pathname === '/api/v1/me/gifts') return { items: [giftOrder()], nextCursor: null };
+    if (pathname === '/api/v1/me/gifts/overview')
+      return {
+        counts: { claimable: 14, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
+        urgent: null,
+      };
     if (pathname === '/api/v1/me/announcements') {
       return { items: [announcement()], nextCursor: null };
     }
@@ -33,6 +38,7 @@ test('lands a recipient on the mobile dashboard', async ({ appUrl, page }) => {
   await expect(page.getByRole('heading', { name: '近期资讯' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '七月舰长礼物' })).toBeVisible();
   await expect(page.getByText('先保存一个收货地址')).toBeVisible();
+  await expect(page.getByText('你有 14 份礼物等待领取。')).toBeVisible();
 
   const accountTrigger = page.getByRole('button', { name: '测试用户的账号菜单' });
   await accountTrigger.focus();

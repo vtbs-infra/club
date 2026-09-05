@@ -13,8 +13,6 @@ import {
   giftPackages,
   giftReleases,
   giftTierRules,
-  shipments,
-  trackingEvents,
 } from './gifts.js';
 import {
   auditLogs,
@@ -61,12 +59,10 @@ export const schema = {
   giftReleases,
   giftTierRules,
   sessions,
-  shipments,
   snapshotAttemptMembers,
   snapshotAttempts,
   snapshotPages,
   snapshotRuns,
-  trackingEvents,
   users,
   verifications,
   verificationRooms,

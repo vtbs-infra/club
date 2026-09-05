@@ -20,9 +20,8 @@ export const giftOrderPresentation = {
   CANCELLED: { label: '已取消', tone: 'neutral' },
   CLAIMABLE: { label: '待领取', tone: 'info' },
   UPCOMING: { label: '待开放', tone: 'neutral' },
-  COMPLETED: { label: '已完成', tone: 'success' },
   EXPIRED: { label: '已过期', tone: 'neutral' },
-  SHIPPED: { label: '已发货', tone: 'info' },
+  SHIPPED: { label: '已发货', tone: 'success' },
   SUBMITTED: { label: '待发货', tone: 'warning' },
 } as const satisfies Readonly<Record<GiftOrder['status'], StatusPresentation>>;
 
@@ -71,29 +70,6 @@ export const announcementStatePresentation = {
   PUBLISHED: { label: '已发布', tone: 'success' },
   WITHDRAWN: { label: '已撤下', tone: 'warning' },
 } as const satisfies Readonly<Record<Announcement['status'], StatusPresentation>>;
-
-const shipmentProgressPresentations = {
-  DELIVERED: { label: '已送达', tone: 'success' },
-  IN_TRANSIT: { label: '运输中', tone: 'info' },
-  LABEL_CREATED: { label: '已录单', tone: 'warning' },
-  OUT_FOR_DELIVERY: { label: '派送中', tone: 'warning' },
-} as const satisfies Readonly<
-  Record<GiftOrder['shipments'][number]['progress'], StatusPresentation>
->;
-
-export function shipmentProgressPresentation(progress: string): StatusPresentation {
-  return (
-    (shipmentProgressPresentations as Readonly<Record<string, StatusPresentation>>)[progress] ?? {
-      label: '状态更新中',
-      tone: 'neutral',
-    }
-  );
-}
-
-export const shipmentExceptionPresentation = {
-  label: '物流异常',
-  tone: 'danger',
-} as const satisfies StatusPresentation;
 
 const roomHealthPresentations = {
   CONNECTING: { label: '连接中', tone: 'info' },

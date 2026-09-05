@@ -192,10 +192,10 @@ export function DashboardPage() {
           </div>
           <div>
             <strong>一份礼物正在向你出发</strong>
-            <p>物流状态已经更新，可以随时查看。</p>
+            <p>主播已填写快递公司和单号，可以随时查看。</p>
           </div>
           <Link className="button primary" to={`/gifts/${shipped.id}`}>
-            查看物流
+            查看发货信息
             <ArrowRight aria-hidden="true" size={16} />
           </Link>
         </section>
@@ -206,7 +206,7 @@ export function DashboardPage() {
           <div>
             <p className="eyebrow">礼物中心</p>
             <h2>我的礼物单</h2>
-            <p>资格、领取和物流状态都集中在同一张礼物单中。</p>
+            <p>资格、领取和发货信息都集中在同一张礼物单中。</p>
           </div>
           <Link className="button ghost" to="/gifts">
             全部礼物

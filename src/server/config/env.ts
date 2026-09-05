@@ -27,7 +27,6 @@ const ConfigSchema = Type.Object(
     port: Type.Integer({ minimum: 1, maximum: 65_535 }),
     storageDriver: Type.Literal('local'),
     storageLocalPath: Type.String({ minLength: 1 }),
-    trackingProvider: Type.Union([Type.Literal('none'), Type.Literal('fake')]),
     logLevel: Type.Union([
       Type.Literal('fatal'),
       Type.Literal('error'),
@@ -55,7 +54,6 @@ export interface AppConfig {
   readonly port: number;
   readonly storageDriver: 'local';
   readonly storageLocalPath: string;
-  readonly trackingProvider: 'none' | 'fake';
   readonly logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   readonly trustProxy: boolean;
 }
@@ -109,7 +107,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port: parsePort(env.PORT),
     storageDriver: env.STORAGE_DRIVER ?? 'local',
     storageLocalPath: env.STORAGE_LOCAL_PATH ?? './data/club',
-    trackingProvider: env.TRACKING_PROVIDER ?? (nodeEnv === 'test' ? 'fake' : 'none'),
     logLevel: env.LOG_LEVEL ?? 'info',
     trustProxy: parseBoolean(env.TRUST_PROXY),
   };

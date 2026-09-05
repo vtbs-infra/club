@@ -663,35 +663,25 @@
   font-weight: 700;
 }
 
-.shipment-form,
+.shipping-form,
 .settings-form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.shipment-form > div > p:last-child {
+.shipping-form > div > p:last-child {
   color: var(--muted);
   font-size: 0.8rem;
   line-height: 1.55;
   margin-top: 0.35rem;
 }
 
-.shipment-summary > div {
+.shipping-summary > div {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 1rem;
-}
-
-.shipment-summary a {
-  align-items: center;
-  color: var(--primary-hover);
-  display: inline-flex;
-  font-size: 0.8rem;
-  font-weight: 700;
-  gap: 0.3rem;
-  width: max-content;
 }
 
 .settings-grid {

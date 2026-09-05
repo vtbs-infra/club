@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, ExternalLink, Gift, PackageCheck, Plus } from 'lucide-react';
+import { ArrowLeft, Check, Gift, PackageCheck, Plus } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
@@ -8,11 +8,8 @@ import { AddressForm } from '../components/AddressEditor';
 import { ErrorNotice, ErrorState, InlineNotice, LoadingState, StatusBadge } from '../components/Ui';
 import { useNow } from '../hooks/useNow';
 import { formatDate, formatMonth, tierLabel } from '../lib/format';
-import {
-  giftOrderPresentation,
-  shipmentExceptionPresentation,
-  shipmentProgressPresentation,
-} from '../lib/status-presentation';
+import { giftOrderPresentation } from '../lib/status-presentation';
+import { ShippingDetails } from '../components/ShippingDetails';
 
 export function GiftDetailPage() {
   const now = useNow();
@@ -65,7 +62,7 @@ export function GiftDetailPage() {
   const order = gift.data;
   const selectedAddress = addresses.data?.find((address) => address.id === selectedAddressId);
   const claimNotStarted = new Date(order.release.claimStartAt).getTime() > now;
-  const claimEnded = new Date(order.release.claimDeadlineAt).getTime() < now;
+  const claimEnded = new Date(order.release.claimDeadlineAt).getTime() <= now;
 
   return (
     <div className="gift-detail stack-lg">
@@ -389,12 +386,11 @@ export function GiftDetailPage() {
 }
 
 function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof getMyGift>> }) {
-  const shipment = order.shipments[0];
   return (
     <section className="panel order-progress">
       <div className="section-heading compact">
         <div>
-          <p className="eyebrow">履约进度</p>
+          <p className="eyebrow">领取与发货</p>
           <h2>礼物进度</h2>
         </div>
         <StatusBadge {...giftOrderPresentation[order.status]} />
@@ -403,67 +399,26 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
         {[
           { done: order.submittedAt !== null, label: '已领取', time: order.submittedAt },
           { done: order.shippedAt !== null, label: '已发货', time: order.shippedAt },
-          { done: order.completedAt !== null, label: '已完成', time: order.completedAt },
         ].map((step) => (
           <div className={step.done ? 'progress-step done' : 'progress-step'} key={step.label}>
             <i>{step.done ? <Check aria-hidden="true" size={14} /> : null}</i>
             <strong>{step.label}</strong>
-            <small>{step.time ? formatDate(step.time, true) : '等待更新'}</small>
+            <small>{step.time ? formatDate(step.time, true) : '等待中'}</small>
           </div>
         ))}
       </div>
-      {shipment ? (
-        <div className="tracking-card">
-          <div>
-            <p className="eyebrow">物流信息</p>
-            <h3>{shipment.carrierName}</h3>
-            <p>运单号 {shipment.trackingNumber}</p>
-            <span className="status-cluster">
-              <StatusBadge {...shipmentProgressPresentation(shipment.progress)} />
-              {shipment.exceptionMessage ? (
-                <StatusBadge {...shipmentExceptionPresentation} />
-              ) : null}
-            </span>
-          </div>
-          {shipment.trackingUrl ? (
-            <a
-              className="button secondary"
-              href={shipment.trackingUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              查询物流
-              <ExternalLink aria-hidden="true" size={15} />
-            </a>
-          ) : null}
-          {shipment.exceptionMessage ? (
-            <InlineNotice tone="danger">
-              <p>{shipment.exceptionMessage}</p>
-            </InlineNotice>
-          ) : null}
-          {shipment.events.length > 0 ? (
-            <ol className="tracking-events">
-              {shipment.events.map((event) => (
-                <li key={`${event.occurredAt}-${event.description}`}>
-                  <time>{formatDate(event.occurredAt, true)}</time>
-                  <div>
-                    <strong>{event.description}</strong>
-                    {event.location ? <span>{event.location}</span> : null}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          ) : null}
-        </div>
+      {order.shipping ? (
+        <ShippingDetails shipping={order.shipping} />
       ) : (
         <p className="quiet-line">
           {order.status === 'EXPIRED'
-            ? order.expiryReason === 'RELEASE_CLOSED'
-              ? '主播已关闭这份礼物的领取。'
-              : '这份礼物未在领取期限内提交。'
-            : order.status === 'CANCELLED'
-              ? '这份礼物单已取消。'
-              : '主播发货后，物流信息会显示在这里。'}
+            ? (order.expiryReason === 'RELEASE_CLOSED' ? '主播已关闭领取。' : '领取期限已结束。') +
+              (order.expiredAt ? formatDate(order.expiredAt, true) : '')
+            : order.status === 'UPCOMING'
+              ? '领取将在 ' + formatDate(order.release.claimStartAt, true) + ' 开始。'
+              : order.status === 'CANCELLED'
+                ? '这份礼物单已取消。'
+                : '领取信息已提交，主播发货后会在这里显示快递公司和单号。'}
         </p>
       )}
     </section>

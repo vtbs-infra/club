@@ -15,7 +15,6 @@ describe('loadConfig', () => {
     expect(config.port).toBe(8080);
     expect(config.trustProxy).toBe(true);
     expect(config.storageDriver).toBe('local');
-    expect(config.trackingProvider).toBe('none');
   });
 
   it('rejects missing database configuration without leaking a URL', () => {
@@ -30,16 +29,6 @@ describe('loadConfig', () => {
         TRUST_PROXY: 'sometimes',
       }),
     ).toThrow(/trustProxy/);
-  });
-
-  it('rejects unknown tracking providers', () => {
-    expect(() =>
-      loadConfig({
-        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
-        DATABASE_URL: 'postgres://localhost/club',
-        TRACKING_PROVIDER: 'live-unknown',
-      }),
-    ).toThrow(/trackingProvider/);
   });
 
   it('rejects non-http application URLs', () => {

@@ -40,7 +40,7 @@ const processSteps = [
     title: '提交领取',
   },
   {
-    copy: '主播发货后，在同一张礼物单里查看物流进度。',
+    copy: '主播发货后，在同一张礼物单里查看发货信息。',
     icon: Truck,
     title: '等待收货',
   },
@@ -160,7 +160,7 @@ export function HomePage() {
               <span className="portal-hero-title-accent">都在这里。</span>
             </h1>
             <p className="portal-hero-intro">
-              绑定你的 B站 UID，平台会自动匹配舰长礼物资格。从确认领取、填写地址到查询物流，
+              绑定你的 B站 UID，平台会自动匹配舰长礼物资格。从确认领取、填写地址到查看单号，
               每一步都清楚可见。
             </p>
             <div className="portal-hero-actions">
@@ -349,7 +349,7 @@ export function HomePage() {
           <h2>{signedIn ? '去工作台查看你的舰长礼物' : '别错过属于你的舰长礼物'}</h2>
           <p>
             {signedIn
-              ? '你的礼物资格、领取记录和物流进度都集中在工作台。'
+              ? '你的礼物资格、领取记录和发货记录都集中在工作台。'
               : '创建账号并绑定 B站 UID，后续礼物资格会自动匹配到你的工作台。'}
           </p>
         </div>

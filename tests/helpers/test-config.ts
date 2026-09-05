@@ -15,7 +15,6 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
     port: 3000,
     storageDriver: 'local',
     storageLocalPath: './data/test',
-    trackingProvider: 'fake',
     trustProxy: false,
     ...overrides,
   };

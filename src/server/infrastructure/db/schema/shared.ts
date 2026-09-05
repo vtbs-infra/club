@@ -13,16 +13,6 @@ export interface GiftReleaseField {
   readonly options?: readonly string[];
 }
 
-export interface GiftOrderPackageSnapshot {
-  readonly name: string;
-  readonly description: string;
-  readonly items: readonly {
-    readonly name: string;
-    readonly description: string;
-    readonly quantity: number;
-  }[];
-}
-
 export const timestamps = {
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),

@@ -92,7 +92,6 @@ integration('database migration baseline', () => {
         'gift_cover_objects',
         'gift_orders',
         'gift_order_addresses',
-        'shipments',
         'announcements',
         'platform_appearance',
       ]) {
@@ -105,7 +104,11 @@ integration('database migration baseline', () => {
       expect(await columnExists(database, 'creators', 'archived_at')).toBe(false);
       expect(await columnExists(database, 'gift_orders', 'processing_at')).toBe(false);
       expect(await columnExists(database, 'gift_releases', 'cover_object_key')).toBe(false);
-      expect(await columnExists(database, 'shipments', 'progress')).toBe(true);
+      expect(await tableExists(database, 'shipments')).toBe(false);
+      expect(await tableExists(database, 'tracking_events')).toBe(false);
+      expect(await tableExists(database, 'snapshot_members')).toBe(false);
+      expect(await columnExists(database, 'gift_order_items', 'package_snapshot')).toBe(false);
+      expect(await columnExists(database, 'gift_orders', 'carrier_name')).toBe(true);
       expect(await columnExists(database, 'shipments', 'status')).toBe(false);
       expect(await columnExists(database, 'announcement_reads', 'announcement_version')).toBe(true);
       expect(await columnExists(database, 'announcements', 'status')).toBe(true);
@@ -128,7 +131,6 @@ integration('database migration baseline', () => {
         'gift_packages_published_immutability',
         'gift_releases_lifecycle',
         'gift_tier_rules_published_immutability',
-        'shipments_lifecycle',
         'snapshot_attempt_members_append_only',
         'snapshot_attempts_preserve_completed',
         'snapshot_attempt_members_sealed',
@@ -136,7 +138,6 @@ integration('database migration baseline', () => {
         'snapshot_runs_accepted_attempt',
         'snapshot_pages_append_only',
         'snapshot_runs_preserve_finalized',
-        'tracking_events_append_only',
       ]) {
         expect(await triggerExists(database, trigger), trigger).toBe(true);
       }

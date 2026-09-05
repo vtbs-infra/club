@@ -272,16 +272,6 @@
   .progress-step {
     min-width: 95px;
   }
-  .tracking-card {
-    grid-template-columns: 1fr;
-  }
-  .tracking-events {
-    grid-column: 1;
-  }
-  .tracking-events li {
-    grid-template-columns: 1fr;
-    gap: 0.25rem;
-  }
   .announcement-card > button {
     grid-template-columns: auto 1fr auto;
   }

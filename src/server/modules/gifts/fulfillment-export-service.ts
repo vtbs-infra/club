@@ -7,7 +7,6 @@ import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
   giftOrderAddresses,
-  giftOrderItems,
   giftOrderOptionValues,
   giftOrders,
   giftReleases,
@@ -18,6 +17,7 @@ import {
 } from '../../infrastructure/encryption/key-ring.js';
 import { isAddressPayload, type AddressPayload } from '../addresses/address-domain.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
+import { loadOrderPackages } from './order-packages.js';
 import { buildFulfillmentWorkbook, type FulfillmentWorkbookRow } from './fulfillment-workbook.js';
 
 interface CreatorExportProfile {
@@ -116,15 +116,14 @@ export class GiftFulfillmentExportService {
         }
 
         const orderIds = orders.map((order) => order.id);
-        const items = await transaction
-          .select({
-            giftOrderId: giftOrderItems.giftOrderId,
-            packageSnapshot: giftOrderItems.packageSnapshot,
-            sortOrder: giftOrderItems.sortOrder,
-          })
-          .from(giftOrderItems)
-          .where(inArray(giftOrderItems.giftOrderId, orderIds))
-          .orderBy(asc(giftOrderItems.sortOrder));
+        const items = await loadOrderPackages(
+          transaction,
+          and(
+            eq(giftOrders.creatorId, creator.id),
+            eq(giftOrders.giftReleaseId, release.id),
+            eq(giftOrders.status, 'SUBMITTED'),
+          )!,
+        );
         const options = await transaction
           .select()
           .from(giftOrderOptionValues)
@@ -135,10 +134,10 @@ export class GiftFulfillmentExportService {
       { accessMode: 'read only', isolationLevel: 'repeatable read' },
     );
 
-    const itemsByOrder = new Map<string, (typeof source.items)[number]['packageSnapshot'][]>();
+    const itemsByOrder = new Map<string, (typeof source.items)[number][]>();
     for (const item of source.items) {
       const orderItems = itemsByOrder.get(item.giftOrderId) ?? [];
-      orderItems.push(item.packageSnapshot);
+      orderItems.push(item);
       itemsByOrder.set(item.giftOrderId, orderItems);
     }
     const optionsByOrder = new Map<string, Record<string, ClaimValue>>();

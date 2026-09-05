@@ -1,22 +1,16 @@
-import { randomUUID } from 'node:crypto';
-
 import { and, eq } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
-import {
-  giftOrders,
-  giftOrderStatusHistory,
-  shipments,
-} from '../../infrastructure/db/schema/index.js';
+import { giftOrders, giftOrderStatusHistory } from '../../infrastructure/db/schema/index.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
-import type { TrackingProvider } from '../fulfillment/tracking-provider.js';
+import type { ShipGiftInput, CorrectShippingInput } from '../../../shared/contracts/gifts.js';
 
 function cleanText(value: string, maximum: number, label: string): string {
   const normalized = value.trim();
   if (!normalized || normalized.length > maximum) {
-    throw new AppError('SHIPMENT_INVALID', `${label} is invalid.`, 400);
+    throw new AppError('SHIPPING_INVALID', `${label} is invalid.`, 400);
   }
   return normalized;
 }
@@ -26,7 +20,6 @@ export class GiftFulfillmentService {
 
   public constructor(
     private readonly database: DatabaseService,
-    private readonly trackingProvider: TrackingProvider | null,
     private readonly clock: Clock,
   ) {
     this.audit = new AuditService(database);
@@ -41,68 +34,6 @@ export class GiftFulfillmentService {
       .for('update');
     if (!order) throw new AppError('GIFT_ORDER_NOT_FOUND', 'Gift order not found.', 404);
     return order;
-  }
-
-  private stopTracking(transaction: AppDatabase, orderId: string, now: Date) {
-    return transaction
-      .update(shipments)
-      .set({
-        exceptionMessage: null,
-        lastTrackingError: null,
-        nextTrackingRefreshAt: null,
-        trackingFailureCount: 0,
-        updatedAt: now,
-      })
-      .where(eq(shipments.giftOrderId, orderId));
-  }
-
-  public async complete(creatorId: string, orderId: string, context: RequestAuditContext) {
-    return this.database.orm.transaction(async (transaction) => {
-      const order = await this.lockOrder(transaction, creatorId, orderId);
-      const now = this.clock.now();
-      if (order.status === 'COMPLETED') {
-        await this.stopTracking(transaction, order.id, now);
-        return order;
-      }
-      if (order.status !== 'SHIPPED') {
-        throw new AppError(
-          'GIFT_ORDER_TRANSITION_INVALID',
-          `A ${order.status} order cannot move to COMPLETED.`,
-          409,
-        );
-      }
-      await this.stopTracking(transaction, order.id, now);
-      const [updated] = await transaction
-        .update(giftOrders)
-        .set({
-          completedAt: now,
-          status: 'COMPLETED',
-          updatedAt: now,
-          version: order.version + 1,
-        })
-        .where(eq(giftOrders.id, order.id))
-        .returning();
-      await transaction.insert(giftOrderStatusHistory).values({
-        actorUserId: context.actorUserId,
-        fromStatus: 'SHIPPED',
-        giftOrderId: order.id,
-        toStatus: 'COMPLETED',
-      });
-      await this.audit.record(
-        {
-          action: 'gift-order.completed',
-          actorUserId: context.actorUserId,
-          afterSummary: { from: 'SHIPPED', to: 'COMPLETED' },
-          creatorId,
-          ipAddress: context.ipAddress,
-          requestId: context.requestId,
-          targetId: order.id,
-          targetType: 'gift-order',
-        },
-        transaction,
-      );
-      return updated!;
-    });
   }
 
   public async cancel(
@@ -165,61 +96,28 @@ export class GiftFulfillmentService {
   public async ship(
     creatorId: string,
     orderId: string,
-    input: {
-      readonly carrierCode: string;
-      readonly carrierName: string;
-      readonly trackingNumber: string;
-      readonly trackingUrl?: string | null;
-    },
+    input: ShipGiftInput,
     context: RequestAuditContext,
   ): Promise<void> {
-    const carrierCode = cleanText(input.carrierCode, 80, 'Carrier code');
-    const carrierName = cleanText(input.carrierName, 120, 'Carrier name');
-    const trackingNumber = cleanText(input.trackingNumber, 160, 'Tracking number');
-    let trackingUrl = input.trackingUrl?.trim() || null;
-    trackingUrl ??= this.trackingProvider?.buildPublicUrl?.(carrierCode, trackingNumber) ?? null;
-    if (trackingUrl) {
-      let protocol: string;
-      try {
-        protocol = new URL(trackingUrl).protocol;
-      } catch {
-        protocol = '';
-      }
-      if (!['http:', 'https:'].includes(protocol)) {
-        throw new AppError('SHIPMENT_INVALID', 'Tracking URL must use HTTP or HTTPS.', 400);
-      }
-    }
-
+    const shipping = {
+      carrierName: cleanText(input.carrierName, 120, 'Carrier name'),
+      trackingNumber: cleanText(input.trackingNumber, 160, 'Tracking number'),
+    };
     await this.database.orm.transaction(async (transaction) => {
       const order = await this.lockOrder(transaction, creatorId, orderId);
-      if (order.status !== 'SUBMITTED') {
+      if (order.status !== 'SUBMITTED')
         throw new AppError(
           'GIFT_ORDER_NOT_SHIPPABLE',
           'Only submitted orders can be shipped.',
           409,
         );
-      }
       const now = this.clock.now();
-      const shipmentId = randomUUID();
-      const [shipment] = await transaction
-        .insert(shipments)
-        .values({
-          carrierCode,
-          carrierName,
-          creatorId,
-          giftOrderId: order.id,
-          id: shipmentId,
-          nextTrackingRefreshAt: this.trackingProvider ? new Date(now.getTime() + 60_000) : null,
-          shipmentNumber: `S-${randomUUID().slice(0, 10).toUpperCase()}`,
-          trackingNumber,
-          trackingUrl,
-        })
-        .returning();
-      if (!shipment) throw new Error('Shipment insert returned no row.');
       await transaction
         .update(giftOrders)
         .set({
+          ...shipping,
           shippedAt: now,
+          shippedByUserId: context.actorUserId,
           status: 'SHIPPED',
           updatedAt: now,
           version: order.version + 1,
@@ -235,10 +133,57 @@ export class GiftFulfillmentService {
         {
           action: 'gift-order.shipped',
           actorUserId: context.actorUserId,
-          afterSummary: {
-            carrierCode,
-            shipmentNumber: shipment.shipmentNumber,
-          },
+          afterSummary: shipping,
+          creatorId,
+          ipAddress: context.ipAddress,
+          requestId: context.requestId,
+          targetId: order.id,
+          targetType: 'gift-order',
+        },
+        transaction,
+      );
+    });
+  }
+
+  public async correctShipping(
+    creatorId: string,
+    orderId: string,
+    input: CorrectShippingInput,
+    context: RequestAuditContext,
+  ): Promise<void> {
+    const shipping = {
+      carrierName: cleanText(input.carrierName, 120, 'Carrier name'),
+      trackingNumber: cleanText(input.trackingNumber, 160, 'Tracking number'),
+    };
+    await this.database.orm.transaction(async (transaction) => {
+      const order = await this.lockOrder(transaction, creatorId, orderId);
+      if (order.status !== 'SHIPPED')
+        throw new AppError(
+          'GIFT_ORDER_NOT_SHIPPED',
+          'Only shipped orders have shipping information to correct.',
+          409,
+        );
+      if (order.version !== input.expectedVersion)
+        throw new AppError(
+          'GIFT_ORDER_VERSION_CONFLICT',
+          'This gift changed. Reload it before correcting shipping information.',
+          409,
+        );
+      if (
+        order.carrierName === shipping.carrierName &&
+        order.trackingNumber === shipping.trackingNumber
+      )
+        return;
+      await transaction
+        .update(giftOrders)
+        .set({ ...shipping, updatedAt: this.clock.now(), version: order.version + 1 })
+        .where(eq(giftOrders.id, order.id));
+      await this.audit.record(
+        {
+          action: 'gift-order.shipping-corrected',
+          actorUserId: context.actorUserId,
+          beforeSummary: { carrierName: order.carrierName, trackingNumber: order.trackingNumber },
+          afterSummary: shipping,
           creatorId,
           ipAddress: context.ipAddress,
           requestId: context.requestId,

@@ -2,6 +2,8 @@ import type { GuardTier } from '../../shared/contracts/common';
 import type {
   CreatorOrder,
   CreatorOrderOverview,
+  CorrectShippingInput,
+  ShipGiftInput,
   UserOrderOverview,
   FulfillmentReleaseSummaryPage,
   GiftFormField,
@@ -180,25 +182,20 @@ export function downloadFulfillmentWorkbook(releaseId: string) {
   });
 }
 
-export function shipCreatorOrder(
-  giftOrderId: string,
-  input: {
-    readonly carrierCode: string;
-    readonly carrierName: string;
-    readonly trackingNumber: string;
-    readonly trackingUrl?: null | string;
-  },
-): Promise<CreatorOrder> {
+export function shipCreatorOrder(giftOrderId: string, input: ShipGiftInput): Promise<CreatorOrder> {
   return apiRequest(`/api/v1/creator/orders/${giftOrderId}/ship`, {
     body: JSON.stringify(input),
     method: 'POST',
   });
 }
 
-export function completeCreatorOrder(giftOrderId: string): Promise<CreatorOrder> {
-  return apiRequest(`/api/v1/creator/orders/${giftOrderId}/complete`, {
-    body: JSON.stringify({}),
-    method: 'POST',
+export function correctCreatorOrderShipping(
+  giftOrderId: string,
+  input: CorrectShippingInput,
+): Promise<CreatorOrder> {
+  return apiRequest(`/api/v1/creator/orders/${giftOrderId}/shipping`, {
+    body: JSON.stringify(input),
+    method: 'PATCH',
   });
 }
 

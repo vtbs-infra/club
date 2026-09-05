@@ -6,7 +6,6 @@ import {
   HardDrive,
   ImageIcon,
   RadioTower,
-  Truck,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -22,8 +21,6 @@ import { formatDate } from '../../lib/format';
 import {
   roomHealthPresentation,
   runtimeStatePresentation,
-  shipmentExceptionPresentation,
-  shipmentProgressPresentation,
   snapshotRunPresentation,
   systemStatusPresentation,
   type StatusTone,
@@ -47,6 +44,7 @@ const auditActionLabel: Readonly<Record<string, string>> = {
   'creator.updated': '修改主播',
   'gift-order.cancelled': '取消礼物单',
   'gift-order.shipped': '礼物单发货',
+  'gift-order.shipping-corrected': '更正发货信息',
   'gift-release.fulfillment-exported': '导出待发货清单',
   'gift-release.created': '创建礼物草稿',
   'gift-release.published': '发布礼物',
@@ -73,7 +71,6 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
   const bindingRuntime = runtimeStatePresentation[data.runtimes.binding.state];
   const mediaRuntime = runtimeStatePresentation[data.runtimes.media.state];
   const rosterRuntime = runtimeStatePresentation[data.runtimes.roster.state];
-  const trackingRuntime = runtimeStatePresentation[data.runtimes.tracking.state];
   return (
     <>
       <section className="metric-grid system-metrics">
@@ -124,19 +121,6 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
           tone={runtimeMetricTone(rosterRuntime.tone)}
           value={rosterRuntime.label}
         />
-        <MetricCard
-          description={`${data.trackingDueCount} 个物流等待刷新${
-            data.trackingExceptionCount > 0 ? ` · ${data.trackingExceptionCount} 个物流异常` : ''
-          }`}
-          icon={Truck}
-          label="物流刷新"
-          tone={runtimeMetricTone(trackingRuntime.tone)}
-          value={
-            !data.runtimes.tracking.configured && data.runtimes.tracking.state === 'RUNNING'
-              ? '定时清理运行中'
-              : trackingRuntime.label
-          }
-        />
       </section>
       <div className="overview-grid">
         <section className="panel">
@@ -156,35 +140,6 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
                   <strong>{count}</strong>
                 </div>
               ))
-            )}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="section-heading compact">
-            <div>
-              <p className="eyebrow">发货概况</p>
-              <h2>物流状态</h2>
-            </div>
-          </div>
-          <div className="count-list">
-            {Object.keys(data.shipmentProgressCounts).length === 0 &&
-            data.trackingExceptionCount === 0 ? (
-              <p className="quiet-line">暂无物流记录。</p>
-            ) : (
-              <>
-                {Object.entries(data.shipmentProgressCounts).map(([progress, count]) => (
-                  <div key={progress}>
-                    <StatusBadge {...shipmentProgressPresentation(progress)} />
-                    <strong>{count}</strong>
-                  </div>
-                ))}
-                {data.trackingExceptionCount > 0 ? (
-                  <div>
-                    <StatusBadge {...shipmentExceptionPresentation} />
-                    <strong>{data.trackingExceptionCount}</strong>
-                  </div>
-                ) : null}
-              </>
             )}
           </div>
         </section>

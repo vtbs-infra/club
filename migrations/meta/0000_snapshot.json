@@ -1,5 +1,5 @@
 {
-  "id": "0af79c7a-59c9-4949-b252-798e1811f67a",
+  "id": "5a887c6b-0174-4c29-b6e9-2a27f9efd363",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1225,12 +1225,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "package_snapshot": {
-          "name": "package_snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
         "sort_order": {
           "name": "sort_order",
           "type": "integer",
@@ -1527,11 +1521,11 @@
       "checkConstraints": {
         "gift_order_status_history_from_check": {
           "name": "gift_order_status_history_from_check",
-          "value": "\"gift_order_status_history\".\"from_status\" is null or \"gift_order_status_history\".\"from_status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')"
+          "value": "\"gift_order_status_history\".\"from_status\" is null or \"gift_order_status_history\".\"from_status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'CANCELLED')"
         },
         "gift_order_status_history_to_check": {
           "name": "gift_order_status_history_to_check",
-          "value": "\"gift_order_status_history\".\"to_status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')"
+          "value": "\"gift_order_status_history\".\"to_status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'CANCELLED')"
         }
       },
       "isRLSEnabled": false
@@ -1614,9 +1608,21 @@
           "primaryKey": false,
           "notNull": false
         },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp with time zone",
+        "carrier_name": {
+          "name": "carrier_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tracking_number": {
+          "name": "tracking_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shipped_by_user_id": {
+          "name": "shipped_by_user_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -1839,6 +1845,15 @@
           "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "gift_orders_shipped_by_user_id_users_id_fk": {
+          "name": "gift_orders_shipped_by_user_id_users_id_fk",
+          "tableFrom": "gift_orders",
+          "tableTo": "users",
+          "columnsFrom": ["shipped_by_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1851,7 +1866,7 @@
         },
         "gift_orders_status_check": {
           "name": "gift_orders_status_check",
-          "value": "\"gift_orders\".\"status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')"
+          "value": "\"gift_orders\".\"status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'CANCELLED')"
         },
         "gift_orders_tier_check": {
           "name": "gift_orders_tier_check",
@@ -2398,346 +2413,6 @@
         "gift_tier_rules_tier_check": {
           "name": "gift_tier_rules_tier_check",
           "value": "\"gift_tier_rules\".\"tier\" in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.shipments": {
-      "name": "shipments",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "shipment_number": {
-          "name": "shipment_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "gift_order_id": {
-          "name": "gift_order_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "creator_id": {
-          "name": "creator_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "carrier_code": {
-          "name": "carrier_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "carrier_name": {
-          "name": "carrier_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tracking_number": {
-          "name": "tracking_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tracking_url": {
-          "name": "tracking_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "progress": {
-          "name": "progress",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'LABEL_CREATED'"
-        },
-        "delivered_at": {
-          "name": "delivered_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_tracking_refresh_at": {
-          "name": "last_tracking_refresh_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "next_tracking_refresh_at": {
-          "name": "next_tracking_refresh_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "exception_message": {
-          "name": "exception_message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tracking_failure_count": {
-          "name": "tracking_failure_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_tracking_error": {
-          "name": "last_tracking_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "shipments_number_unique": {
-          "name": "shipments_number_unique",
-          "columns": [
-            {
-              "expression": "shipment_number",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "shipments_order_unique": {
-          "name": "shipments_order_unique",
-          "columns": [
-            {
-              "expression": "gift_order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "shipments_creator_progress_idx": {
-          "name": "shipments_creator_progress_idx",
-          "columns": [
-            {
-              "expression": "creator_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "progress",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "shipments_tracking_due_idx": {
-          "name": "shipments_tracking_due_idx",
-          "columns": [
-            {
-              "expression": "next_tracking_refresh_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "shipments_gift_order_id_gift_orders_id_fk": {
-          "name": "shipments_gift_order_id_gift_orders_id_fk",
-          "tableFrom": "shipments",
-          "tableTo": "gift_orders",
-          "columnsFrom": ["gift_order_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "shipments_creator_id_creators_id_fk": {
-          "name": "shipments_creator_id_creators_id_fk",
-          "tableFrom": "shipments",
-          "tableTo": "creators",
-          "columnsFrom": ["creator_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "shipments_progress_check": {
-          "name": "shipments_progress_check",
-          "value": "\"shipments\".\"progress\" in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED')"
-        },
-        "shipments_delivery_check": {
-          "name": "shipments_delivery_check",
-          "value": "(\n        (\"shipments\".\"progress\" = 'DELIVERED' and \"shipments\".\"delivered_at\" is not null and \"shipments\".\"next_tracking_refresh_at\" is null)\n        or (\"shipments\".\"progress\" <> 'DELIVERED' and \"shipments\".\"delivered_at\" is null)\n      )"
-        },
-        "shipments_tracking_identity_check": {
-          "name": "shipments_tracking_identity_check",
-          "value": "length(\"shipments\".\"carrier_code\") between 1 and 80 and length(\"shipments\".\"tracking_number\") between 1 and 160"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.tracking_events": {
-      "name": "tracking_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "shipment_id": {
-          "name": "shipment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_event_id": {
-          "name": "provider_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "location": {
-          "name": "location",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "occurred_at": {
-          "name": "occurred_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "tracking_events_shipment_provider_unique": {
-          "name": "tracking_events_shipment_provider_unique",
-          "columns": [
-            {
-              "expression": "shipment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "provider_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "tracking_events_shipment_occurred_idx": {
-          "name": "tracking_events_shipment_occurred_idx",
-          "columns": [
-            {
-              "expression": "shipment_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "occurred_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "tracking_events_shipment_id_shipments_id_fk": {
-          "name": "tracking_events_shipment_id_shipments_id_fk",
-          "tableFrom": "tracking_events",
-          "tableTo": "shipments",
-          "columnsFrom": ["shipment_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "tracking_events_status_check": {
-          "name": "tracking_events_status_check",
-          "value": "\"tracking_events\".\"status\" in ('LABEL_CREATED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION')"
         }
       },
       "isRLSEnabled": false

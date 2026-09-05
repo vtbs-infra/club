@@ -1,20 +1,8 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  isNull,
-  lt,
-  or,
-  sql,
-  type SQL,
-} from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
 
 import type { GiftOrderListFilter } from '../../../shared/contracts/gifts.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
+import { loadOrderPackages } from './order-packages.js';
 import { effectiveOrderStatus, orderStatusSelection } from './order-status.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
@@ -23,12 +11,9 @@ import {
   creators,
   giftCoverObjects,
   giftOrderAddresses,
-  giftOrderItems,
   giftOrderOptionValues,
   giftOrders,
   giftReleases,
-  shipments,
-  trackingEvents,
   type GiftOrderStatus,
 } from '../../infrastructure/db/schema/index.js';
 import {
@@ -37,6 +22,17 @@ import {
 } from '../../infrastructure/encryption/key-ring.js';
 import type { AddressPayload } from '../addresses/address-domain.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
+
+function shippingRecord(order: {
+  status: string;
+  carrierName: string | null;
+  trackingNumber: string | null;
+}) {
+  if (order.status !== 'SHIPPED') return null;
+  if (!order.carrierName || !order.trackingNumber)
+    throw new Error('A shipped order is missing its shipping record.');
+  return { carrierName: order.carrierName, trackingNumber: order.trackingNumber };
+}
 
 type ClaimValue = boolean | string;
 type GiftOrderCursor = { readonly orderNumber: string };
@@ -113,7 +109,7 @@ function emptyCounts() {
     upcoming: 0,
     cancelled: 0,
     claimable: 0,
-    completed: 0,
+
     expired: 0,
     shipped: 0,
     submitted: 0,
@@ -160,6 +156,8 @@ export class GiftOrderQueryService {
       .select({
         creator: { displayName: creators.displayName, id: creators.id },
         order: {
+          carrierName: giftOrders.carrierName,
+          trackingNumber: giftOrders.trackingNumber,
           biliDisplayName: giftOrders.biliDisplayName,
           biliUid: giftOrders.biliUid,
           ...orderStatusSelection(this.clock.now()),
@@ -176,11 +174,6 @@ export class GiftOrderQueryService {
           id: giftReleases.id,
           title: giftReleases.title,
         },
-        shipment: {
-          carrierName: shipments.carrierName,
-          exceptionMessage: shipments.exceptionMessage,
-          progress: shipments.progress,
-        },
       })
       .from(giftOrders)
       .innerJoin(giftReleases, eq(giftReleases.id, giftOrders.giftReleaseId))
@@ -192,7 +185,6 @@ export class GiftOrderQueryService {
           eq(giftCoverObjects.state, 'ACTIVE'),
         ),
       )
-      .leftJoin(shipments, eq(shipments.giftOrderId, giftOrders.id))
       .where(
         and(input.condition, cursor ? lt(giftOrders.orderNumber, cursor.orderNumber) : undefined),
       )
@@ -201,7 +193,7 @@ export class GiftOrderQueryService {
     const hasMore = rows.length > input.limit;
     const page = rows.slice(0, input.limit);
     return {
-      items: page.map(({ creator, order, release, shipment }) => ({
+      items: page.map(({ creator, order, release }) => ({
         biliDisplayName: order.biliDisplayName,
         biliUid: order.biliUid,
         creator,
@@ -220,13 +212,7 @@ export class GiftOrderQueryService {
           id: release.id,
           title: release.title,
         },
-        shipment: shipment?.carrierName
-          ? {
-              carrierName: shipment.carrierName,
-              exceptionMessage: shipment.exceptionMessage,
-              progress: shipment.progress,
-            }
-          : null,
+        shipping: shippingRecord(order),
         status: order.status,
         tier: order.tier,
         updatedAt: order.updatedAt,
@@ -291,7 +277,6 @@ export class GiftOrderQueryService {
         cancelled: sql<number>`count(*) filter (where ${giftOrders.status} = 'CANCELLED')::int`,
         claimable: sql<number>`count(*) filter (where ${effectiveOrderStatus(this.clock.now())} = 'CLAIMABLE')::int`,
         upcoming: sql<number>`count(*) filter (where ${effectiveOrderStatus(this.clock.now())} = 'UPCOMING')::int`,
-        completed: sql<number>`count(*) filter (where ${giftOrders.status} = 'COMPLETED')::int`,
         expired: sql<number>`count(*) filter (where ${effectiveOrderStatus(this.clock.now())} = 'EXPIRED')::int`,
         shipped: sql<number>`count(*) filter (where ${giftOrders.status} = 'SHIPPED')::int`,
         submitted: sql<number>`count(*) filter (where ${giftOrders.status} = 'SUBMITTED')::int`,
@@ -449,57 +434,24 @@ export class GiftOrderQueryService {
     row: Awaited<ReturnType<GiftOrderQueryService['loadDetailRows']>>[number] | undefined,
   ) {
     if (!row) return null;
-    const orderItems = await this.database.orm
-      .select()
-      .from(giftOrderItems)
-      .where(eq(giftOrderItems.giftOrderId, row.order.id))
-      .orderBy(asc(giftOrderItems.sortOrder));
-    const shipmentRows = await this.database.orm
-      .select()
-      .from(shipments)
-      .where(eq(shipments.giftOrderId, row.order.id))
-      .orderBy(desc(shipments.createdAt));
-    const shipmentIds = shipmentRows.map((shipment) => shipment.id);
-    const events =
-      shipmentIds.length === 0
-        ? []
-        : await this.database.orm
-            .select()
-            .from(trackingEvents)
-            .where(inArray(trackingEvents.shipmentId, shipmentIds))
-            .orderBy(desc(trackingEvents.occurredAt));
-    const eventsByShipment = new Map<string, typeof events>();
-    for (const event of events) {
-      const values = eventsByShipment.get(event.shipmentId) ?? [];
-      values.push(event);
-      eventsByShipment.set(event.shipmentId, values);
-    }
+    const orderItems = await loadOrderPackages(this.database.orm, eq(giftOrders.id, row.order.id));
     return {
       ...row.order,
       ...row.effectiveState,
       creator: row.creator,
-      items: orderItems.map((item) => ({ id: item.id, ...item.packageSnapshot })),
+      items: orderItems.map(({ id, name, description, items }) => ({
+        id,
+        name,
+        description,
+        items,
+      })),
       release: {
         ...row.release,
         coverImageUrl: row.release.coverObjectKey
           ? `/api/v1/gift-releases/${row.release.id}/cover`
           : null,
       },
-      shipments: shipmentRows.map((shipment) => ({
-        carrierName: shipment.carrierName,
-        createdAt: shipment.createdAt,
-        events: (eventsByShipment.get(shipment.id) ?? []).map((event) => ({
-          description: event.description,
-          location: event.location,
-          occurredAt: event.occurredAt,
-          status: event.status,
-        })),
-        exceptionMessage: shipment.exceptionMessage,
-        id: shipment.id,
-        progress: shipment.progress,
-        trackingNumber: shipment.trackingNumber,
-        trackingUrl: shipment.trackingUrl,
-      })),
+      shipping: shippingRecord(row.order),
     };
   }
 

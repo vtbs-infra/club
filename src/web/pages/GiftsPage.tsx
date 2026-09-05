@@ -12,7 +12,6 @@ const filters: readonly { readonly label: string; readonly value: GiftOrderListF
   { label: '待开放', value: 'UPCOMING' },
   { label: '等待发货', value: 'SUBMITTED' },
   { label: '已发货', value: 'SHIPPED' },
-  { label: '已完成', value: 'COMPLETED' },
   { label: '已结束', value: 'ENDED' },
 ];
 

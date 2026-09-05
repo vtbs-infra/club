@@ -3,27 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   giftOrderPresentation,
   roomHealthPresentation,
-  shipmentExceptionPresentation,
-  shipmentProgressPresentation,
   snapshotRunPresentation,
 } from '../../src/web/lib/status-presentation';
 
 describe('status presentation', () => {
   it('keeps order workflow labels explicit', () => {
     expect(giftOrderPresentation.SUBMITTED).toEqual({ label: '待发货', tone: 'warning' });
-    expect(giftOrderPresentation.SHIPPED).toEqual({ label: '已发货', tone: 'info' });
-  });
-
-  it('presents shipment progress separately from active exceptions', () => {
-    expect(shipmentProgressPresentation('IN_TRANSIT')).toEqual({
-      label: '运输中',
-      tone: 'info',
-    });
-    expect(shipmentExceptionPresentation).toEqual({ label: '物流异常', tone: 'danger' });
-    expect(shipmentProgressPresentation('PROVIDER_EXTENSION')).toEqual({
-      label: '状态更新中',
-      tone: 'neutral',
-    });
+    expect(giftOrderPresentation.SHIPPED).toEqual({ label: '已发货', tone: 'success' });
   });
 
   it('distinguishes connecting and unknown verification rooms', () => {

@@ -14,28 +14,10 @@ export const GiftOrderStatusSchema = Type.Union([
   Type.Literal('CLAIMABLE'),
   Type.Literal('SUBMITTED'),
   Type.Literal('SHIPPED'),
-  Type.Literal('COMPLETED'),
   Type.Literal('EXPIRED'),
   Type.Literal('CANCELLED'),
 ]);
 export type GiftOrderStatus = Static<typeof GiftOrderStatusSchema>;
-
-export const ShipmentProgressSchema = Type.Union([
-  Type.Literal('LABEL_CREATED'),
-  Type.Literal('IN_TRANSIT'),
-  Type.Literal('OUT_FOR_DELIVERY'),
-  Type.Literal('DELIVERED'),
-]);
-export type ShipmentProgress = Static<typeof ShipmentProgressSchema>;
-
-export const TrackingEventStatusSchema = Type.Union([
-  Type.Literal('LABEL_CREATED'),
-  Type.Literal('IN_TRANSIT'),
-  Type.Literal('OUT_FOR_DELIVERY'),
-  Type.Literal('DELIVERED'),
-  Type.Literal('EXCEPTION'),
-]);
-export type TrackingEventStatus = Static<typeof TrackingEventStatusSchema>;
 
 export const GiftFormFieldTypeSchema = Type.Union([
   Type.Literal('TEXT'),
@@ -194,29 +176,15 @@ const GiftOrderItemSchema = Type.Object({
   name: Type.String(),
 });
 
-const ShipmentSchema = Type.Object({
+const ShippingRecordSchema = Type.Object({
   carrierName: Type.String(),
-  createdAt: DateTimeSchema,
-  events: Type.Array(
-    Type.Object({
-      description: Type.String(),
-      location: Nullable(Type.String()),
-      occurredAt: DateTimeSchema,
-      status: TrackingEventStatusSchema,
-    }),
-  ),
-  exceptionMessage: Nullable(Type.String()),
-  id: IdSchema,
-  progress: ShipmentProgressSchema,
   trackingNumber: Type.String(),
-  trackingUrl: Nullable(Type.String()),
 });
 
 export const GiftOrderSchema = Type.Object({
   biliDisplayName: Nullable(Type.String()),
   biliUid: Type.String(),
   cancelledAt: Nullable(DateTimeSchema),
-  completedAt: Nullable(DateTimeSchema),
   creator: Type.Object({
     displayName: Type.String(),
     id: IdSchema,
@@ -237,7 +205,7 @@ export const GiftOrderSchema = Type.Object({
     id: IdSchema,
     title: Type.String(),
   }),
-  shipments: Type.Array(ShipmentSchema),
+  shipping: Nullable(ShippingRecordSchema),
   shippedAt: Nullable(DateTimeSchema),
   status: GiftOrderStatusSchema,
   submittedAt: Nullable(DateTimeSchema),
@@ -253,7 +221,6 @@ export const GiftOrderListFilterSchema = Type.Union([
   Type.Literal('CLAIMABLE'),
   Type.Literal('SUBMITTED'),
   Type.Literal('SHIPPED'),
-  Type.Literal('COMPLETED'),
   Type.Literal('ENDED'),
 ]);
 export type GiftOrderListFilter = Static<typeof GiftOrderListFilterSchema>;
@@ -278,13 +245,7 @@ export const GiftOrderSummarySchema = Type.Object({
     id: IdSchema,
     title: Type.String(),
   }),
-  shipment: Nullable(
-    Type.Object({
-      carrierName: Type.String(),
-      exceptionMessage: Nullable(Type.String()),
-      progress: ShipmentProgressSchema,
-    }),
-  ),
+  shipping: Nullable(ShippingRecordSchema),
   status: GiftOrderStatusSchema,
   tier: GuardTierSchema,
   updatedAt: DateTimeSchema,
@@ -301,7 +262,6 @@ const GiftOrderStatusCountsSchema = Type.Object({
   cancelled: Type.Integer({ minimum: 0 }),
   claimable: Type.Integer({ minimum: 0 }),
   upcoming: Type.Integer({ minimum: 0 }),
-  completed: Type.Integer({ minimum: 0 }),
   expired: Type.Integer({ minimum: 0 }),
   shipped: Type.Integer({ minimum: 0 }),
   submitted: Type.Integer({ minimum: 0 }),
@@ -370,13 +330,18 @@ export const SubmitGiftSchema = Type.Object(
 
 export const ShipGiftSchema = Type.Object(
   {
-    carrierCode: Type.String({ maxLength: 80, minLength: 1 }),
     carrierName: Type.String({ maxLength: 120, minLength: 1 }),
     trackingNumber: Type.String({ maxLength: 160, minLength: 1 }),
-    trackingUrl: Type.Optional(Nullable(Type.String({ maxLength: 1_000, pattern: '^https?://' }))),
   },
   { additionalProperties: false },
 );
+
+export type ShipGiftInput = Static<typeof ShipGiftSchema>;
+export const CorrectShippingSchema = Type.Object(
+  { ...ShipGiftSchema.properties, expectedVersion: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+export type CorrectShippingInput = Static<typeof CorrectShippingSchema>;
 
 export const FulfillmentExportInputSchema = Type.Object(
   { releaseId: IdSchema },

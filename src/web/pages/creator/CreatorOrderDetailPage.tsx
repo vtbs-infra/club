@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, CircleCheck, ExternalLink, PackageCheck, XCircle } from 'lucide-react';
+import { ArrowLeft, Pencil, PackageCheck, XCircle } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import {
   cancelCreatorOrder,
-  completeCreatorOrder,
+  correctCreatorOrderShipping,
   getCreatorOrder,
   shipCreatorOrder,
 } from '../../api/client';
@@ -18,21 +18,18 @@ import {
   StatusBadge,
 } from '../../components/Ui';
 import { formatDate, formatMonth, tierLabel } from '../../lib/format';
-import {
-  giftOrderPresentation,
-  shipmentExceptionPresentation,
-  shipmentProgressPresentation,
-} from '../../lib/status-presentation';
+import { giftOrderPresentation } from '../../lib/status-presentation';
+import { ShippingDetails } from '../../components/ShippingDetails';
 
-const carrierCodes: Readonly<Record<string, string>> = {
-  EMS: 'EMS',
-  京东物流: 'JD',
-  圆通速递: 'YTO',
-  申通快递: 'STO',
-  顺丰速运: 'SF',
-  韵达快递: 'YD',
-  中通快递: 'ZTO',
-};
+const carrierNames = [
+  'EMS',
+  '京东物流',
+  '圆通速递',
+  '申通快递',
+  '顺丰速运',
+  '韵达快递',
+  '中通快递',
+];
 
 export function CreatorOrderDetailPage() {
   const { giftOrderId = '' } = useParams();
@@ -44,10 +41,10 @@ export function CreatorOrderDetailPage() {
   });
   const [carrierName, setCarrierName] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
-  const [trackingUrl, setTrackingUrl] = useState('');
-  const [shipmentValidationError, setShipmentValidationError] = useState<string | null>(null);
+  const [shippingValidationError, setShippingValidationError] = useState<string | null>(null);
   const [shipOpen, setShipOpen] = useState(false);
-  const [completeOpen, setCompleteOpen] = useState(false);
+  const [editingShipping, setEditingShipping] = useState(false);
+  const [shippingVersion, setShippingVersion] = useState(0);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const update = async (updated: Awaited<ReturnType<typeof getCreatorOrder>>) => {
@@ -55,22 +52,15 @@ export function CreatorOrderDetailPage() {
     await queryClient.invalidateQueries({ queryKey: ['creator', 'orders'] });
   };
   const ship = useMutation({
-    mutationFn: () =>
-      shipCreatorOrder(giftOrderId, {
-        carrierCode: carrierCodes[carrierName.trim()] ?? 'OTHER',
-        carrierName: carrierName.trim(),
-        trackingNumber: trackingNumber.trim(),
-        ...(trackingUrl.trim() ? { trackingUrl: trackingUrl.trim() } : {}),
-      }),
+    mutationFn: () => {
+      const input = { carrierName: carrierName.trim(), trackingNumber: trackingNumber.trim() };
+      return editingShipping
+        ? correctCreatorOrderShipping(giftOrderId, { ...input, expectedVersion: shippingVersion })
+        : shipCreatorOrder(giftOrderId, input);
+    },
     onSuccess: async (updated) => {
       setShipOpen(false);
-      await update(updated);
-    },
-  });
-  const complete = useMutation({
-    mutationFn: () => completeCreatorOrder(giftOrderId),
-    onSuccess: async (updated) => {
-      setCompleteOpen(false);
+      setEditingShipping(false);
       await update(updated);
     },
   });
@@ -86,8 +76,8 @@ export function CreatorOrderDetailPage() {
   if (order.isPending) return <LoadingState label="正在读取礼物单…" />;
   if (order.isError || !order.data) return <ErrorState error={order.error} />;
   const data = order.data;
-  const mutationError = ship.error ?? complete.error ?? cancel.error;
-  const operationPending = ship.isPending || complete.isPending || cancel.isPending;
+  const mutationError = ship.error ?? cancel.error;
+  const operationPending = ship.isPending || cancel.isPending;
   return (
     <div className="stack-lg">
       <Link className="back-link" to="/creator/orders">
@@ -112,14 +102,16 @@ export function CreatorOrderDetailPage() {
               disabled={operationPending}
               onClick={() => {
                 ship.reset();
-                complete.reset();
                 cancel.reset();
-                setCompleteOpen(true);
+                setCarrierName(data.shipping!.carrierName);
+                setTrackingNumber(data.shipping!.trackingNumber);
+                setShippingVersion(data.version);
+                setEditingShipping(true);
               }}
               type="button"
             >
-              标记已完成
-              <CircleCheck aria-hidden="true" size={16} />
+              更正发货信息
+              <Pencil aria-hidden="true" size={16} />
             </button>
           ) : null}
           {data.status === 'SUBMITTED' ? (
@@ -128,7 +120,6 @@ export function CreatorOrderDetailPage() {
               disabled={operationPending}
               onClick={() => {
                 ship.reset();
-                complete.reset();
                 cancel.reset();
                 setCancelOpen(true);
               }}
@@ -246,25 +237,24 @@ export function CreatorOrderDetailPage() {
               </div>
             </dl>
           </section>
-          {data.status === 'SUBMITTED' ? (
+          {data.status === 'SUBMITTED' || editingShipping ? (
             <form
-              className="panel shipment-form"
+              className="panel shipping-form"
               onSubmit={(event: FormEvent) => {
                 event.preventDefault();
                 if (!carrierName.trim() || !trackingNumber.trim()) {
-                  setShipmentValidationError('快递公司和运单号不能只包含空格。');
+                  setShippingValidationError('快递公司和运单号不能只包含空格。');
                   return;
                 }
-                setShipmentValidationError(null);
+                setShippingValidationError(null);
                 ship.reset();
-                complete.reset();
                 cancel.reset();
                 setShipOpen(true);
               }}
             >
               <div>
                 <p className="eyebrow">发货操作</p>
-                <h2>录入发货信息</h2>
+                <h2>{editingShipping ? '更正发货信息' : '录入发货信息'}</h2>
                 <p>填写用户能识别的快递名称和运单号即可。</p>
               </div>
               <label>
@@ -273,7 +263,7 @@ export function CreatorOrderDetailPage() {
                   list="carrier-options"
                   maxLength={120}
                   onChange={(event) => {
-                    setShipmentValidationError(null);
+                    setShippingValidationError(null);
                     setCarrierName(event.target.value);
                   }}
                   placeholder="例如：中通快递"
@@ -281,7 +271,7 @@ export function CreatorOrderDetailPage() {
                   value={carrierName}
                 />
                 <datalist id="carrier-options">
-                  {Object.keys(carrierCodes).map((name) => (
+                  {carrierNames.map((name) => (
                     <option key={name} value={name} />
                   ))}
                 </datalist>
@@ -291,73 +281,53 @@ export function CreatorOrderDetailPage() {
                 <input
                   maxLength={160}
                   onChange={(event) => {
-                    setShipmentValidationError(null);
+                    setShippingValidationError(null);
                     setTrackingNumber(event.target.value);
                   }}
                   required
                   value={trackingNumber}
                 />
               </label>
-              <label>
-                查询链接（可选）
-                <input
-                  maxLength={1_000}
-                  onChange={(event) => {
-                    setShipmentValidationError(null);
-                    setTrackingUrl(event.target.value);
-                  }}
-                  placeholder="https://…"
-                  type="url"
-                  value={trackingUrl}
-                />
-              </label>
-              {shipmentValidationError ? (
+              {shippingValidationError ? (
                 <InlineNotice tone="danger">
-                  <p>{shipmentValidationError}</p>
+                  <p>{shippingValidationError}</p>
                 </InlineNotice>
               ) : null}
               <button className="button primary wide" disabled={operationPending} type="submit">
-                确认发货
+                {editingShipping ? '保存更正' : '确认发货'}
                 <PackageCheck aria-hidden="true" size={16} />
               </button>
+              {editingShipping ? (
+                <button
+                  className="button secondary wide"
+                  disabled={operationPending}
+                  onClick={() => setEditingShipping(false)}
+                  type="button"
+                >
+                  取消更正
+                </button>
+              ) : null}
             </form>
-          ) : data.shipments.length > 0 ? (
-            <section className="panel shipment-summary">
-              <p className="eyebrow">物流信息</p>
-              <h2>物流信息</h2>
-              {data.shipments.map((shipment) => (
-                <div key={shipment.id}>
-                  <strong>{shipment.carrierName}</strong>
-                  <p>{shipment.trackingNumber}</p>
-                  <span className="status-cluster">
-                    <StatusBadge {...shipmentProgressPresentation(shipment.progress)} />
-                    {shipment.exceptionMessage ? (
-                      <StatusBadge {...shipmentExceptionPresentation} />
-                    ) : null}
-                  </span>
-                  {shipment.exceptionMessage ? (
-                    <InlineNotice tone="danger">
-                      <p>{shipment.exceptionMessage}</p>
-                    </InlineNotice>
-                  ) : null}
-                  {shipment.trackingUrl ? (
-                    <a href={shipment.trackingUrl} rel="noreferrer" target="_blank">
-                      查询物流
-                      <ExternalLink aria-hidden="true" size={14} />
-                    </a>
-                  ) : null}
-                </div>
-              ))}
+          ) : data.shipping ? (
+            <section className="panel shipping-summary">
+              <p className="eyebrow">发货记录</p>
+              <h2>发货信息</h2>
+              {data.shippedAt ? <p>{formatDate(data.shippedAt, true)}</p> : null}
+              <ShippingDetails shipping={data.shipping} />
             </section>
           ) : null}
         </aside>
       </div>
       <ConfirmDialog
         busy={ship.isPending}
-        confirmLabel="确认发货"
+        confirmLabel={editingShipping ? '保存更正' : '确认发货'}
         description={
           <div className="stack-md">
-            <p>提交后礼物单会进入已发货状态，用户将立即看到以下物流信息。</p>
+            <p>
+              {editingShipping
+                ? '用户将看到更正后的发货信息，本次修改会保留审计记录。'
+                : '提交后礼物单会进入已发货状态，用户将立即看到以下发货信息。'}
+            </p>
             <dl className="dialog-summary">
               <div>
                 <dt>快递公司</dt>
@@ -374,21 +344,7 @@ export function CreatorOrderDetailPage() {
         onCancel={() => setShipOpen(false)}
         onConfirm={() => ship.mutate()}
         open={shipOpen}
-        title="核对并提交发货信息"
-      />
-      <ConfirmDialog
-        busy={complete.isPending}
-        confirmLabel="标记已完成"
-        description={
-          <div className="stack-md">
-            <p>礼物单会结束当前履约流程。请仅在确认无需继续跟进物流时执行。</p>
-            {complete.isError ? <ErrorNotice error={complete.error} /> : null}
-          </div>
-        }
-        onCancel={() => setCompleteOpen(false)}
-        onConfirm={() => complete.mutate()}
-        open={completeOpen}
-        title="确认将礼物单标记为已完成？"
+        title={editingShipping ? '核对并更正发货信息' : '核对并提交发货信息'}
       />
       <ConfirmDialog
         busy={cancel.isPending}

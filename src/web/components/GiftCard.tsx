@@ -3,22 +3,17 @@ import { Link } from 'react-router-dom';
 
 import type { GiftOrderSummary } from '../api/client';
 import { formatMonth, relativeDeadline, tierLabel } from '../lib/format';
-import {
-  giftOrderPresentation,
-  shipmentExceptionPresentation,
-  shipmentProgressPresentation,
-} from '../lib/status-presentation';
+import { giftOrderPresentation } from '../lib/status-presentation';
 import { StatusBadge } from './Ui';
 
 function action(order: GiftOrderSummary): string {
   if (order.status === 'CLAIMABLE') return '现在领取';
-  if (order.status === 'SHIPPED') return '查看物流';
+  if (order.status === 'SHIPPED') return '查看发货信息';
   if (order.status === 'SUBMITTED') return '查看进度';
   return '查看详情';
 }
 
 function progress(order: GiftOrderSummary, now: number): string {
-  const shipment = order.shipment;
   switch (order.status) {
     case 'UPCOMING':
       return '尚未到领取开始时间';
@@ -27,15 +22,7 @@ function progress(order: GiftOrderSummary, now: number): string {
     case 'SUBMITTED':
       return '领取信息已提交，等待主播发货';
     case 'SHIPPED':
-      return shipment
-        ? `${shipment.carrierName} · ${
-            shipment.exceptionMessage
-              ? shipmentExceptionPresentation.label
-              : shipmentProgressPresentation(shipment.progress).label
-          }`
-        : '已发货，物流信息正在更新';
-    case 'COMPLETED':
-      return '礼物流程已完成';
+      return order.shipping ? `${order.shipping.carrierName} · 发货信息已登记` : '已发货';
     case 'EXPIRED':
       return order.expiryReason === 'RELEASE_CLOSED' ? '主播已关闭领取' : '未在领取期内提交';
     case 'CANCELLED':

@@ -1,6 +1,5 @@
 import type { AppDatabase, DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import type { BindingRuntime } from '../../src/server/modules/binding/binding-runtime.js';
-import type { FulfillmentRuntime } from '../../src/server/modules/fulfillment/fulfillment-runtime.js';
 import type { GiftMediaRuntime } from '../../src/server/modules/gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../../src/server/modules/snapshots/snapshot-runtime.js';
 
@@ -42,20 +41,6 @@ export function bindingRuntimeStub(
     start: () => Promise.resolve(),
     ...overrides,
   } as unknown as BindingRuntime;
-}
-
-export function fulfillmentRuntimeStub(
-  overrides: Partial<Pick<FulfillmentRuntime, 'close' | 'getStatus' | 'start'>> = {},
-): FulfillmentRuntime {
-  return {
-    close: () => undefined,
-    getStatus: () => ({ ...runtimeStatus('STOPPED'), configured: false }),
-    provider: null,
-    service: {},
-    start: () => Promise.resolve(),
-    tick: () => Promise.resolve(),
-    ...overrides,
-  } as unknown as FulfillmentRuntime;
 }
 
 export function giftMediaRuntimeStub(
