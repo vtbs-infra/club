@@ -170,8 +170,8 @@ CREATE TABLE "gift_order_status_history" (
 	"actor_user_id" uuid,
 	"reason" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "gift_order_status_history_from_check" CHECK ("gift_order_status_history"."from_status" is null or "gift_order_status_history"."from_status" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')),
-	CONSTRAINT "gift_order_status_history_to_check" CHECK ("gift_order_status_history"."to_status" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED'))
+	CONSTRAINT "gift_order_status_history_from_check" CHECK ("gift_order_status_history"."from_status" is null or "gift_order_status_history"."from_status" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')),
+	CONSTRAINT "gift_order_status_history_to_check" CHECK ("gift_order_status_history"."to_status" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED'))
 );
 --> statement-breakpoint
 CREATE TABLE "gift_orders" (
@@ -184,19 +184,17 @@ CREATE TABLE "gift_orders" (
 	"bili_uid" text NOT NULL,
 	"bili_display_name" text NOT NULL,
 	"tier" text NOT NULL,
-	"status" text DEFAULT 'CLAIMABLE' NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
+	"status" text DEFAULT 'UNCLAIMED' NOT NULL,
 	"submitted_at" timestamp with time zone,
 	"shipped_at" timestamp with time zone,
 	"completed_at" timestamp with time zone,
-	"expired_at" timestamp with time zone,
 	"cancelled_at" timestamp with time zone,
 	"cancel_reason" text,
 	"version" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "gift_orders_number_format_check" CHECK ("gift_orders"."order_number" ~ '^G[0-9]{4}(0[1-9]|1[0-2])-[0-9A-F]{32}$'),
-	CONSTRAINT "gift_orders_status_check" CHECK ("gift_orders"."status" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')),
+	CONSTRAINT "gift_orders_status_check" CHECK ("gift_orders"."status" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')),
 	CONSTRAINT "gift_orders_tier_check" CHECK ("gift_orders"."tier" in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')),
 	CONSTRAINT "gift_orders_version_positive" CHECK ("gift_orders"."version" > 0)
 );
@@ -892,7 +890,6 @@ BEGIN
 		OR NEW.bili_uid IS DISTINCT FROM OLD.bili_uid
 		OR NEW.bili_display_name IS DISTINCT FROM OLD.bili_display_name
 		OR NEW.tier IS DISTINCT FROM OLD.tier
-		OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
 		OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
 		RAISE EXCEPTION 'gift order identity is immutable';
 	END IF;
@@ -903,7 +900,7 @@ BEGIN
 		RAISE EXCEPTION 'gift order version must increment exactly once';
 	END IF;
 	IF NOT (
-		(OLD.status = 'CLAIMABLE' AND NEW.status IN ('SUBMITTED', 'EXPIRED'))
+		(OLD.status = 'UNCLAIMED' AND NEW.status = 'SUBMITTED')
 		OR (OLD.status = 'SUBMITTED' AND NEW.status IN ('SHIPPED', 'CANCELLED'))
 		OR (OLD.status = 'SHIPPED' AND NEW.status = 'COMPLETED')
 	) THEN
@@ -917,9 +914,6 @@ BEGIN
 	END IF;
 	IF NEW.status = 'COMPLETED' AND NEW.completed_at IS NULL THEN
 		RAISE EXCEPTION 'completed gift orders require a timestamp';
-	END IF;
-	IF NEW.status = 'EXPIRED' AND NEW.expired_at IS NULL THEN
-		RAISE EXCEPTION 'expired gift orders require a timestamp';
 	END IF;
 	IF NEW.status = 'CANCELLED' AND (NEW.cancelled_at IS NULL OR NEW.cancel_reason IS NULL) THEN
 		RAISE EXCEPTION 'cancelled gift orders require a timestamp and reason';

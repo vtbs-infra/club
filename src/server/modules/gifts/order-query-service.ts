@@ -14,6 +14,8 @@ import {
 } from 'drizzle-orm';
 
 import type { GiftOrderListFilter } from '../../../shared/contracts/gifts.js';
+import type { Clock } from '../../infrastructure/clock/clock.js';
+import { effectiveOrderStatus, orderStatusSelection } from './order-status.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
@@ -94,12 +96,12 @@ function encodeFulfillmentReleaseCursor(row: FulfillmentReleaseCursor): string {
   ).toString('base64url');
 }
 
-function filterCondition(filter: GiftOrderListFilter): SQL | undefined {
+function filterCondition(filter: GiftOrderListFilter, now: Date): SQL | undefined {
   if (filter === 'ALL') return undefined;
   if (filter === 'ENDED') {
-    return or(eq(giftOrders.status, 'EXPIRED'), eq(giftOrders.status, 'CANCELLED'));
+    return or(eq(effectiveOrderStatus(now), 'EXPIRED'), eq(giftOrders.status, 'CANCELLED'));
   }
-  return eq(giftOrders.status, filter);
+  return eq(effectiveOrderStatus(now), filter);
 }
 
 function escapedPrefix(value: string): string {
@@ -107,7 +109,15 @@ function escapedPrefix(value: string): string {
 }
 
 function emptyCounts() {
-  return { cancelled: 0, claimable: 0, completed: 0, expired: 0, shipped: 0, submitted: 0 };
+  return {
+    upcoming: 0,
+    cancelled: 0,
+    claimable: 0,
+    completed: 0,
+    expired: 0,
+    shipped: 0,
+    submitted: 0,
+  };
 }
 
 function statusCounts(row: Record<string, unknown> | undefined) {
@@ -125,6 +135,7 @@ export class GiftOrderQueryService {
   public constructor(
     private readonly database: DatabaseService,
     private readonly encryption: EncryptionKeyRing,
+    private readonly clock: Clock,
   ) {
     this.audit = new AuditService(database);
   }
@@ -151,10 +162,9 @@ export class GiftOrderQueryService {
         order: {
           biliDisplayName: giftOrders.biliDisplayName,
           biliUid: giftOrders.biliUid,
-          expiresAt: giftOrders.expiresAt,
+          ...orderStatusSelection(this.clock.now()),
           id: giftOrders.id,
           orderNumber: giftOrders.orderNumber,
-          status: giftOrders.status,
           tier: giftOrders.tier,
           updatedAt: giftOrders.updatedAt,
         },
@@ -196,6 +206,8 @@ export class GiftOrderQueryService {
         biliUid: order.biliUid,
         creator,
         expiresAt: order.expiresAt,
+        expiredAt: order.expiredAt,
+        expiryReason: order.expiryReason,
         id: order.id,
         orderNumber: order.orderNumber,
         release: {
@@ -236,7 +248,7 @@ export class GiftOrderQueryService {
       ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
       : eq(giftOrders.userId, userId);
     return this.listSummaries({
-      condition: and(access, filterCondition(input.filter)),
+      condition: and(access, filterCondition(input.filter, this.clock.now())),
       cursor: input.cursor,
       cursorCode: 'GIFT_ORDER_CURSOR_INVALID',
       limit: input.limit,
@@ -257,7 +269,7 @@ export class GiftOrderQueryService {
     return this.listSummaries({
       condition: and(
         eq(giftOrders.creatorId, creatorId),
-        input.status ? eq(giftOrders.status, input.status) : undefined,
+        input.status ? eq(effectiveOrderStatus(this.clock.now()), input.status) : undefined,
         prefix
           ? or(
               ilike(giftOrders.orderNumber, prefix),
@@ -277,14 +289,45 @@ export class GiftOrderQueryService {
     return this.database.orm
       .select({
         cancelled: sql<number>`count(*) filter (where ${giftOrders.status} = 'CANCELLED')::int`,
-        claimable: sql<number>`count(*) filter (where ${giftOrders.status} = 'CLAIMABLE')::int`,
+        claimable: sql<number>`count(*) filter (where ${effectiveOrderStatus(this.clock.now())} = 'CLAIMABLE')::int`,
+        upcoming: sql<number>`count(*) filter (where ${effectiveOrderStatus(this.clock.now())} = 'UPCOMING')::int`,
         completed: sql<number>`count(*) filter (where ${giftOrders.status} = 'COMPLETED')::int`,
-        expired: sql<number>`count(*) filter (where ${giftOrders.status} = 'EXPIRED')::int`,
+        expired: sql<number>`count(*) filter (where ${effectiveOrderStatus(this.clock.now())} = 'EXPIRED')::int`,
         shipped: sql<number>`count(*) filter (where ${giftOrders.status} = 'SHIPPED')::int`,
         submitted: sql<number>`count(*) filter (where ${giftOrders.status} = 'SUBMITTED')::int`,
       })
       .from(giftOrders)
+      .innerJoin(giftReleases, eq(giftReleases.id, giftOrders.giftReleaseId))
       .where(condition);
+  }
+
+  public async overviewForUser(userId: string) {
+    const binding = await this.activeBinding(userId);
+    const access = binding
+      ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))!
+      : eq(giftOrders.userId, userId);
+    const now = this.clock.now();
+    const [[counts], [urgent]] = await Promise.all([
+      this.countSelection(access),
+      this.database.orm
+        .select({
+          id: giftOrders.id,
+          title: giftReleases.title,
+          claimDeadlineAt: giftReleases.claimDeadlineAt,
+        })
+        .from(giftOrders)
+        .innerJoin(giftReleases, eq(giftReleases.id, giftOrders.giftReleaseId))
+        .where(
+          and(
+            access,
+            eq(effectiveOrderStatus(now), 'CLAIMABLE'),
+            sql`${giftReleases.claimDeadlineAt} < ${new Date(now.getTime() + 3 * 86_400_000).toISOString()}::timestamptz`,
+          ),
+        )
+        .orderBy(asc(giftReleases.claimDeadlineAt), asc(giftOrders.id))
+        .limit(1),
+    ]);
+    return { counts: statusCounts(counts), urgent: urgent ?? null };
   }
 
   public async overviewForCreator(creatorId: string) {
@@ -376,6 +419,7 @@ export class GiftOrderQueryService {
       .select({
         creator: { displayName: creators.displayName, id: creators.id },
         order: giftOrders,
+        effectiveState: orderStatusSelection(this.clock.now()),
         release: {
           claimDeadlineAt: giftReleases.claimDeadlineAt,
           claimStartAt: giftReleases.claimStartAt,
@@ -432,6 +476,7 @@ export class GiftOrderQueryService {
     }
     return {
       ...row.order,
+      ...row.effectiveState,
       creator: row.creator,
       items: orderItems.map((item) => ({ id: item.id, ...item.packageSnapshot })),
       release: {

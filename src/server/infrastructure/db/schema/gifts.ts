@@ -163,12 +163,10 @@ export const giftOrders = pgTable(
     biliUid: text('bili_uid').notNull(),
     biliDisplayName: text('bili_display_name').notNull(),
     tier: text('tier').notNull(),
-    status: text('status').default('CLAIMABLE').notNull(),
-    expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
+    status: text('status').default('UNCLAIMED').notNull(),
     submittedAt: timestamp('submitted_at', { mode: 'date', withTimezone: true }),
     shippedAt: timestamp('shipped_at', { mode: 'date', withTimezone: true }),
     completedAt: timestamp('completed_at', { mode: 'date', withTimezone: true }),
-    expiredAt: timestamp('expired_at', { mode: 'date', withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { mode: 'date', withTimezone: true }),
     cancelReason: text('cancel_reason'),
     version: integer('version').default(1).notNull(),
@@ -195,7 +193,7 @@ export const giftOrders = pgTable(
     ),
     check(
       'gift_orders_status_check',
-      sql`${table.status} in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
+      sql`${table.status} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
     ),
     check('gift_orders_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
     check('gift_orders_version_positive', sql`${table.version} > 0`),
@@ -295,11 +293,11 @@ export const giftOrderStatusHistory = pgTable(
     index('gift_order_status_history_order_created_idx').on(table.giftOrderId, table.createdAt),
     check(
       'gift_order_status_history_from_check',
-      sql`${table.fromStatus} is null or ${table.fromStatus} in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
+      sql`${table.fromStatus} is null or ${table.fromStatus} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
     ),
     check(
       'gift_order_status_history_to_check',
-      sql`${table.toStatus} in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')`,
+      sql`${table.toStatus} in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')`,
     ),
   ],
 );

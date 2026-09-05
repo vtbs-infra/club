@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
@@ -41,33 +41,6 @@ export class GiftClaimService {
     private readonly clock: Clock,
   ) {
     this.audit = new AuditService(database);
-  }
-
-  public async expireClaimable(): Promise<number> {
-    const now = this.clock.now();
-    return this.database.orm.transaction(async (transaction) => {
-      const expired = await transaction
-        .update(giftOrders)
-        .set({
-          expiredAt: now,
-          status: 'EXPIRED',
-          updatedAt: now,
-          version: sql`${giftOrders.version} + 1`,
-        })
-        .where(and(eq(giftOrders.status, 'CLAIMABLE'), lte(giftOrders.expiresAt, now)))
-        .returning({ id: giftOrders.id });
-      if (expired.length > 0) {
-        await transaction.insert(giftOrderStatusHistory).values(
-          expired.map((order) => ({
-            fromStatus: 'CLAIMABLE',
-            giftOrderId: order.id,
-            reason: 'Claim deadline elapsed.',
-            toStatus: 'EXPIRED',
-          })),
-        );
-      }
-      return expired.length;
-    });
   }
 
   private async activeBinding(userId: string, executor: AppDatabase = this.database.orm) {
@@ -136,7 +109,6 @@ export class GiftClaimService {
     },
     context: RequestAuditContext,
   ): Promise<void> {
-    await this.expireClaimable();
     await this.database.orm.transaction(async (transaction) => {
       const [order] = await transaction
         .select()
@@ -145,7 +117,7 @@ export class GiftClaimService {
         .limit(1)
         .for('update');
       if (!order) throw new AppError('GIFT_ORDER_NOT_FOUND', 'Gift order not found.', 404);
-      if (order.status !== 'CLAIMABLE') {
+      if (order.status !== 'UNCLAIMED') {
         throw new AppError('GIFT_ORDER_NOT_CLAIMABLE', 'This gift can no longer be claimed.', 409);
       }
       if (order.version !== input.expectedVersion) {
@@ -172,14 +144,14 @@ export class GiftClaimService {
         })
         .from(giftReleases)
         .where(eq(giftReleases.id, order.giftReleaseId))
-        .limit(1);
+        .limit(1)
+        .for('share');
       const now = this.clock.now();
       if (
         !release ||
         release.status !== 'PUBLISHED' ||
         now < release.claimStartAt ||
-        now >= release.claimDeadlineAt ||
-        now >= order.expiresAt
+        now >= release.claimDeadlineAt
       ) {
         throw new AppError(
           'GIFT_ORDER_CLAIM_WINDOW_CLOSED',
@@ -224,7 +196,7 @@ export class GiftClaimService {
         .where(
           and(
             eq(giftOrders.id, order.id),
-            eq(giftOrders.status, 'CLAIMABLE'),
+            eq(giftOrders.status, 'UNCLAIMED'),
             eq(giftOrders.version, order.version),
           ),
         )
@@ -238,7 +210,7 @@ export class GiftClaimService {
       }
       await transaction.insert(giftOrderStatusHistory).values({
         actorUserId: userId,
-        fromStatus: 'CLAIMABLE',
+        fromStatus: 'UNCLAIMED',
         giftOrderId: order.id,
         toStatus: 'SUBMITTED',
       });

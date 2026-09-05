@@ -26,6 +26,7 @@ import { giftOrderPresentation } from '../../lib/status-presentation';
 const filters: readonly { readonly label: string; readonly value?: GiftOrderStatus }[] = [
   { label: '全部' },
   { label: '待领取', value: 'CLAIMABLE' },
+  { label: '待开放', value: 'UPCOMING' },
   { label: '待发货', value: 'SUBMITTED' },
   { label: '已发货', value: 'SHIPPED' },
   { label: '已完成', value: 'COMPLETED' },

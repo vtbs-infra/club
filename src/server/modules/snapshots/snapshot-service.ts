@@ -30,7 +30,7 @@ import {
   classifyPunctuality,
   relevantMonthlyPeriods,
 } from './month-end.js';
-import { GiftEligibilityService } from '../gifts/eligibility-service.js';
+import type { GiftEligibilityService } from '../gifts/eligibility-service.js';
 import { lockEligibilityPeriod } from '../gifts/eligibility-lock.js';
 import { SnapshotQueryService } from './snapshot-query-service.js';
 

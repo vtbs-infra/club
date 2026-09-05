@@ -19,6 +19,7 @@ export interface StatusPresentation {
 export const giftOrderPresentation = {
   CANCELLED: { label: '已取消', tone: 'neutral' },
   CLAIMABLE: { label: '待领取', tone: 'info' },
+  UPCOMING: { label: '待开放', tone: 'neutral' },
   COMPLETED: { label: '已完成', tone: 'success' },
   EXPIRED: { label: '已过期', tone: 'neutral' },
   SHIPPED: { label: '已发货', tone: 'info' },

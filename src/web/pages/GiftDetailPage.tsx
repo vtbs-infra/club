@@ -458,7 +458,9 @@ function OrderProgress({ order }: { readonly order: Awaited<ReturnType<typeof ge
       ) : (
         <p className="quiet-line">
           {order.status === 'EXPIRED'
-            ? '这份礼物未在领取期限内提交。'
+            ? order.expiryReason === 'RELEASE_CLOSED'
+              ? '主播已关闭这份礼物的领取。'
+              : '这份礼物未在领取期限内提交。'
             : order.status === 'CANCELLED'
               ? '这份礼物单已取消。'
               : '主播发货后，物流信息会显示在这里。'}

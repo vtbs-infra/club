@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
 import {
   CreatorOrderOverviewSchema,
+  UserOrderOverviewSchema,
   CreatorOrderSchema,
   FulfillmentReleaseSummaryPageSchema,
   FulfillmentExportInputSchema,
@@ -80,6 +81,15 @@ function workbookContentDisposition(input: {
 const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, options) => {
   const requireSession = createRequireSession(options.auth);
   const requireCreator = createRequireCreator(options.auth, options.database);
+
+  app.get(
+    '/api/v1/me/gifts/overview',
+    {
+      preHandler: requireSession,
+      schema: { response: { 200: UserOrderOverviewSchema }, tags: ['my-gifts'] },
+    },
+    (request) => options.service.overviewForUser(session(request).user.id),
+  );
 
   app.get<{
     Querystring: { cursor?: string; filter?: GiftOrderListFilter; limit?: number };

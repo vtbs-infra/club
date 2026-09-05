@@ -101,6 +101,8 @@ export function giftOrder(overrides: GiftOrderOverrides = {}): GiftOrder {
       ...creator,
     },
     expiresAt: testTime(30),
+    expiredAt: null,
+    expiryReason: null,
     id: testId(3),
     items: [
       {

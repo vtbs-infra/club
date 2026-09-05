@@ -2,7 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, ClockAlert, Gift, Link2, MapPin, Sparkles, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { getAddresses, getAnnouncements, getBinding, getIdentity, getMyGifts } from '../api/client';
+import {
+  getAddresses,
+  getAnnouncements,
+  getBinding,
+  getIdentity,
+  getMyGifts,
+  getMyGiftOverview,
+} from '../api/client';
 import { GiftCard } from '../components/GiftCard';
 import { EmptyState, ErrorNotice, ErrorState, LoadingState, StatusBadge } from '../components/Ui';
 import { useNow } from '../hooks/useNow';
@@ -20,18 +27,20 @@ export function DashboardPage() {
     queryFn: () => getMyGifts({ limit: 12 }),
     queryKey: ['gifts', 'mine', 12],
   });
+  const overview = useQuery({
+    queryFn: getMyGiftOverview,
+    queryKey: ['gifts', 'overview'],
+    refetchInterval: 30_000,
+  });
   const binding = useQuery({ queryFn: getBinding, queryKey: ['me', 'bilibili-binding'] });
   const addresses = useQuery({ queryFn: getAddresses, queryKey: ['me', 'addresses'] });
 
   if (identity.isPending) return <LoadingState label="正在准备仪表盘…" />;
   if (identity.isError) return <ErrorState error={identity.error} />;
   const visibleGifts = gifts.data?.items ?? [];
-  const claimable = visibleGifts.filter((gift) => gift.status === 'CLAIMABLE');
+  const claimableCount = overview.data?.counts.claimable ?? 0;
   const shipped = visibleGifts.find((gift) => gift.status === 'SHIPPED');
-  const urgent = claimable.find((gift) => {
-    const remaining = new Date(gift.release.claimDeadlineAt).getTime() - now;
-    return remaining >= 0 && remaining < 3 * 86_400_000;
-  });
+  const urgent = overview.data?.urgent;
 
   return (
     <div className="dashboard stack-xl">
@@ -45,12 +54,12 @@ export function DashboardPage() {
           <p>欢迎回来</p>
           <h1>欢迎回来，{identity.data.user.name}！</h1>
           <span>
-            {gifts.isPending
+            {overview.isPending
               ? '正在读取你的礼物单…'
-              : gifts.isError
+              : overview.isError
                 ? '礼物单暂时无法读取，其他功能仍可继续使用。'
-                : claimable.length > 0
-                  ? `你有 ${claimable.length} 份礼物等待领取。`
+                : claimableCount > 0
+                  ? `你有 ${claimableCount} 份礼物等待领取。`
                   : '新的舰长礼物会自动出现在这里。'}
           </span>
         </div>
@@ -98,6 +107,13 @@ export function DashboardPage() {
         )}
       </section>
 
+      {overview.isError ? (
+        <ErrorState
+          error={overview.error}
+          onRetry={() => void overview.refetch()}
+          title="礼物待办暂时无法加载"
+        />
+      ) : null}
       {binding.isError ? (
         <div className="stack-md">
           <ErrorNotice error={binding.error} />
@@ -110,7 +126,7 @@ export function DashboardPage() {
           </button>
         </div>
       ) : null}
-      {addresses.isError && binding.data && claimable.length > 0 ? (
+      {addresses.isError && binding.data && claimableCount > 0 ? (
         <div className="stack-md">
           <ErrorNotice error={addresses.error} />
           <button
@@ -140,7 +156,7 @@ export function DashboardPage() {
       ) : !addresses.isPending &&
         !addresses.isError &&
         binding.data &&
-        claimable.length > 0 &&
+        claimableCount > 0 &&
         addresses.data.length === 0 ? (
         <section className="action-callout">
           <div className="callout-icon">
@@ -161,8 +177,8 @@ export function DashboardPage() {
             <ClockAlert aria-hidden="true" size={22} />
           </div>
           <div>
-            <strong>“{urgent.release.title}”即将截止</strong>
-            <p>请在 {formatDate(urgent.release.claimDeadlineAt, true)} 前完成领取。</p>
+            <strong>“{urgent.title}”即将截止</strong>
+            <p>请在 {formatDate(urgent.claimDeadlineAt, true)} 前完成领取。</p>
           </div>
           <Link className="button primary" to={`/gifts/${urgent.id}`}>
             现在领取

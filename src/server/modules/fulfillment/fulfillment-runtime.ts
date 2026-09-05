@@ -59,7 +59,6 @@ export function createFulfillmentRuntime(input: {
     if (activeTick) return activeTick;
     activeTick = (async () => {
       try {
-        await service.expireClaimable();
         await tracking.refreshDue();
         status.markSuccess();
       } catch (error) {

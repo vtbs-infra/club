@@ -10,6 +10,7 @@ import {
 } from './common.js';
 
 export const GiftOrderStatusSchema = Type.Union([
+  Type.Literal('UPCOMING'),
   Type.Literal('CLAIMABLE'),
   Type.Literal('SUBMITTED'),
   Type.Literal('SHIPPED'),
@@ -221,6 +222,8 @@ export const GiftOrderSchema = Type.Object({
     id: IdSchema,
   }),
   expiresAt: DateTimeSchema,
+  expiredAt: Nullable(DateTimeSchema),
+  expiryReason: Nullable(Type.Union([Type.Literal('DEADLINE'), Type.Literal('RELEASE_CLOSED')])),
   id: IdSchema,
   items: Type.Array(GiftOrderItemSchema),
   orderNumber: Type.String(),
@@ -246,6 +249,7 @@ export type GiftOrder = Static<typeof GiftOrderSchema>;
 
 export const GiftOrderListFilterSchema = Type.Union([
   Type.Literal('ALL'),
+  Type.Literal('UPCOMING'),
   Type.Literal('CLAIMABLE'),
   Type.Literal('SUBMITTED'),
   Type.Literal('SHIPPED'),
@@ -262,6 +266,8 @@ export const GiftOrderSummarySchema = Type.Object({
     id: IdSchema,
   }),
   expiresAt: DateTimeSchema,
+  expiredAt: Nullable(DateTimeSchema),
+  expiryReason: Nullable(Type.Union([Type.Literal('DEADLINE'), Type.Literal('RELEASE_CLOSED')])),
   id: IdSchema,
   orderNumber: Type.String(),
   release: Type.Object({
@@ -294,11 +300,20 @@ export type GiftOrderSummaryPage = Static<typeof GiftOrderSummaryPageSchema>;
 const GiftOrderStatusCountsSchema = Type.Object({
   cancelled: Type.Integer({ minimum: 0 }),
   claimable: Type.Integer({ minimum: 0 }),
+  upcoming: Type.Integer({ minimum: 0 }),
   completed: Type.Integer({ minimum: 0 }),
   expired: Type.Integer({ minimum: 0 }),
   shipped: Type.Integer({ minimum: 0 }),
   submitted: Type.Integer({ minimum: 0 }),
 });
+
+export const UserOrderOverviewSchema = Type.Object({
+  counts: GiftOrderStatusCountsSchema,
+  urgent: Nullable(
+    Type.Object({ id: IdSchema, title: Type.String(), claimDeadlineAt: DateTimeSchema }),
+  ),
+});
+export type UserOrderOverview = Static<typeof UserOrderOverviewSchema>;
 
 export const CreatorOrderOverviewSchema = Type.Object({
   activeRelease: Nullable(

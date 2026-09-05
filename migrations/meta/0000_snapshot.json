@@ -1,5 +1,5 @@
 {
-  "id": "5bfdf3cc-e03d-401c-b8e6-f695164b43e0",
+  "id": "0af79c7a-59c9-4949-b252-798e1811f67a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -96,12 +96,8 @@
           "name": "announcement_reads_announcement_id_announcements_id_fk",
           "tableFrom": "announcement_reads",
           "tableTo": "announcements",
-          "columnsFrom": [
-            "announcement_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["announcement_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -109,12 +105,8 @@
           "name": "announcement_reads_user_id_users_id_fk",
           "tableFrom": "announcement_reads",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -339,12 +331,8 @@
           "name": "announcements_creator_id_creators_id_fk",
           "tableFrom": "announcements",
           "tableTo": "creators",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -352,12 +340,8 @@
           "name": "announcements_created_by_user_id_users_id_fk",
           "tableFrom": "announcements",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -442,12 +426,8 @@
           "name": "platform_appearance_updated_by_user_id_users_id_fk",
           "tableFrom": "platform_appearance",
           "tableTo": "users",
-          "columnsFrom": [
-            "updated_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["updated_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -596,12 +576,8 @@
           "name": "accounts_user_id_users_id_fk",
           "tableFrom": "accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -720,12 +696,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1004,12 +976,8 @@
           "name": "addresses_user_id_users_id_fk",
           "tableFrom": "addresses",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1112,12 +1080,8 @@
           "name": "gift_cover_objects_gift_release_id_gift_releases_id_fk",
           "tableFrom": "gift_cover_objects",
           "tableTo": "gift_releases",
-          "columnsFrom": [
-            "gift_release_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_release_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1221,12 +1185,8 @@
           "name": "gift_order_addresses_gift_order_id_gift_orders_id_fk",
           "tableFrom": "gift_order_addresses",
           "tableTo": "gift_orders",
-          "columnsFrom": [
-            "gift_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_order_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1335,12 +1295,8 @@
           "name": "gift_order_items_gift_order_id_gift_orders_id_fk",
           "tableFrom": "gift_order_items",
           "tableTo": "gift_orders",
-          "columnsFrom": [
-            "gift_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_order_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1348,12 +1304,8 @@
           "name": "gift_order_items_gift_package_id_gift_packages_id_fk",
           "tableFrom": "gift_order_items",
           "tableTo": "gift_packages",
-          "columnsFrom": [
-            "gift_package_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_package_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1460,12 +1412,8 @@
           "name": "gift_order_option_values_gift_order_id_gift_orders_id_fk",
           "tableFrom": "gift_order_option_values",
           "tableTo": "gift_orders",
-          "columnsFrom": [
-            "gift_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_order_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1558,12 +1506,8 @@
           "name": "gift_order_status_history_gift_order_id_gift_orders_id_fk",
           "tableFrom": "gift_order_status_history",
           "tableTo": "gift_orders",
-          "columnsFrom": [
-            "gift_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_order_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1571,12 +1515,8 @@
           "name": "gift_order_status_history_actor_user_id_users_id_fk",
           "tableFrom": "gift_order_status_history",
           "tableTo": "users",
-          "columnsFrom": [
-            "actor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["actor_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1587,11 +1527,11 @@
       "checkConstraints": {
         "gift_order_status_history_from_check": {
           "name": "gift_order_status_history_from_check",
-          "value": "\"gift_order_status_history\".\"from_status\" is null or \"gift_order_status_history\".\"from_status\" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')"
+          "value": "\"gift_order_status_history\".\"from_status\" is null or \"gift_order_status_history\".\"from_status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')"
         },
         "gift_order_status_history_to_check": {
           "name": "gift_order_status_history_to_check",
-          "value": "\"gift_order_status_history\".\"to_status\" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')"
+          "value": "\"gift_order_status_history\".\"to_status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')"
         }
       },
       "isRLSEnabled": false
@@ -1660,13 +1600,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'CLAIMABLE'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
+          "default": "'UNCLAIMED'"
         },
         "submitted_at": {
           "name": "submitted_at",
@@ -1682,12 +1616,6 @@
         },
         "completed_at": {
           "name": "completed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expired_at": {
-          "name": "expired_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -1880,12 +1808,8 @@
           "name": "gift_orders_creator_id_creators_id_fk",
           "tableFrom": "gift_orders",
           "tableTo": "creators",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1893,12 +1817,8 @@
           "name": "gift_orders_gift_release_id_gift_releases_id_fk",
           "tableFrom": "gift_orders",
           "tableTo": "gift_releases",
-          "columnsFrom": [
-            "gift_release_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_release_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1906,12 +1826,8 @@
           "name": "gift_orders_snapshot_member_id_snapshot_attempt_members_id_fk",
           "tableFrom": "gift_orders",
           "tableTo": "snapshot_attempt_members",
-          "columnsFrom": [
-            "snapshot_member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_member_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -1919,12 +1835,8 @@
           "name": "gift_orders_user_id_users_id_fk",
           "tableFrom": "gift_orders",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -1939,7 +1851,7 @@
         },
         "gift_orders_status_check": {
           "name": "gift_orders_status_check",
-          "value": "\"gift_orders\".\"status\" in ('CLAIMABLE', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'EXPIRED', 'CANCELLED')"
+          "value": "\"gift_orders\".\"status\" in ('UNCLAIMED', 'SUBMITTED', 'SHIPPED', 'COMPLETED', 'CANCELLED')"
         },
         "gift_orders_tier_check": {
           "name": "gift_orders_tier_check",
@@ -2039,12 +1951,8 @@
           "name": "gift_package_items_gift_package_id_gift_packages_id_fk",
           "tableFrom": "gift_package_items",
           "tableTo": "gift_packages",
-          "columnsFrom": [
-            "gift_package_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_package_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2161,12 +2069,8 @@
           "name": "gift_packages_gift_release_id_gift_releases_id_fk",
           "tableFrom": "gift_packages",
           "tableTo": "gift_releases",
-          "columnsFrom": [
-            "gift_release_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_release_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2369,12 +2273,8 @@
           "name": "gift_releases_creator_id_creators_id_fk",
           "tableFrom": "gift_releases",
           "tableTo": "creators",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2382,12 +2282,8 @@
           "name": "gift_releases_created_by_user_id_users_id_fk",
           "tableFrom": "gift_releases",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2480,12 +2376,8 @@
           "name": "gift_tier_rules_gift_release_id_gift_releases_id_fk",
           "tableFrom": "gift_tier_rules",
           "tableTo": "gift_releases",
-          "columnsFrom": [
-            "gift_release_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_release_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2493,12 +2385,8 @@
           "name": "gift_tier_rules_gift_package_id_gift_packages_id_fk",
           "tableFrom": "gift_tier_rules",
           "tableTo": "gift_packages",
-          "columnsFrom": [
-            "gift_package_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_package_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2699,12 +2587,8 @@
           "name": "shipments_gift_order_id_gift_orders_id_fk",
           "tableFrom": "shipments",
           "tableTo": "gift_orders",
-          "columnsFrom": [
-            "gift_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["gift_order_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2712,12 +2596,8 @@
           "name": "shipments_creator_id_creators_id_fk",
           "tableFrom": "shipments",
           "tableTo": "creators",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -2845,12 +2725,8 @@
           "name": "tracking_events_shipment_id_shipments_id_fk",
           "tableFrom": "tracking_events",
           "tableTo": "shipments",
-          "columnsFrom": [
-            "shipment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["shipment_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3015,12 +2891,8 @@
           "name": "audit_logs_actor_user_id_users_id_fk",
           "tableFrom": "audit_logs",
           "tableTo": "users",
-          "columnsFrom": [
-            "actor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["actor_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -3028,12 +2900,8 @@
           "name": "audit_logs_creator_id_creators_id_fk",
           "tableFrom": "audit_logs",
           "tableTo": "creators",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3204,12 +3072,8 @@
           "name": "bilibili_bindings_user_id_users_id_fk",
           "tableFrom": "bilibili_bindings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3217,12 +3081,8 @@
           "name": "bilibili_bindings_challenge_id_binding_challenges_id_fk",
           "tableFrom": "bilibili_bindings",
           "tableTo": "binding_challenges",
-          "columnsFrom": [
-            "challenge_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["challenge_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3389,12 +3249,8 @@
           "name": "binding_challenges_user_id_users_id_fk",
           "tableFrom": "binding_challenges",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3402,12 +3258,8 @@
           "name": "binding_challenges_verification_room_id_verification_rooms_id_fk",
           "tableFrom": "binding_challenges",
           "tableTo": "verification_rooms",
-          "columnsFrom": [
-            "verification_room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["verification_room_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3541,12 +3393,8 @@
           "name": "binding_conflicts_challenge_id_binding_challenges_id_fk",
           "tableFrom": "binding_conflicts",
           "tableTo": "binding_challenges",
-          "columnsFrom": [
-            "challenge_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["challenge_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3554,12 +3402,8 @@
           "name": "binding_conflicts_observed_binding_id_bilibili_bindings_id_fk",
           "tableFrom": "binding_conflicts",
           "tableTo": "bilibili_bindings",
-          "columnsFrom": [
-            "observed_binding_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["observed_binding_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3567,12 +3411,8 @@
           "name": "binding_conflicts_closed_by_user_id_users_id_fk",
           "tableFrom": "binding_conflicts",
           "tableTo": "users",
-          "columnsFrom": [
-            "closed_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["closed_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3772,12 +3612,8 @@
           "name": "creators_user_id_users_id_fk",
           "tableFrom": "creators",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3785,12 +3621,8 @@
           "name": "creators_binding_id_bilibili_bindings_id_fk",
           "tableFrom": "creators",
           "tableTo": "bilibili_bindings",
-          "columnsFrom": [
-            "binding_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["binding_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -4032,12 +3864,8 @@
           "name": "snapshot_attempt_members_snapshot_attempt_id_snapshot_attempts_id_fk",
           "tableFrom": "snapshot_attempt_members",
           "tableTo": "snapshot_attempts",
-          "columnsFrom": [
-            "snapshot_attempt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_attempt_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -4213,12 +4041,8 @@
           "name": "snapshot_attempts_snapshot_run_id_snapshot_runs_id_fk",
           "tableFrom": "snapshot_attempts",
           "tableTo": "snapshot_runs",
-          "columnsFrom": [
-            "snapshot_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -4226,12 +4050,8 @@
           "name": "snapshot_attempts_requested_by_user_id_users_id_fk",
           "tableFrom": "snapshot_attempts",
           "tableTo": "users",
-          "columnsFrom": [
-            "requested_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requested_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -4400,12 +4220,8 @@
           "name": "snapshot_pages_snapshot_attempt_id_snapshot_attempts_id_fk",
           "tableFrom": "snapshot_pages",
           "tableTo": "snapshot_attempts",
-          "columnsFrom": [
-            "snapshot_attempt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_attempt_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -4627,12 +4443,8 @@
           "name": "snapshot_runs_creator_id_creators_id_fk",
           "tableFrom": "snapshot_runs",
           "tableTo": "creators",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["creator_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -4640,12 +4452,8 @@
           "name": "snapshot_runs_accepted_attempt_id_snapshot_attempts_id_fk",
           "tableFrom": "snapshot_runs",
           "tableTo": "snapshot_attempts",
-          "columnsFrom": [
-            "accepted_attempt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["accepted_attempt_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -4653,12 +4461,8 @@
           "name": "snapshot_runs_approved_by_users_id_fk",
           "tableFrom": "snapshot_runs",
           "tableTo": "users",
-          "columnsFrom": [
-            "approved_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["approved_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }

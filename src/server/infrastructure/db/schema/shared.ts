@@ -3,8 +3,7 @@ import { integer, text, timestamp } from 'drizzle-orm/pg-core';
 export type AccountRole = 'USER' | 'CREATOR' | 'PLATFORM_ADMIN';
 export type GuardTier = 'CAPTAIN' | 'ADMIRAL' | 'GOVERNOR';
 export type GiftReleaseStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED';
-export type GiftOrderStatus =
-  'CLAIMABLE' | 'SUBMITTED' | 'SHIPPED' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
+export type { GiftOrderStatus } from '../../../../shared/contracts/gifts.js';
 
 export interface GiftReleaseField {
   readonly key: string;

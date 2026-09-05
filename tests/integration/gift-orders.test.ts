@@ -822,7 +822,7 @@ integration('gift order lifecycle', () => {
           .from(giftOrders)
           .where(eq(giftOrders.id, julyOrder!.id))
       )[0]?.status,
-    ).toBe('EXPIRED');
+    ).toBe('UNCLAIMED');
     expect(
       (
         await database.orm
@@ -833,7 +833,7 @@ integration('gift order lifecycle', () => {
           .from(giftOrderStatusHistory)
           .where(eq(giftOrderStatusHistory.giftOrderId, julyOrder!.id))
       ).map((transition) => `${transition.fromStatus}->${transition.toStatus}`),
-    ).toContain('CLAIMABLE->EXPIRED');
+    ).not.toContain('UNCLAIMED->EXPIRED');
     await expect(
       releaseService.create(
         creatorId,

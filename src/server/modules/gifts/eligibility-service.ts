@@ -119,7 +119,6 @@ export class GiftEligibilityService {
           biliDisplayName: member.displayNameAtCapture,
           biliUid: member.biliUid,
           creatorId: release.creatorId,
-          expiresAt: release.claimDeadlineAt,
           giftReleaseId: release.id,
           id,
           orderNumber: `G${release.eligibilityMonth.slice(0, 7).replace('-', '')}-${id

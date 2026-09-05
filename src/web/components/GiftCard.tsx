@@ -20,6 +20,8 @@ function action(order: GiftOrderSummary): string {
 function progress(order: GiftOrderSummary, now: number): string {
   const shipment = order.shipment;
   switch (order.status) {
+    case 'UPCOMING':
+      return '尚未到领取开始时间';
     case 'CLAIMABLE':
       return relativeDeadline(order.release.claimDeadlineAt, now);
     case 'SUBMITTED':
@@ -35,7 +37,7 @@ function progress(order: GiftOrderSummary, now: number): string {
     case 'COMPLETED':
       return '礼物流程已完成';
     case 'EXPIRED':
-      return '未在领取期内提交';
+      return order.expiryReason === 'RELEASE_CLOSED' ? '主播已关闭领取' : '未在领取期内提交';
     case 'CANCELLED':
       return '礼物单已取消';
   }

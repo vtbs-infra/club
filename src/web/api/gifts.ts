@@ -2,6 +2,7 @@ import type { GuardTier } from '../../shared/contracts/common';
 import type {
   CreatorOrder,
   CreatorOrderOverview,
+  UserOrderOverview,
   FulfillmentReleaseSummaryPage,
   GiftFormField,
   GiftOrder,
@@ -22,6 +23,7 @@ import { apiDownload, apiRequest } from './http';
 export type {
   CreatorOrder,
   CreatorOrderOverview,
+  UserOrderOverview,
   FulfillmentReleaseSummaryPage,
   GiftFormField,
   GiftOrder,
@@ -46,6 +48,10 @@ function queryString(values: Readonly<Record<string, number | string | undefined
   }
   const query = parameters.toString();
   return query ? `?${query}` : '';
+}
+
+export function getMyGiftOverview(): Promise<UserOrderOverview> {
+  return apiRequest('/api/v1/me/gifts/overview');
 }
 
 export function getMyGifts(

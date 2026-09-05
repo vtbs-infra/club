@@ -9,6 +9,7 @@ import { useNow } from '../hooks/useNow';
 const filters: readonly { readonly label: string; readonly value: GiftOrderListFilter }[] = [
   { label: '全部', value: 'ALL' },
   { label: '待领取', value: 'CLAIMABLE' },
+  { label: '待开放', value: 'UPCOMING' },
   { label: '等待发货', value: 'SUBMITTED' },
   { label: '已发货', value: 'SHIPPED' },
   { label: '已完成', value: 'COMPLETED' },

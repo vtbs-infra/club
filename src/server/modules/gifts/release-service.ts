@@ -14,8 +14,6 @@ import {
   giftPackageItems,
   giftPackages,
   giftCoverObjects,
-  giftOrders,
-  giftOrderStatusHistory,
   giftReleases,
   giftTierRules,
 } from '../../infrastructure/db/schema/index.js';
@@ -578,32 +576,11 @@ export class GiftReleaseService {
           version: before.version + 1,
         })
         .where(eq(giftReleases.id, before.id));
-      const expired = await transaction
-        .update(giftOrders)
-        .set({
-          expiredAt: now,
-          status: 'EXPIRED',
-          updatedAt: now,
-          version: sql`${giftOrders.version} + 1`,
-        })
-        .where(and(eq(giftOrders.giftReleaseId, before.id), eq(giftOrders.status, 'CLAIMABLE')))
-        .returning({ id: giftOrders.id });
-      if (expired.length > 0) {
-        await transaction.insert(giftOrderStatusHistory).values(
-          expired.map((order) => ({
-            actorUserId: context.actorUserId,
-            fromStatus: 'CLAIMABLE',
-            giftOrderId: order.id,
-            reason: 'Gift release closed by creator.',
-            toStatus: 'EXPIRED',
-          })),
-        );
-      }
       await this.audit.record(
         {
           action: 'gift-release.closed',
           actorUserId: context.actorUserId,
-          afterSummary: { expiredOrders: expired.length },
+          afterSummary: { closedAt: now.toISOString() },
           creatorId,
           ipAddress: context.ipAddress,
           requestId: context.requestId,

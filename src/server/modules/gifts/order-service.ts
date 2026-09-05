@@ -34,11 +34,11 @@ export class GiftOrderService {
     this.claims = new GiftClaimService(database, encryption, addresses, clock);
     this.exporter = new GiftFulfillmentExportService(database, encryption, clock);
     this.fulfillment = new GiftFulfillmentService(database, trackingProvider, clock);
-    this.queries = new GiftOrderQueryService(database, encryption);
+    this.queries = new GiftOrderQueryService(database, encryption, clock);
   }
 
-  public expireClaimable() {
-    return this.claims.expireClaimable();
+  public overviewForUser(userId: string) {
+    return this.queries.overviewForUser(userId);
   }
 
   public listForUser(
