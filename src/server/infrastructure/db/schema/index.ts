@@ -27,7 +27,6 @@ import {
 import {
   snapshotAttemptMembers,
   snapshotAttempts,
-  snapshotMembers,
   snapshotPages,
   snapshotRuns,
 } from './snapshots.js';
@@ -65,7 +64,6 @@ export const schema = {
   shipments,
   snapshotAttemptMembers,
   snapshotAttempts,
-  snapshotMembers,
   snapshotPages,
   snapshotRuns,
   trackingEvents,

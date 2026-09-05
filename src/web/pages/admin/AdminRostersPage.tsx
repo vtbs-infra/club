@@ -167,7 +167,7 @@ export function AdminRostersPage() {
     members.data?.pages.flatMap((page) =>
       page.items.map((member) => ({
         ...member,
-        displayName: member.displayNameAtSnapshot,
+        displayName: member.displayNameAtCapture,
       })),
     ) ?? [];
   const approvalMemberItems =

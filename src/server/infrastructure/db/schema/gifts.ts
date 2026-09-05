@@ -21,7 +21,7 @@ import {
   type GiftReleaseField,
   timestamps,
 } from './shared.js';
-import { snapshotMembers } from './snapshots.js';
+import { snapshotAttemptMembers } from './snapshots.js';
 
 export const giftReleases = pgTable(
   'gift_releases',
@@ -158,7 +158,7 @@ export const giftOrders = pgTable(
       .references(() => giftReleases.id, { onDelete: 'restrict' }),
     snapshotMemberId: uuid('snapshot_member_id')
       .notNull()
-      .references(() => snapshotMembers.id, { onDelete: 'restrict' }),
+      .references(() => snapshotAttemptMembers.id, { onDelete: 'restrict' }),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'restrict' }),
     biliUid: text('bili_uid').notNull(),
     biliDisplayName: text('bili_display_name').notNull(),

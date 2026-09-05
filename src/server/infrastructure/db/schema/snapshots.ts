@@ -52,7 +52,7 @@ export const snapshotRuns = pgTable(
     index('snapshot_runs_period_id_idx').on(table.periodStart, table.id),
     check(
       'snapshot_runs_status_check',
-      sql`${table.status} in ('SCHEDULED', 'RUNNING', 'FAILED', 'PENDING_APPROVAL', 'FINALIZED', 'REJECTED', 'CANCELLED')`,
+      sql`${table.status} in ('SCHEDULED', 'RUNNING', 'READY', 'FAILED', 'PENDING_APPROVAL', 'FINALIZED', 'REJECTED', 'CANCELLED')`,
     ),
   ],
 );
@@ -174,31 +174,5 @@ export const snapshotAttemptMembers = pgTable(
       'snapshot_attempt_members_tier_check',
       sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`,
     ),
-  ],
-);
-
-export const snapshotMembers = pgTable(
-  'snapshot_members',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    snapshotRunId: uuid('snapshot_run_id')
-      .notNull()
-      .references(() => snapshotRuns.id, { onDelete: 'restrict' }),
-    biliUid: text('bili_uid').notNull(),
-    displayNameAtSnapshot: text('display_name_at_snapshot').notNull(),
-    tier: text('tier').notNull(),
-    rawTier: text('raw_tier').notNull(),
-    sourcePosition: integer('source_position').notNull(),
-    createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex('snapshot_members_run_uid_unique').on(table.snapshotRunId, table.biliUid),
-    index('snapshot_members_run_position_uid_idx').on(
-      table.snapshotRunId,
-      table.sourcePosition,
-      table.biliUid,
-    ),
-    index('snapshot_members_bili_uid_idx').on(table.biliUid),
-    check('snapshot_members_tier_check', sql`${table.tier} in ('CAPTAIN', 'ADMIRAL', 'GOVERNOR')`),
   ],
 );

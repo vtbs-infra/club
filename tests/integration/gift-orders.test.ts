@@ -14,7 +14,8 @@ import {
   giftOrderStatusHistory,
   giftOrders,
   shipments,
-  snapshotMembers,
+  snapshotAttemptMembers,
+  snapshotAttempts,
   snapshotRuns,
   users,
   verificationRooms,
@@ -149,22 +150,49 @@ integration('gift order lifecycle', () => {
         scheduledCutoffAt: new Date(`${periodStart}T15:59:00.000Z`),
       })
       .returning({ id: snapshotRuns.id });
+    const [attempt] = await database.orm
+      .insert(snapshotAttempts)
+      .values({
+        snapshotRunId: run!.id,
+        attemptNumber: 1,
+        schedulerStartedAt: new Date(),
+        captureStartedAt: new Date(),
+        punctuality: 'ON_TIME',
+        sourceName: 'fixture',
+        sourceVersion: '1',
+      })
+      .returning();
     if (members.length > 0) {
       const rows = members.map((member, index) => ({
         biliUid: member.biliUid,
-        displayNameAtSnapshot: `Member ${member.biliUid}`,
+        displayNameAtCapture: `Member ${member.biliUid}`,
         rawTier: member.tier === 'GOVERNOR' ? '1' : member.tier === 'ADMIRAL' ? '2' : '3',
-        snapshotRunId: run!.id,
+        snapshotAttemptId: attempt!.id,
+        sourcePage: 1,
         sourcePosition: index + 1,
         tier: member.tier,
       }));
       for (const batch of databaseWriteBatches(rows)) {
-        await database.orm.insert(snapshotMembers).values(batch);
+        await database.orm.insert(snapshotAttemptMembers).values(batch);
       }
     }
     await database.orm
+      .update(snapshotAttempts)
+      .set({
+        captureCompletedAt: new Date(),
+        consistencyStatus: 'CONSISTENT',
+        declaredTotal: members.length,
+        normalizedTotal: members.length,
+      })
+      .where(eq(snapshotAttempts.id, attempt!.id));
+    await database.orm
       .update(snapshotRuns)
-      .set({ finalizedAt: new Date(), status: 'FINALIZED', updatedAt: new Date() })
+      .set({
+        acceptedAttemptId: attempt!.id,
+        finalizedAt: new Date(),
+        status: 'FINALIZED',
+        updatedAt: new Date(),
+      })
       .where(eq(snapshotRuns.id, run!.id));
     return run!.id;
   }

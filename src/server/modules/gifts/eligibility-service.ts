@@ -11,7 +11,7 @@ import {
   giftPackages,
   giftReleases,
   giftTierRules,
-  snapshotMembers,
+  snapshotAttemptMembers,
   snapshotRuns,
   type GiftOrderPackageSnapshot,
   type GuardTier,
@@ -55,10 +55,11 @@ export class GiftEligibilityService {
       .select()
       .from(giftReleases)
       .where(eq(giftReleases.id, releaseId))
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (!release || release.status !== 'PUBLISHED') return 0;
     const [run] = await executor
-      .select({ id: snapshotRuns.id })
+      .select({ acceptedAttemptId: snapshotRuns.acceptedAttemptId })
       .from(snapshotRuns)
       .where(
         and(
@@ -68,11 +69,11 @@ export class GiftEligibilityService {
         ),
       )
       .limit(1);
-    if (!run) return 0;
+    if (!run?.acceptedAttemptId) return 0;
     const members = await executor
       .select()
-      .from(snapshotMembers)
-      .where(eq(snapshotMembers.snapshotRunId, run.id));
+      .from(snapshotAttemptMembers)
+      .where(eq(snapshotAttemptMembers.snapshotAttemptId, run.acceptedAttemptId));
     if (members.length === 0) return 0;
 
     const packages = await executor
@@ -115,7 +116,7 @@ export class GiftEligibilityService {
       const candidates = memberBatch.map((member) => {
         const id = randomUUID();
         return {
-          biliDisplayName: member.displayNameAtSnapshot,
+          biliDisplayName: member.displayNameAtCapture,
           biliUid: member.biliUid,
           creatorId: release.creatorId,
           expiresAt: release.claimDeadlineAt,
@@ -147,8 +148,14 @@ export class GiftEligibilityService {
         const eligibleTiers =
           release.fulfillmentMode === 'CUMULATIVE' ? TIERS.slice(0, TIER_INDEX[tier] + 1) : [tier];
         const eligiblePackageIds = [
-          ...new Set(eligibleTiers.map((eligibleTier) => ruleByTier.get(eligibleTier))),
-        ].filter((id): id is string => Boolean(id));
+          ...new Set(
+            eligibleTiers.map((eligibleTier) => {
+              const packageId = ruleByTier.get(eligibleTier);
+              if (!packageId) throw new Error('Published release is missing a tier rule.');
+              return packageId;
+            }),
+          ),
+        ];
         return eligiblePackageIds.map((giftPackageId, index) => {
           if (!packageById.has(giftPackageId) || !packageSnapshot.has(giftPackageId)) {
             throw new Error('Published release contains an invalid tier package.');

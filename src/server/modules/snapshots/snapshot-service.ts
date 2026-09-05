@@ -2,18 +2,17 @@ import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 
-import { and, asc, desc, eq, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lte, or } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import { SNAPSHOT_ATTEMPT_LIMIT } from '../../../shared/contracts/snapshots.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
-import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
+import type { DatabaseService } from '../../infrastructure/db/database.js';
 import { databaseWriteBatches } from '../../infrastructure/db/write-batches.js';
 import {
   creators,
   snapshotAttemptMembers,
   snapshotAttempts,
-  snapshotMembers,
   snapshotPages,
   snapshotRuns,
 } from '../../infrastructure/db/schema/index.js';
@@ -31,6 +30,8 @@ import {
   classifyPunctuality,
   relevantMonthlyPeriods,
 } from './month-end.js';
+import { GiftEligibilityService } from '../gifts/eligibility-service.js';
+import { lockEligibilityPeriod } from '../gifts/eligibility-lock.js';
 import { SnapshotQueryService } from './snapshot-query-service.js';
 
 const gzipAsync = promisify(gzip);
@@ -104,8 +105,8 @@ export class SnapshotService {
     private readonly storage: StorageDriver,
     private readonly source: GuardRosterSource,
     private readonly clock: Clock,
+    private readonly eligibility: GiftEligibilityService,
     private readonly maxDurationMs = 120_000,
-    private readonly onFinalized?: (runId: string, executor: AppDatabase) => Promise<unknown>,
     private readonly onBackgroundError?: (error: unknown) => void,
   ) {
     this.audit = new AuditService(database);
@@ -173,14 +174,17 @@ export class SnapshotService {
   public async runDue(): Promise<number> {
     if (this.shuttingDown) return 0;
     const due = await this.database.orm
-      .select({ id: snapshotRuns.id })
+      .select({ id: snapshotRuns.id, status: snapshotRuns.status })
       .from(snapshotRuns)
       .innerJoin(creators, eq(creators.id, snapshotRuns.creatorId))
       .where(
-        and(
-          eq(snapshotRuns.status, 'SCHEDULED'),
-          lte(snapshotRuns.scheduledCutoffAt, this.clock.now()),
-          eq(creators.monthlySyncEnabled, true),
+        or(
+          eq(snapshotRuns.status, 'READY'),
+          and(
+            eq(snapshotRuns.status, 'SCHEDULED'),
+            lte(snapshotRuns.scheduledCutoffAt, this.clock.now()),
+            eq(creators.monthlySyncEnabled, true),
+          ),
         ),
       )
       .orderBy(asc(snapshotRuns.scheduledCutoffAt));
@@ -195,7 +199,8 @@ export class SnapshotService {
           nextIndex += 1;
           if (!run) continue;
           try {
-            await this.capture(run.id);
+            if (run.status === 'READY') await this.finalizeReady(run.id);
+            else await this.capture(run.id);
             started += 1;
           } catch (error) {
             if (!(error instanceof AppError)) unexpectedErrors.push(error);
@@ -487,47 +492,13 @@ export class SnapshotService {
             normalizedTotal: members.length,
           })
           .where(eq(snapshotAttempts.id, attemptId));
-        if (punctuality === 'ON_TIME') {
-          if (members.length > 0) {
-            const rows = members.map((member) => ({
-              biliUid: member.biliUid,
-              displayNameAtSnapshot: member.displayName,
-              rawTier: member.rawTier,
-              snapshotRunId: run.id,
-              sourcePosition: member.sourcePosition,
-              tier: member.tier,
-            }));
-            for (const batch of databaseWriteBatches(rows)) {
-              await transaction.insert(snapshotMembers).values(batch);
-            }
-          }
-          await transaction
-            .update(snapshotRuns)
-            .set({
-              acceptedAttemptId: attemptId,
-              finalizedAt: completedAt,
-              status: 'FINALIZED',
-              updatedAt: completedAt,
-            })
-            .where(eq(snapshotRuns.id, run.id));
-          await this.onFinalized?.(run.id, transaction);
-          await this.audit.record(
-            {
-              action: 'snapshot.finalized',
-              actorUserId: null,
-              afterSummary: { attemptId, memberCount: members.length, punctuality },
-              creatorId: run.creatorId,
-              targetId: run.id,
-              targetType: 'snapshot-run',
-            },
-            transaction,
-          );
-        } else {
-          await transaction
-            .update(snapshotRuns)
-            .set({ status: 'PENDING_APPROVAL', updatedAt: completedAt })
-            .where(eq(snapshotRuns.id, run.id));
-        }
+        await transaction
+          .update(snapshotRuns)
+          .set({
+            status: punctuality === 'ON_TIME' ? 'READY' : 'PENDING_APPROVAL',
+            updatedAt: completedAt,
+          })
+          .where(eq(snapshotRuns.id, run.id));
       });
     } catch (error) {
       const captureFailure = failure(signal.aborted ? signal.reason : error);
@@ -546,7 +517,10 @@ export class SnapshotService {
           .set({ status: 'FAILED', updatedAt: this.clock.now() })
           .where(eq(snapshotRuns.id, run.id));
       });
+      return;
     }
+    // Capture is durable. A business failure leaves READY for retry without another fetch.
+    if (punctuality === 'ON_TIME') await this.finalizeReady(run.id);
   }
 
   private startExecution(attemptId: string, run: CaptureRun): Promise<void> {
@@ -593,18 +567,34 @@ export class SnapshotService {
     }
   }
 
+  public async finalizeReady(runId: string): Promise<void> {
+    await this.finalize(runId, null);
+  }
+
   public async approveLate(runId: string, context: RequestAuditContext): Promise<void> {
+    await this.finalize(runId, context);
+  }
+
+  private async finalize(runId: string, context: RequestAuditContext | null): Promise<void> {
     await this.database.orm.transaction(async (transaction) => {
+      const [scope] = await transaction
+        .select()
+        .from(snapshotRuns)
+        .where(eq(snapshotRuns.id, runId));
+      if (!scope) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
+      await lockEligibilityPeriod(transaction, scope.creatorId, scope.periodStart);
       const [run] = await transaction
         .select()
         .from(snapshotRuns)
         .where(eq(snapshotRuns.id, runId))
-        .limit(1)
         .for('update');
-      if (!run || run.status !== 'PENDING_APPROVAL') {
+      if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
+      if (run.status === 'FINALIZED') return;
+      const expectedStatus = context ? 'PENDING_APPROVAL' : 'READY';
+      if (run.status !== expectedStatus) {
         throw new AppError(
           'SNAPSHOT_NOT_APPROVABLE',
-          'No consistent late attempt is pending.',
+          'No consistent attempt is awaiting finalization.',
           409,
         );
       }
@@ -615,50 +605,37 @@ export class SnapshotService {
           and(
             eq(snapshotAttempts.snapshotRunId, run.id),
             eq(snapshotAttempts.consistencyStatus, 'CONSISTENT'),
-            eq(snapshotAttempts.punctuality, 'LATE'),
+            eq(snapshotAttempts.punctuality, context ? 'LATE' : 'ON_TIME'),
           ),
         )
         .orderBy(desc(snapshotAttempts.attemptNumber))
         .limit(1);
-      if (!attempt) throw new AppError('SNAPSHOT_NOT_APPROVABLE', 'No late attempt exists.', 409);
-      const candidates = await transaction
-        .select()
-        .from(snapshotAttemptMembers)
-        .where(eq(snapshotAttemptMembers.snapshotAttemptId, attempt.id));
-      if (candidates.length > 0) {
-        const rows = candidates.map((member) => ({
-          biliUid: member.biliUid,
-          displayNameAtSnapshot: member.displayNameAtCapture,
-          rawTier: member.rawTier,
-          snapshotRunId: run.id,
-          sourcePosition: member.sourcePosition,
-          tier: member.tier,
-        }));
-        for (const batch of databaseWriteBatches(rows)) {
-          await transaction.insert(snapshotMembers).values(batch);
-        }
-      }
+      if (!attempt?.captureCompletedAt)
+        throw new Error('A ready snapshot requires a completed consistent attempt.');
       const now = this.clock.now();
       await transaction
         .update(snapshotRuns)
         .set({
           acceptedAttemptId: attempt.id,
-          approvedAt: now,
-          approvedBy: context.actorUserId,
+          approvedAt: context ? now : null,
+          approvedBy: context?.actorUserId ?? null,
           finalizedAt: now,
           status: 'FINALIZED',
           updatedAt: now,
         })
         .where(eq(snapshotRuns.id, run.id));
-      await this.onFinalized?.(run.id, transaction);
+      const createdOrders = await this.eligibility.reconcileSnapshot(run.id, transaction);
       await this.audit.record(
         {
-          action: 'snapshot.late-approved',
-          actorUserId: context.actorUserId,
-          afterSummary: { attemptId: attempt.id, memberCount: candidates.length },
+          action: context ? 'snapshot.late-approved' : 'snapshot.finalized',
+          actorUserId: context?.actorUserId ?? null,
+          afterSummary: {
+            attemptId: attempt.id,
+            memberCount: attempt.normalizedTotal,
+            createdOrders,
+          },
           creatorId: run.creatorId,
-          ipAddress: context.ipAddress,
-          requestId: context.requestId,
+          ...(context ? { ipAddress: context.ipAddress, requestId: context.requestId } : {}),
           targetId: run.id,
           targetType: 'snapshot-run',
         },

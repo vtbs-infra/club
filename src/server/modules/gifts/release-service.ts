@@ -20,6 +20,7 @@ import {
   giftTierRules,
 } from '../../infrastructure/db/schema/index.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
+import { lockEligibilityPeriod } from './eligibility-lock.js';
 import { GiftEligibilityService } from './eligibility-service.js';
 
 const TIERS = ['CAPTAIN', 'ADMIRAL', 'GOVERNOR'] as const;
@@ -465,6 +466,7 @@ export class GiftReleaseService {
     const validated = validateDraft(input);
     try {
       await this.database.orm.transaction(async (transaction) => {
+        await lockEligibilityPeriod(transaction, creatorId, input.eligibilityMonth);
         const [release] = await transaction
           .select()
           .from(giftReleases)
@@ -473,7 +475,6 @@ export class GiftReleaseService {
           .for('update');
         if (!release) throw new AppError('GIFT_RELEASE_NOT_FOUND', 'Gift release not found.', 404);
         if (release.status === 'PUBLISHED') {
-          await this.eligibility.reconcileRelease(release.id, transaction);
           return;
         }
         if (release.status !== 'DRAFT') {

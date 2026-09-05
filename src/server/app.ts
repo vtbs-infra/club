@@ -141,8 +141,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       clock,
       config,
       database,
-      onFinalized: (runId, executor) =>
-        releaseService.eligibility.reconcileSnapshot(runId, executor),
+      eligibility: releaseService.eligibility,
       reportError: reportRuntimeError,
       storage,
     });

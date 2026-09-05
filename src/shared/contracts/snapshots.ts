@@ -7,6 +7,7 @@ export const SNAPSHOT_ATTEMPT_LIMIT = 3;
 export const SnapshotRunStatusSchema = Type.Union([
   Type.Literal('SCHEDULED'),
   Type.Literal('RUNNING'),
+  Type.Literal('READY'),
   Type.Literal('FAILED'),
   Type.Literal('PENDING_APPROVAL'),
   Type.Literal('FINALIZED'),
@@ -80,17 +81,6 @@ export const SnapshotPageSchema = Type.Object({
   uncompressedSize: Type.Integer({ minimum: 0 }),
 });
 
-export const SnapshotMemberSchema = Type.Object({
-  biliUid: Type.String(),
-  createdAt: DateTimeSchema,
-  displayNameAtSnapshot: Nullable(Type.String()),
-  id: IdSchema,
-  rawTier: Type.String(),
-  snapshotRunId: IdSchema,
-  sourcePosition: Type.Integer({ minimum: 1 }),
-  tier: GuardTierSchema,
-});
-
 export const SnapshotAttemptMemberSchema = Type.Object({
   biliUid: Type.String(),
   createdAt: DateTimeSchema,
@@ -150,7 +140,7 @@ export const AdminSnapshotPageSchema = Type.Object({
 export type AdminSnapshotPage = Static<typeof AdminSnapshotPageSchema>;
 
 export const SnapshotMemberPageSchema = Type.Object({
-  items: Type.Array(SnapshotMemberSchema),
+  items: Type.Array(SnapshotAttemptMemberSchema),
   nextCursor: Nullable(Type.String()),
 });
 export type SnapshotMemberPage = Static<typeof SnapshotMemberPageSchema>;

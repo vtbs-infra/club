@@ -12,7 +12,6 @@ import {
   creators,
   snapshotAttemptMembers,
   snapshotAttempts,
-  snapshotMembers,
   snapshotPages,
   snapshotRuns,
 } from '../../infrastructure/db/schema/index.js';
@@ -237,8 +236,12 @@ export class SnapshotQueryService {
     const [[members], [pages]] = await Promise.all([
       this.database.orm
         .select({ value: count() })
-        .from(snapshotMembers)
-        .where(eq(snapshotMembers.snapshotRunId, run.id)),
+        .from(snapshotAttemptMembers)
+        .innerJoin(
+          snapshotRuns,
+          eq(snapshotRuns.acceptedAttemptId, snapshotAttemptMembers.snapshotAttemptId),
+        )
+        .where(eq(snapshotRuns.id, run.id)),
       this.database.orm
         .select({ value: count() })
         .from(snapshotPages)
@@ -304,45 +307,13 @@ export class SnapshotQueryService {
       readonly search?: string | undefined;
     },
   ) {
-    const cursor = input.cursor ? decodeMemberCursor(input.cursor) : null;
-    const search = input.search?.trim();
-    const prefix = search ? escapedPrefix(search) : null;
-    const rows = await this.database.orm
-      .select()
-      .from(snapshotMembers)
-      .where(
-        and(
-          eq(snapshotMembers.snapshotRunId, runId),
-          prefix
-            ? or(
-                ilike(snapshotMembers.biliUid, prefix),
-                ilike(snapshotMembers.displayNameAtSnapshot, prefix),
-              )
-            : undefined,
-          cursor
-            ? or(
-                gt(snapshotMembers.sourcePosition, cursor.sourcePosition),
-                and(
-                  eq(snapshotMembers.sourcePosition, cursor.sourcePosition),
-                  gt(snapshotMembers.biliUid, cursor.biliUid),
-                ),
-              )
-            : undefined,
-        ),
-      )
-      .orderBy(asc(snapshotMembers.sourcePosition), asc(snapshotMembers.biliUid))
-      .limit(input.limit + 1);
-    const hasMore = rows.length > input.limit;
-    const items = rows.slice(0, input.limit);
-    return {
-      items,
-      nextCursor: hasMore
-        ? encodeCursor({
-            biliUid: items.at(-1)!.biliUid,
-            sourcePosition: items.at(-1)!.sourcePosition,
-          })
-        : null,
-    };
+    const [run] = await this.database.orm
+      .select({ acceptedAttemptId: snapshotRuns.acceptedAttemptId })
+      .from(snapshotRuns)
+      .where(eq(snapshotRuns.id, runId));
+    if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
+    if (!run.acceptedAttemptId) return { items: [], nextCursor: null };
+    return this.listAttemptMembers(runId, run.acceptedAttemptId, input);
   }
 
   private async assertAttempt(runId: string, attemptId: string) {

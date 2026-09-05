@@ -38,6 +38,7 @@ const snapshotPresentations = {
   PENDING_APPROVAL: { label: '等待平台确认', tone: 'warning' },
   REJECTED: { label: '已拒绝', tone: 'danger' },
   RUNNING: { label: '同步中', tone: 'info' },
+  READY: { label: '等待定稿', tone: 'info' },
   SCHEDULED: { label: '已计划', tone: 'neutral' },
 } as const satisfies Readonly<Record<SnapshotRun['status'], StatusPresentation>>;
 

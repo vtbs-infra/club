@@ -1,5 +1,5 @@
 import { and, count, eq, inArray } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
@@ -7,7 +7,6 @@ import {
   auditLogs,
   snapshotAttemptMembers,
   snapshotAttempts,
-  snapshotMembers,
   snapshotRuns,
   users,
 } from '../../src/server/infrastructure/db/schema/index.js';
@@ -31,6 +30,7 @@ import type {
   GuardRosterSource,
 } from '../../src/server/modules/bilibili/guard-roster-source.js';
 import { CreatorService } from '../../src/server/modules/creators/creator-service.js';
+import { GiftEligibilityService } from '../../src/server/modules/gifts/eligibility-service.js';
 import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
 import { insertTestCreator } from '../helpers/creator-fixture.js';
 import {
@@ -276,7 +276,13 @@ integration('month-end snapshot capture', () => {
   it('pre-creates current and next runs and freezes exact cutoff fields', async () => {
     const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));
     const source = new FakeGuardRosterSource();
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     expect(await service.precreateRuns()).toBe(40);
     expect(await service.precreateRuns()).toBe(0);
     const runs = await database.orm
@@ -299,7 +305,13 @@ integration('month-end snapshot capture', () => {
       ),
     );
     const source = new AdvancingSource(fake, clock, new Date('2026-07-31T16:01:00.000Z'));
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const run = await julyRun(creatorIds[0]!);
     await service.capture(run.id);
 
@@ -339,8 +351,12 @@ integration('month-end snapshot capture', () => {
     ).toBe(true);
     const [total] = await database.orm
       .select({ value: count() })
-      .from(snapshotMembers)
-      .where(eq(snapshotMembers.snapshotRunId, run.id));
+      .from(snapshotAttemptMembers)
+      .innerJoin(
+        snapshotRuns,
+        eq(snapshotRuns.acceptedAttemptId, snapshotAttemptMembers.snapshotAttemptId),
+      )
+      .where(eq(snapshotRuns.id, run.id));
     expect(total?.value).toBe(35);
     const firstMemberPage = await service.queries.listMembers(run.id, { limit: 20 });
     const secondMemberPage = await service.queries.listMembers(run.id, {
@@ -358,14 +374,24 @@ integration('month-end snapshot capture', () => {
     const clock = new MutableClock(new Date('2026-07-31T16:00:00.000Z'));
     const source = new FakeGuardRosterSource();
     source.setScenario(buildFakeRosterScenario([member('2001', 1, '1')]));
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const run = await julyRun(creatorIds[1]!);
     await service.capture(run.id);
     expect((await service.queries.getDetail(run.id)).run.status).toBe('PENDING_APPROVAL');
     const [before] = await database.orm
       .select({ value: count() })
-      .from(snapshotMembers)
-      .where(eq(snapshotMembers.snapshotRunId, run.id));
+      .from(snapshotAttemptMembers)
+      .innerJoin(
+        snapshotRuns,
+        eq(snapshotRuns.acceptedAttemptId, snapshotAttemptMembers.snapshotAttemptId),
+      )
+      .where(eq(snapshotRuns.id, run.id));
     expect(before?.value).toBe(0);
 
     await service.approveLate(run.id, {
@@ -392,7 +418,13 @@ integration('month-end snapshot capture', () => {
         ),
       ),
     );
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const run = await augustRun(creatorIds[15]!);
 
     await service.capture(run.id);
@@ -431,8 +463,12 @@ integration('month-end snapshot capture', () => {
     });
     const [finalCount] = await database.orm
       .select({ value: count() })
-      .from(snapshotMembers)
-      .where(eq(snapshotMembers.snapshotRunId, run.id));
+      .from(snapshotAttemptMembers)
+      .innerJoin(
+        snapshotRuns,
+        eq(snapshotRuns.acceptedAttemptId, snapshotAttemptMembers.snapshotAttemptId),
+      )
+      .where(eq(snapshotRuns.id, run.id));
     expect(finalCount?.value).toBe(expectedMembers);
   });
 
@@ -440,7 +476,13 @@ integration('month-end snapshot capture', () => {
     const clock = new MutableClock(new Date('2026-07-31T15:59:10.000Z'));
     const source = new FakeGuardRosterSource();
     source.setScenario(buildFakeRosterScenario([member('3001', 1), member('3001', 2)]));
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const run = await julyRun(creatorIds[2]!);
     await service.capture(run.id);
     expect((await service.queries.getDetail(run.id)).attempts[0]).toMatchObject({
@@ -515,7 +557,13 @@ integration('month-end snapshot capture', () => {
           : { pages };
     }
     source.setScenario(scenario);
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const run = await julyRun(creatorIds[creatorIndex]!);
     await service.capture(run.id);
     expect((await service.queries.getDetail(run.id)).attempts[0]).toMatchObject({
@@ -528,12 +576,14 @@ integration('month-end snapshot capture', () => {
     const run = await julyRun(creatorIds[0]!);
     await expect(
       database.orm
-        .update(snapshotMembers)
-        .set({ displayNameAtSnapshot: 'tampered' })
-        .where(eq(snapshotMembers.snapshotRunId, run.id)),
+        .update(snapshotAttemptMembers)
+        .set({ displayNameAtCapture: 'tampered' })
+        .where(eq(snapshotAttemptMembers.snapshotAttemptId, run.acceptedAttemptId!)),
     ).rejects.toThrow();
     await expect(
-      database.orm.delete(snapshotMembers).where(eq(snapshotMembers.snapshotRunId, run.id)),
+      database.orm
+        .delete(snapshotAttemptMembers)
+        .where(eq(snapshotAttemptMembers.snapshotAttemptId, run.acceptedAttemptId!)),
     ).rejects.toThrow();
   });
 
@@ -559,6 +609,7 @@ integration('month-end snapshot capture', () => {
       storage.driver,
       new FakeGuardRosterSource(),
       new MutableClock(new Date('2026-07-31T16:05:00.000Z')),
+      new GiftEligibilityService(),
     );
     expect(await service.recoverInterrupted()).toBe(1);
     expect((await service.queries.getDetail(run!.id)).attempts[0]).toMatchObject({
@@ -574,7 +625,13 @@ integration('month-end snapshot capture', () => {
   it('starts due creators concurrently without exceeding the scheduler limit', async () => {
     const clock = new MutableClock(new Date('2026-07-31T15:59:40.000Z'));
     const source = new ConcurrentEmptySource();
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
 
     expect(await service.runDue()).toBeGreaterThanOrEqual(12);
 
@@ -613,9 +670,21 @@ integration('month-end snapshot capture', () => {
         member('administrator-retry-member', 2),
       ]),
     );
-    await new SnapshotService(database, storage.driver, failedSource, clock).capture(run!.id);
+    await new SnapshotService(
+      database,
+      storage.driver,
+      failedSource,
+      clock,
+      new GiftEligibilityService(),
+    ).capture(run!.id);
     const source = new BlockingEmptySource();
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const queued = await service.queueCapture(run!.id, {
       actorUserId: ownerId,
       ipAddress: '127.0.0.1',
@@ -700,7 +769,13 @@ integration('month-end snapshot capture', () => {
         and(eq(snapshotRuns.creatorId, creatorIds[9]!), eq(snapshotRuns.periodStart, '2026-08-01')),
       );
     const source = new BlockingEmptySource();
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const firstCapture = service.capture(concurrentRun!.id);
     await source.entered;
     await expect(service.capture(concurrentRun!.id)).rejects.toMatchObject({
@@ -760,7 +835,13 @@ integration('month-end snapshot capture', () => {
         });
       },
     };
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const [run] = await database.orm
       .select()
       .from(snapshotRuns)
@@ -784,7 +865,13 @@ integration('month-end snapshot capture', () => {
   it('bounds total response bytes across an entire attempt', async () => {
     const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
     const source = new FixedResponseSizeSource(33, 2 * 1024 * 1024);
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const run = await augustRun(creatorIds[14]!);
 
     await service.capture(run.id);
@@ -802,7 +889,13 @@ integration('month-end snapshot capture', () => {
   it('records a deterministic failure when graceful shutdown cancels a capture', async () => {
     const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
     const source = new AbortableBlockingSource();
-    const service = new SnapshotService(database, storage.driver, source, clock);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+    );
     const [run] = await database.orm
       .select()
       .from(snapshotRuns)
@@ -844,7 +937,14 @@ integration('month-end snapshot capture', () => {
           );
         }),
     };
-    const service = new SnapshotService(database, storage.driver, source, clock, 5);
+    const service = new SnapshotService(
+      database,
+      storage.driver,
+      source,
+      clock,
+      new GiftEligibilityService(),
+      5,
+    );
     const [run] = await database.orm
       .select()
       .from(snapshotRuns)
@@ -858,7 +958,7 @@ integration('month-end snapshot capture', () => {
     });
   });
 
-  it('rolls back finalized members when termination happens during finalization', async () => {
+  it('preserves completed capture and retries business finalization without fetching again', async () => {
     const [account] = await database.orm
       .insert(users)
       .values({
@@ -877,23 +977,36 @@ integration('month-end snapshot capture', () => {
     const clock = new MutableClock(new Date('2026-07-22T00:00:00.000Z'));
     const source = new FakeGuardRosterSource();
     source.setScenario(buildFakeRosterScenario([member('termination-member', 1)]));
-    const service = new SnapshotService(database, storage.driver, source, clock, 120_000, () =>
-      Promise.reject(new Error('simulated termination during finalization')),
-    );
+    const eligibility = new GiftEligibilityService();
+    const reconcile = vi
+      .spyOn(eligibility, 'reconcileSnapshot')
+      .mockRejectedValueOnce(new Error('simulated finalization failure'));
+    const fetch = vi.spyOn(source, 'fetchPage');
+    const service = new SnapshotService(database, storage.driver, source, clock, eligibility);
     await service.precreateRuns();
     clock.current = new Date('2026-07-31T15:59:00.000Z');
     const run = await julyRun(creator.id);
-    await service.capture(run.id);
+    await expect(service.capture(run.id)).rejects.toThrow('simulated finalization failure');
     const detail = await service.queries.getDetail(run.id);
-    expect(detail.run.status).toBe('FAILED');
+    expect(detail.run.status).toBe('READY');
     expect(detail.attempts[0]).toMatchObject({
-      consistencyStatus: 'INCONSISTENT',
-      failureCode: 'SOURCE_FAILURE',
+      consistencyStatus: 'CONSISTENT',
+      failureCode: null,
     });
     const [members] = await database.orm
       .select({ value: count() })
-      .from(snapshotMembers)
-      .where(eq(snapshotMembers.snapshotRunId, run.id));
+      .from(snapshotAttemptMembers)
+      .innerJoin(
+        snapshotRuns,
+        eq(snapshotRuns.acceptedAttemptId, snapshotAttemptMembers.snapshotAttemptId),
+      )
+      .where(eq(snapshotRuns.id, run.id));
     expect(members?.value).toBe(0);
+    expect(detail.attempts[0]?.normalizedTotal).toBe(1);
+    fetch.mockClear();
+    await service.runDue();
+    expect((await service.queries.getDetail(run.id)).run.status).toBe('FINALIZED');
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

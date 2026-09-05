@@ -1,6 +1,6 @@
 import type { AppConfig } from '../../config/env.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
-import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
+import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import {
   RuntimeStatusTracker,
@@ -9,6 +9,7 @@ import {
 import { FakeGuardRosterSource } from '../bilibili/fake-guard-roster-source.js';
 import type { GuardRosterSource } from '../bilibili/guard-roster-source.js';
 import { PublicWebGuardRosterSource } from '../bilibili/public-web-guard-roster-source.js';
+import type { GiftEligibilityService } from '../gifts/eligibility-service.js';
 import { SnapshotService } from './snapshot-service.js';
 
 export interface SnapshotRuntime {
@@ -25,7 +26,7 @@ export function createSnapshotRuntime(input: {
   readonly config: AppConfig;
   readonly database: DatabaseService;
   readonly maxDurationMs?: number;
-  readonly onFinalized?: (runId: string, executor: AppDatabase) => Promise<unknown>;
+  readonly eligibility: GiftEligibilityService;
   readonly reportError?: (error: unknown, operation: string) => void;
   readonly retryDelayMs?: number;
   readonly source?: GuardRosterSource;
@@ -41,8 +42,8 @@ export function createSnapshotRuntime(input: {
     input.storage,
     source,
     input.clock,
+    input.eligibility,
     input.maxDurationMs,
-    input.onFinalized,
     (error) => input.reportError?.(error, 'snapshot.manual-capture'),
   );
   let interval: ReturnType<typeof setInterval> | null = null;
