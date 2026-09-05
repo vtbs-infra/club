@@ -1,14 +1,22 @@
 # 开始使用
 
-本指南使用 Docker Compose 启动一个可用的 Club 实例，并完成首个平台管理员、B站验证
-直播间和主播配置。
+本指南使用 Docker Compose 或 Podman Compose 启动一个可用的 Club 实例，并完成首个
+平台管理员、B站验证直播间和主播配置。
 
 ## 环境要求
 
-- Docker Engine
-- Docker Compose v2
+- Docker Engine 与 Docker Compose v2；或者
+- Podman 4.7 或更高版本，以及可供 `podman compose` 调用的 Compose provider
 - 可访问 B站 HTTPS 与 WebSocket 服务的网络
 - 一个用于 UID 验证的 B站直播间
+
+Docker 用户执行 `docker --version` 和 `docker compose version` 检查环境。Podman 用户
+执行 `podman --version` 和 `podman compose version`；Windows 与 macOS 还需要启动
+Podman Machine，首次运行 `podman machine init` 创建，之后使用 `podman machine start`
+启动。Podman Desktop 可在 **Settings > Resources > Compose** 中安装 Compose provider。
+
+下面每个容器操作都分别给出 Docker 与 Podman 命令。一次部署只能选择其中一组，不要
+混用，否则两个运行时会创建彼此独立的容器、网络和数据卷。
 
 默认端口：
 
@@ -55,10 +63,20 @@ ADDRESS_ENCRYPTION_KEY_RING=1:<32 字节 base64 密钥>
 
 ## 2. 获取应用镜像并启动数据库
 
+**Docker**
+
 ```powershell
 docker compose pull app
 docker compose up -d postgres
 docker compose ps
+```
+
+**Podman**
+
+```powershell
+podman compose pull app
+podman compose up -d postgres
+podman compose ps
 ```
 
 等待 `postgres` 显示为 `healthy`。
@@ -66,15 +84,27 @@ docker compose ps
 从源码构建时，删除 `.env` 中的 `CLUB_IMAGE`，并用以下命令替代 `pull`：
 
 ```powershell
+# Docker
 docker compose build app
+
+# Podman
+podman compose build app
 ```
 
 ## 3. 创建数据库结构
 
 迁移需要显式执行：
 
+**Docker**
+
 ```powershell
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
+```
+
+**Podman**
+
+```powershell
+podman compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 ```
 
 同一批迁移可以重复调用；已经记录的迁移不会再次执行。当前版本使用单一 fresh-install
@@ -82,8 +112,17 @@ docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 
 ## 4. 创建平台管理员
 
+**Docker**
+
 ```powershell
 docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
+  node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
+```
+
+**Podman**
+
+```powershell
+podman compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
   node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
 ```
 
@@ -91,9 +130,18 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 
 ## 5. 启动 Club
 
+**Docker**
+
 ```powershell
 docker compose up -d --no-build app
 docker compose ps
+```
+
+**Podman**
+
+```powershell
+podman compose up -d --no-build app
+podman compose ps
 ```
 
 检查服务：
@@ -160,9 +208,18 @@ America/Los_Angeles
 
 ## 9. 检查运行状态
 
+**Docker**
+
 ```powershell
 docker compose logs --tail 200 app
 docker compose logs --tail 100 postgres
+```
+
+**Podman**
+
+```powershell
+podman compose logs --tail 200 app
+podman compose logs --tail 100 postgres
 ```
 
 管理后台 `/admin/system` 展示数据库、存储、验证直播间、名单调度、物流刷新和礼物封面

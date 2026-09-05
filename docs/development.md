@@ -7,8 +7,8 @@
 
 - Node.js `>=24 <25`
 - pnpm `11.9.0`
-- Docker Engine
-- Docker Compose v2
+- Docker Engine 与 Docker Compose v2；或者
+- Podman 4.7 或更高版本，以及可供 `podman compose` 调用的 Compose provider
 
 安装依赖：
 
@@ -21,7 +21,12 @@ Copy-Item .env.example .env
 配置 `.env` 后启动 PostgreSQL：
 
 ```powershell
+# Docker
 docker compose up -d postgres
+
+# Podman
+podman compose up -d postgres
+
 pnpm db:migrate
 ```
 
@@ -244,7 +249,12 @@ $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 pnpm build
 pnpm test:browser
+
+# Docker
 docker compose build app
+
+# Podman
+podman compose build app
 ```
 
 提交前还应确认：

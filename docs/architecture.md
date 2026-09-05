@@ -373,6 +373,9 @@ Escape、焦点返回和 Tab 循环；视觉样式仍由语义化 CSS 提供，�
 
 ## 部署边界
 
+Docker Compose v2 与 Podman Compose 共用同一份 `compose.yaml` 和 OCI 镜像，不维护
+运行时专用的应用拓扑。两种运行时创建的容器、网络和数据卷彼此独立，同一实例不得混用。
+
 生产镜像分两阶段构建。运行层包含：
 
 - Node.js 24；
@@ -385,5 +388,5 @@ Escape、焦点返回和 Tab 循环；视觉样式仍由语义化 CSS 提供，�
 OpenAPI 从同一版本值生成响应。正式镜像使用精确语义版本 Tag，并通过 OCI Revision 和
 Digest 关联到 Git 提交。
 
-迁移与管理员 CLI 都使用 `node dist/server/...` 编译入口。Docker 健康检查调用
+迁移与管理员 CLI 都使用 `node dist/server/...` 编译入口。OCI 容器健康检查调用
 `/health/ready`，容器停止宽限期为 15 秒。

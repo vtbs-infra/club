@@ -3,6 +3,10 @@
 本手册适用于长期运行的 Club 实例。首次安装见[开始使用](getting-started.md)，所有环境
 变量见[配置参考](configuration.md)。
 
+本手册同时支持 Docker Compose v2 与 Podman Compose。为保持命令紧凑，后续示例使用
+`docker compose`；Podman 部署把该前缀原样替换为 `podman compose`，其余参数不变。
+同一实例不得混用两个运行时。
+
 ## 部署拓扑
 
 一个 Club 部署包含：
