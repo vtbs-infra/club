@@ -15,6 +15,7 @@ import {
   giftOrders,
   giftReleases,
   type GiftOrderStatus,
+  type StoredGiftOrderStatus,
 } from '../../infrastructure/db/schema/index.js';
 import {
   EncryptionError,
@@ -24,7 +25,7 @@ import type { AddressPayload } from '../addresses/address-domain.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
 
 function shippingRecord(order: {
-  status: string;
+  status: GiftOrderStatus | StoredGiftOrderStatus;
   carrierName: string | null;
   trackingNumber: string | null;
 }) {

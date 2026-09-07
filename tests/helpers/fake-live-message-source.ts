@@ -5,7 +5,7 @@ import type {
   LiveMessageListener,
   LiveMessageSource,
   RoomConnection,
-} from './live-message-source.js';
+} from '../../src/server/modules/bilibili/live-message-source.js';
 
 interface FakeConnection extends RoomConnection {
   readonly listener: LiveMessageListener;

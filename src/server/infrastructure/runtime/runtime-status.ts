@@ -1,6 +1,7 @@
 import type { Clock } from '../clock/clock.js';
 
-export type RuntimeState = 'STARTING' | 'RUNNING' | 'DEGRADED' | 'STOPPED';
+import type { RuntimeState } from '../../../shared/contracts/system.js';
+export type { RuntimeState } from '../../../shared/contracts/system.js';
 
 export interface RuntimeStatus {
   readonly lastErrorAt: Date | null;

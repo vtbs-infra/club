@@ -1,3 +1,5 @@
+import type { VerificationRoom } from '../../../../shared/contracts/verification-rooms.js';
+import type { BindingConflict, BilibiliChallenge } from '../../../../shared/contracts/binding.js';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -76,7 +78,10 @@ export const verificationRooms = pgTable(
     displayName: text('display_name').notNull(),
     priority: integer('priority').default(100).notNull(),
     enabled: boolean('enabled').default(true).notNull(),
-    healthStatus: text('health_status').default('UNKNOWN').notNull(),
+    healthStatus: text('health_status')
+      .$type<VerificationRoom['healthStatus']>()
+      .default('UNKNOWN')
+      .notNull(),
     lastConnectedAt: timestamp('last_connected_at', { mode: 'date', withTimezone: true }),
     ...timestamps,
   },
@@ -101,7 +106,7 @@ export const bindingChallenges = pgTable(
       .notNull()
       .references(() => verificationRooms.id, { onDelete: 'restrict' }),
     codeDigest: text('code_digest').notNull(),
-    status: text('status').default('ACTIVE').notNull(),
+    status: text('status').$type<BilibiliChallenge['status']>().default('ACTIVE').notNull(),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
     consumedAt: timestamp('consumed_at', { mode: 'date', withTimezone: true }),
     consumedEventId: text('consumed_event_id'),
@@ -169,7 +174,7 @@ export const bindingConflicts = pgTable(
       .notNull()
       .references(() => bilibiliBindings.id, { onDelete: 'restrict' }),
     biliUid: text('bili_uid').notNull(),
-    status: text('status').default('OPEN').notNull(),
+    status: text('status').$type<BindingConflict['status']>().default('OPEN').notNull(),
     closedAt: timestamp('closed_at', { mode: 'date', withTimezone: true }),
     closedByUserId: uuid('closed_by_user_id').references(() => users.id, {
       onDelete: 'restrict',

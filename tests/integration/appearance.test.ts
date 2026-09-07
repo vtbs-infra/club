@@ -1,7 +1,7 @@
 import { count, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
-import { buildApp } from '../../src/server/app.js';
+import { buildApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { auditLogs, platformAppearance } from '../../src/server/infrastructure/db/schema/index.js';
 import {

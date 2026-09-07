@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
+import { eq } from 'drizzle-orm';
 import Fastify, { LogController, type FastifyError } from 'fastify';
 import pino, { type DestinationStream } from 'pino';
 
@@ -12,6 +13,7 @@ import { APPLICATION_VERSION } from './application-version.js';
 import { loadConfig, type AppConfig } from './config/env.js';
 import { SystemClock, type Clock } from './infrastructure/clock/clock.js';
 import { createDatabase, type DatabaseService } from './infrastructure/db/database.js';
+import { verificationRooms } from './infrastructure/db/schema/index.js';
 import { EncryptionKeyRing } from './infrastructure/encryption/key-ring.js';
 import { createLoggerOptions } from './infrastructure/logging/logger.js';
 import { LocalStorageDriver } from './infrastructure/storage/local-storage.js';
@@ -25,6 +27,8 @@ import authRoutes from './modules/auth/routes.js';
 import { AddressService } from './modules/addresses/address-service.js';
 import addressRoutes from './modules/addresses/routes.js';
 import { createBindingRuntime, type BindingRuntime } from './modules/binding/binding-runtime.js';
+import { BindingService } from './modules/binding/binding-service.js';
+import { BindingConflictService } from './modules/binding/binding-conflict-service.js';
 import bindingRoutes from './modules/binding/routes.js';
 import { AnnouncementService } from './modules/announcements/announcement-service.js';
 import announcementRoutes from './modules/announcements/routes.js';
@@ -33,11 +37,19 @@ import appearanceRoutes from './modules/appearance/routes.js';
 import { AuditQueryService } from './modules/audit/audit-query-service.js';
 import auditRoutes from './modules/audit/routes.js';
 import type { CreatorProfileSource } from './modules/bilibili/creator-profile-source.js';
-import { FakeCreatorProfileSource } from './modules/bilibili/fake-creator-profile-source.js';
 import { PublicWebCreatorProfileSource } from './modules/bilibili/public-web-creator-profile-source.js';
+import type { GuardRosterSource } from './modules/bilibili/guard-roster-source.js';
+import type { LiveMessageSource } from './modules/bilibili/live-message-source.js';
+import { PublicWebGuardRosterSource } from './modules/bilibili/public-web-guard-roster-source.js';
+import { PublicWebLiveMessageSource } from './modules/bilibili/public-web-live-message-source.js';
+import { RoomConnectionManager } from './modules/bilibili/room-connection-manager.js';
 import { CreatorService } from './modules/creators/creator-service.js';
 import creatorRoutes from './modules/creators/routes.js';
-import { GiftOrderService } from './modules/gifts/order-service.js';
+import { GiftClaimService } from './modules/gifts/claim-service.js';
+import { GiftFulfillmentService } from './modules/gifts/fulfillment-service.js';
+import { GiftFulfillmentExportService } from './modules/gifts/fulfillment-export-service.js';
+import { GiftOrderQueryService } from './modules/gifts/order-query-service.js';
+import { GiftMediaService } from './modules/gifts/gift-media-service.js';
 import {
   createGiftMediaRuntime,
   type GiftMediaRuntime,
@@ -55,6 +67,8 @@ import {
   type SnapshotRuntime,
 } from './modules/snapshots/snapshot-runtime.js';
 import verificationRoomRoutes from './modules/verification-rooms/routes.js';
+import { VerificationRoomService } from './modules/verification-rooms/verification-room-service.js';
+import { SnapshotService } from './modules/snapshots/snapshot-service.js';
 
 export interface BuildAppOptions {
   readonly auth?: AppAuth;
@@ -65,6 +79,8 @@ export interface BuildAppOptions {
   readonly creatorProfileSource?: CreatorProfileSource;
   readonly database?: DatabaseService;
   readonly giftMediaRuntime?: GiftMediaRuntime;
+  readonly guardRosterSource?: GuardRosterSource;
+  readonly liveMessageSource?: LiveMessageSource;
   readonly loggerStream?: DestinationStream;
   readonly rateLimiter?: InMemoryRateLimiter;
   readonly serveStatic?: boolean;
@@ -98,14 +114,47 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const encryption = new EncryptionKeyRing(config);
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
+  const creatorProfileSource = options.creatorProfileSource ?? new PublicWebCreatorProfileSource();
+  const connections: RoomConnectionManager = new RoomConnectionManager({
+    source: options.liveMessageSource ?? new PublicWebLiveMessageSource(),
+    onMessage: async (event) => {
+      await bindings.handleLiveMessage(event);
+    },
+    onStateChange: async (biliRoomId, state) => {
+      const now = clock.now();
+      await database.orm
+        .update(verificationRooms)
+        .set({
+          healthStatus: state,
+          ...(state === 'HEALTHY' ? { lastConnectedAt: now } : {}),
+          updatedAt: now,
+        })
+        .where(eq(verificationRooms.biliRoomId, biliRoomId));
+    },
+  });
+  const conflicts = new BindingConflictService(database, clock);
+  const bindings: BindingService = new BindingService(
+    database,
+    clock,
+    config.authSecret,
+    connections,
+    conflicts,
+    () => bindingRuntime.requestTick(),
+  );
+  const rooms = new VerificationRoomService(
+    database,
+    connections,
+    () => bindingRuntime.requestTick(),
+    reportRuntimeError,
+  );
   const bindingRuntime =
     options.bindingRuntime ??
-    createBindingRuntime({ clock, config, database, reportError: reportRuntimeError });
-  const creatorProfileSource =
-    options.creatorProfileSource ??
-    (config.bilibiliRosterSource === 'fake'
-      ? new FakeCreatorProfileSource()
-      : new PublicWebCreatorProfileSource());
+    createBindingRuntime({
+      clock,
+      bindings,
+      connections,
+      reportError: reportRuntimeError,
+    });
   const addressService = new AddressService(database, encryption);
   const creatorService = new CreatorService(database, creatorProfileSource, clock);
   const releaseService = new GiftReleaseService(database, clock);
@@ -113,22 +162,32 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const appearanceService = new AppearanceService(database);
   const portalService = new PortalService(database, clock);
   const auditQueryService = new AuditQueryService(database);
+  const giftMediaService = new GiftMediaService(database, storage, clock);
   const giftMediaRuntime =
     options.giftMediaRuntime ??
     createGiftMediaRuntime({
       clock,
-      database,
+      service: giftMediaService,
       reportError: reportRuntimeError,
-      storage,
     });
-  const orderService = new GiftOrderService(database, encryption, addressService, clock);
+  const claims = new GiftClaimService(database, encryption, addressService, clock);
+  const fulfillment = new GiftFulfillmentService(database, clock);
+  const exporter = new GiftFulfillmentExportService(database, encryption, clock);
+  const queries = new GiftOrderQueryService(database, encryption, clock);
+  const snapshotService = new SnapshotService(
+    database,
+    storage,
+    options.guardRosterSource ?? new PublicWebGuardRosterSource(),
+    clock,
+    releaseService.eligibility,
+    undefined,
+    (error) => reportRuntimeError(error, 'snapshot.manual-capture'),
+  );
   const snapshotRuntime =
     options.snapshotRuntime ??
     createSnapshotRuntime({
       clock,
-      config,
-      database,
-      eligibility: releaseService.eligibility,
+      service: snapshotService,
       reportError: reportRuntimeError,
       storage,
     });
@@ -246,18 +305,21 @@ export async function buildApp(options: BuildAppOptions = {}) {
     auth,
     challengeLimiter,
     clock,
-    conflicts: bindingRuntime.conflicts,
-    service: bindingRuntime.bindings,
+    conflicts,
+    service: bindings,
   });
   await app.register(giftReleaseRoutes, { auth, database, service: releaseService });
   await app.register(giftOrderRoutes, {
     auth,
     database,
-    service: orderService,
+    claims,
+    fulfillment,
+    exporter,
+    queries,
   });
-  await app.register(giftMediaRoutes, { auth, database, service: giftMediaRuntime.service });
-  await app.register(verificationRoomRoutes, { auth, service: bindingRuntime.rooms });
-  await app.register(snapshotRoutes, { auth, database, service: snapshotRuntime.service });
+  await app.register(giftMediaRoutes, { auth, database, service: giftMediaService });
+  await app.register(verificationRoomRoutes, { auth, service: rooms });
+  await app.register(snapshotRoutes, { auth, database, service: snapshotService });
   await app.register(announcementRoutes, {
     auth,
     database,

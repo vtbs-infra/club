@@ -2,7 +2,7 @@ import { and, count, eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
-import { buildApp } from '../../src/server/app.js';
+import { buildApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { databaseWriteBatches } from '../../src/server/infrastructure/db/write-batches.js';
 import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
@@ -23,7 +23,10 @@ import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/ke
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
 import type { AppAuth } from '../../src/server/modules/auth/auth.js';
-import { GiftOrderService } from '../../src/server/modules/gifts/order-service.js';
+import { GiftClaimService } from '../../src/server/modules/gifts/claim-service.js';
+import { GiftFulfillmentExportService } from '../../src/server/modules/gifts/fulfillment-export-service.js';
+import { GiftOrderQueryService } from '../../src/server/modules/gifts/order-query-service.js';
+import { GiftFulfillmentService } from '../../src/server/modules/gifts/fulfillment-service.js';
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
 import { createTestConfig } from '../helpers/test-config.js';
 import { createReleaseDraft } from '../helpers/gift-release.js';
@@ -62,7 +65,10 @@ integration('gift order lifecycle', () => {
   let releaseService: GiftReleaseService;
   let addressService: AddressService;
   let encryption: EncryptionKeyRing;
-  let orderService: GiftOrderService;
+  let queries: GiftOrderQueryService;
+  let claims: GiftClaimService;
+  let exporter: GiftFulfillmentExportService;
+  let fulfillment: GiftFulfillmentService;
 
   beforeAll(async () => {
     integrationDatabase = await createIntegrationDatabase('gift_orders');
@@ -116,7 +122,10 @@ integration('gift order lifecycle', () => {
     });
     addressService = new AddressService(database, encryption);
     releaseService = new GiftReleaseService(database, new SystemClock());
-    orderService = new GiftOrderService(database, encryption, addressService, new SystemClock());
+    queries = new GiftOrderQueryService(database, encryption, new SystemClock());
+    claims = new GiftClaimService(database, encryption, addressService, new SystemClock());
+    exporter = new GiftFulfillmentExportService(database, encryption, new SystemClock());
+    fulfillment = new GiftFulfillmentService(database, new SystemClock());
   });
 
   afterAll(async () => {
@@ -253,37 +262,37 @@ integration('gift order lifecycle', () => {
     expect(juneOrders).toHaveLength(2);
     const captainOrder = juneOrders.find((order) => order.biliUid === '11001')!;
     expect(captainOrder.userId).toBeNull();
-    const firstCreatorPage = await orderService.listForCreator(creatorId, { limit: 1 });
+    const firstCreatorPage = await queries.listForCreator(creatorId, { limit: 1 });
     expect(firstCreatorPage.items).toHaveLength(1);
     expect(firstCreatorPage.nextCursor).not.toBeNull();
     expect(firstCreatorPage.items[0]).not.toHaveProperty('items');
     expect(firstCreatorPage.items[0]).not.toHaveProperty('shipments');
-    const secondCreatorPage = await orderService.listForCreator(creatorId, {
+    const secondCreatorPage = await queries.listForCreator(creatorId, {
       cursor: firstCreatorPage.nextCursor!,
       limit: 1,
     });
     expect(secondCreatorPage.items).toHaveLength(1);
     expect(secondCreatorPage.items[0]!.id).not.toBe(firstCreatorPage.items[0]!.id);
-    const searchedOrders = await orderService.listForCreator(creatorId, {
+    const searchedOrders = await queries.listForCreator(creatorId, {
       limit: 20,
       search: captainOrder.orderNumber.slice(0, 6),
     });
     expect(searchedOrders.items.some((order) => order.id === captainOrder.id)).toBe(true);
-    expect(
-      (await orderService.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items,
-    ).toHaveLength(1);
+    expect((await queries.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
+      1,
+    );
 
     await database.orm
       .update(bilibiliBindings)
       .set({ unboundAt: new Date(), updatedAt: new Date() })
       .where(eq(bilibiliBindings.id, firstBindingId));
-    expect(
-      (await orderService.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items,
-    ).toHaveLength(0);
+    expect((await queries.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
+      0,
+    );
     await bind(userTwoId, '11001', 'two');
-    expect(
-      (await orderService.listForUser(userTwoId, { filter: 'ALL', limit: 20 })).items,
-    ).toHaveLength(1);
+    expect((await queries.listForUser(userTwoId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
+      1,
+    );
 
     const address = await addressService.create(
       userTwoId,
@@ -322,8 +331,8 @@ integration('gift order lifecycle', () => {
     expect(await addressService.list(userTwoId)).toMatchObject([
       { id: address.id, isDefault: true },
     ]);
-    const visible = await orderService.getForUser(userTwoId, captainOrder.id);
-    await orderService.submit(
+    const visible = await queries.getForUser(userTwoId, captainOrder.id);
+    await claims.submit(
       userTwoId,
       captainOrder.id,
       {
@@ -345,7 +354,7 @@ integration('gift order lifecycle', () => {
       { payload: { ...addressPayload, recipientName: '后来修改的名字' } },
       requestContext(userTwoId, 'update-address'),
     );
-    const creatorView = await orderService.getForCreator(
+    const creatorView = await queries.getForCreator(
       creatorId,
       captainOrder.id,
       requestContext(creatorUserId, 'read-fulfillment'),
@@ -360,7 +369,7 @@ integration('gift order lifecycle', () => {
     expect(await addressService.list(userTwoId)).toEqual([]);
     expect(
       (
-        await orderService.getForCreator(
+        await queries.getForCreator(
           creatorId,
           captainOrder.id,
           requestContext(creatorUserId, 'read-frozen-address-after-delete'),
@@ -368,20 +377,20 @@ integration('gift order lifecycle', () => {
       ).deliveryAddress?.recipientName,
     ).toBe('原收件人');
     await expect(
-      orderService.getForCreator(
+      queries.getForCreator(
         otherCreatorId,
         captainOrder.id,
         requestContext(creatorUserId, 'cross-creator-read'),
       ),
     ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_FOUND' });
     await expect(
-      orderService.exportFulfillment(
+      exporter.exportRelease(
         { displayName: 'Creator Two', id: otherCreatorId, timezone: 'Asia/Shanghai' },
         june.id,
         requestContext(creatorUserId, 'cross-creator-export'),
       ),
     ).rejects.toMatchObject({ code: 'GIFT_RELEASE_NOT_FOUND' });
-    const exported = await orderService.exportFulfillment(
+    const exported = await exporter.exportRelease(
       { displayName: 'Creator One', id: creatorId, timezone: 'Asia/Shanghai' },
       june.id,
       requestContext(creatorUserId, 'export-fulfillment'),
@@ -478,7 +487,7 @@ integration('gift order lifecycle', () => {
         .set({ status: 'SHIPPED', version: 999 })
         .where(eq(giftOrders.id, captainOrder.id)),
     ).rejects.toThrow();
-    const shipped = await orderService.ship(
+    await fulfillment.ship(
       creatorId,
       captainOrder.id,
       {
@@ -486,6 +495,11 @@ integration('gift order lifecycle', () => {
         trackingNumber: 'ZT123456789',
       },
       requestContext(creatorUserId, 'ship-order'),
+    );
+    const shipped = await queries.getForCreator(
+      creatorId,
+      captainOrder.id,
+      requestContext(creatorUserId, 'read-shipped'),
     );
     expect(shipped.status).toBe('SHIPPED');
     expect(shipped.shipping).toEqual({ carrierName: '中通快递', trackingNumber: 'ZT123456789' });
@@ -501,14 +515,14 @@ integration('gift order lifecycle', () => {
       ).map((transition) => `${transition.fromStatus}->${transition.toStatus}`),
     ).toContain('SUBMITTED->SHIPPED');
     await expect(
-      orderService.exportFulfillment(
+      exporter.exportRelease(
         { displayName: 'Creator One', id: creatorId, timezone: 'Asia/Shanghai' },
         june.id,
         requestContext(creatorUserId, 'empty-fulfillment-export'),
       ),
     ).rejects.toMatchObject({ code: 'FULFILLMENT_EXPORT_EMPTY' });
     await expect(
-      orderService.ship(
+      fulfillment.ship(
         creatorId,
         captainOrder.id,
         {
@@ -518,7 +532,7 @@ integration('gift order lifecycle', () => {
         requestContext(creatorUserId, 'ship-order-again'),
       ),
     ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_SHIPPABLE' });
-    const corrected = await orderService.correctShipping(
+    await fulfillment.correctShipping(
       creatorId,
       captainOrder.id,
       {
@@ -528,16 +542,21 @@ integration('gift order lifecycle', () => {
       },
       requestContext(creatorUserId, 'correct-shipping'),
     );
+    const corrected = await queries.getForCreator(
+      creatorId,
+      captainOrder.id,
+      requestContext(creatorUserId, 'read-corrected'),
+    );
     expect(corrected).toMatchObject({
       status: 'SHIPPED',
       shippedAt: shipped.shippedAt,
       shipping: { carrierName: '顺丰速运', trackingNumber: 'SF-CORRECTED' },
     });
-    expect((await orderService.getForUser(userTwoId, captainOrder.id)).shipping).toEqual(
+    expect((await queries.getForUser(userTwoId, captainOrder.id)).shipping).toEqual(
       corrected.shipping,
     );
     await expect(
-      orderService.correctShipping(
+      fulfillment.correctShipping(
         creatorId,
         captainOrder.id,
         {
@@ -549,7 +568,7 @@ integration('gift order lifecycle', () => {
       ),
     ).rejects.toMatchObject({ code: 'GIFT_ORDER_VERSION_CONFLICT' });
     await expect(
-      orderService.correctShipping(
+      fulfillment.correctShipping(
         otherCreatorId,
         captainOrder.id,
         {

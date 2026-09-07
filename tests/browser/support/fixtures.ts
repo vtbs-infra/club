@@ -302,7 +302,7 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
       media: runtime,
       roster: runtime,
     },
-    snapshotRunCounts: {},
+    snapshotRunCounts: [],
     status: 'ok',
     version: APPLICATION_VERSION,
     ...overrides,

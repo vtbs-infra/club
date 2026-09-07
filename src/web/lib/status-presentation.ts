@@ -42,13 +42,8 @@ const snapshotPresentations = {
   SCHEDULED: { label: '已计划', tone: 'neutral' },
 } as const satisfies Readonly<Record<SnapshotRun['status'], StatusPresentation>>;
 
-export function snapshotRunPresentation(status: string): StatusPresentation {
-  return (
-    (snapshotPresentations as Readonly<Record<string, StatusPresentation>>)[status] ?? {
-      label: '未知状态',
-      tone: 'neutral',
-    }
-  );
+export function snapshotRunPresentation(status: SnapshotRun['status']): StatusPresentation {
+  return snapshotPresentations[status];
 }
 
 export const snapshotConsistencyPresentation = {
@@ -78,14 +73,12 @@ const roomHealthPresentations = {
   UNKNOWN: { label: '等待检测', tone: 'neutral' },
 } as const satisfies Readonly<Record<VerificationRoom['healthStatus'], StatusPresentation>>;
 
-export function roomHealthPresentation(status: string, enabled = true): StatusPresentation {
+export function roomHealthPresentation(
+  status: VerificationRoom['healthStatus'],
+  enabled = true,
+): StatusPresentation {
   if (!enabled) return { label: '已停用', tone: 'neutral' };
-  return (
-    (roomHealthPresentations as Readonly<Record<string, StatusPresentation>>)[status] ?? {
-      label: '未知状态',
-      tone: 'neutral',
-    }
-  );
+  return roomHealthPresentations[status];
 }
 
 export const connectionStatePresentation = {

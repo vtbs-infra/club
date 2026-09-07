@@ -1,7 +1,7 @@
 import type { MessageData } from 'bilibili-live-danmaku';
 import { describe, expect, it, vi } from 'vitest';
 
-import { FakeLiveMessageSource } from '../../src/server/modules/bilibili/fake-live-message-source.js';
+import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
 import {
   normalizePublicWebDanmaku,
   normalizePublicWebHistoryMessage,

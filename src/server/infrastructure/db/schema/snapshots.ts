@@ -1,3 +1,9 @@
+import type {
+  SnapshotRun,
+  SnapshotAttempt,
+  SnapshotPage,
+} from '../../../../shared/contracts/snapshots.js';
+import type { GuardTier } from './shared.js';
 import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
@@ -39,7 +45,7 @@ export const snapshotRuns = pgTable(
       (): AnyPgColumn => snapshotAttempts.id,
       { onDelete: 'restrict' },
     ),
-    status: text('status').default('SCHEDULED').notNull(),
+    status: text('status').$type<SnapshotRun['status']>().default('SCHEDULED').notNull(),
     finalizedAt: timestamp('finalized_at', { mode: 'date', withTimezone: true }),
     approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
     approvedAt: timestamp('approved_at', { mode: 'date', withTimezone: true }),
@@ -71,13 +77,19 @@ export const snapshotAttempts = pgTable(
     }).notNull(),
     captureStartedAt: timestamp('capture_started_at', { mode: 'date', withTimezone: true }),
     captureCompletedAt: timestamp('capture_completed_at', { mode: 'date', withTimezone: true }),
-    punctuality: text('punctuality'),
-    consistencyStatus: text('consistency_status').default('PENDING').notNull(),
+    punctuality: text('punctuality').$type<NonNullable<SnapshotAttempt['punctuality']>>(),
+    consistencyStatus: text('consistency_status')
+      .$type<SnapshotAttempt['consistencyStatus']>()
+      .default('PENDING')
+      .notNull(),
     declaredTotal: integer('declared_total'),
     normalizedTotal: integer('normalized_total'),
     sourceName: text('source_name').notNull(),
     sourceVersion: text('source_version').notNull(),
-    initiatedBy: text('initiated_by').default('SCHEDULER').notNull(),
+    initiatedBy: text('initiated_by')
+      .$type<SnapshotAttempt['initiatedBy']>()
+      .default('SCHEDULER')
+      .notNull(),
     requestedByUserId: uuid('requested_by_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
@@ -111,7 +123,7 @@ export const snapshotPages = pgTable(
     snapshotAttemptId: uuid('snapshot_attempt_id')
       .notNull()
       .references(() => snapshotAttempts.id, { onDelete: 'restrict' }),
-    captureKind: text('capture_kind').notNull(),
+    captureKind: text('capture_kind').$type<SnapshotPage['captureKind']>().notNull(),
     pageNumber: integer('page_number').notNull(),
     declaredPageCount: integer('declared_page_count').notNull(),
     declaredTotal: integer('declared_total').notNull(),
@@ -154,7 +166,7 @@ export const snapshotAttemptMembers = pgTable(
       .references(() => snapshotAttempts.id, { onDelete: 'restrict' }),
     biliUid: text('bili_uid').notNull(),
     displayNameAtCapture: text('display_name_at_capture').notNull(),
-    tier: text('tier').notNull(),
+    tier: text('tier').$type<GuardTier>().notNull(),
     rawTier: text('raw_tier').notNull(),
     sourcePage: integer('source_page').notNull(),
     sourcePosition: integer('source_position').notNull(),

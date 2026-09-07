@@ -366,22 +366,19 @@ export class SnapshotService {
     }
     const members = pages
       .flatMap((page) => page.members.map((member) => ({ ...member, sourcePage: page.pageNumber })))
-      .map((member, index) => ({
-        ...member,
-        sourcePosition: member.sourcePosition || index + 1,
-      }));
-    if (members.some((member) => member.tier === null)) {
-      throw new CaptureFailure('UNKNOWN_TIER', 'The provider returned an unknown guard tier.');
-    }
+      .map((member) => {
+        if (member.tier === null) {
+          throw new CaptureFailure('UNKNOWN_TIER', 'The provider returned an unknown guard tier.');
+        }
+        return { ...member, tier: member.tier };
+      });
     if (new Set(members.map((member) => member.biliUid)).size !== members.length) {
       throw new CaptureFailure('DUPLICATE_UID', 'The roster contained a duplicate UID.');
     }
     if (members.length !== first.declaredTotal) {
       throw new CaptureFailure('COUNT_MISMATCH', 'The normalized roster did not match its total.');
     }
-    return members as readonly (CapturedRosterMember & {
-      tier: NonNullable<GuardRosterMember['tier']>;
-    })[];
+    return members;
   }
 
   private addResponseBytes(current: number, pages: readonly GuardRosterPage[]): number {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildApp } from '../../src/server/app.js';
+import { buildApp } from '../helpers/test-app.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import type { ReadinessResponse } from '../../src/shared/contracts/health.js';
 import {

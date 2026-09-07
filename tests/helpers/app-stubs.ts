@@ -32,15 +32,13 @@ export function bindingRuntimeStub(
   overrides: Partial<Pick<BindingRuntime, 'close' | 'getStatus' | 'start'>> = {},
 ): BindingRuntime {
   return {
-    bindings: {},
     close: () => Promise.resolve(),
-    connections: {},
     getStatus: () => runtimeStatus('STOPPED'),
-    rooms: {},
-    source: {},
     start: () => Promise.resolve(),
+    requestTick: () => undefined,
+    tick: () => Promise.resolve(),
     ...overrides,
-  } as unknown as BindingRuntime;
+  };
 }
 
 export function giftMediaRuntimeStub(
@@ -49,23 +47,22 @@ export function giftMediaRuntimeStub(
   return {
     close: () => Promise.resolve(),
     getStatus: () => runtimeStatus('STOPPED'),
-    service: {},
     start: () => Promise.resolve(),
+    requestTick: () => undefined,
     tick: () => Promise.resolve(),
     ...overrides,
-  } as unknown as GiftMediaRuntime;
+  };
 }
 
 export function snapshotRuntimeStub(
   overrides: Partial<Pick<SnapshotRuntime, 'close' | 'getStatus' | 'start'>> = {},
 ): SnapshotRuntime {
   return {
-    close: () => undefined,
+    close: () => Promise.resolve(),
     getStatus: () => runtimeStatus('STOPPED'),
-    service: {},
-    source: {},
     start: () => Promise.resolve(),
+    requestTick: () => undefined,
     tick: () => Promise.resolve(),
     ...overrides,
-  } as unknown as SnapshotRuntime;
+  };
 }

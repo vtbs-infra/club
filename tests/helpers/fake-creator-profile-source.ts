@@ -1,4 +1,7 @@
-import type { BilibiliCreatorProfile, CreatorProfileSource } from './creator-profile-source.js';
+import type {
+  BilibiliCreatorProfile,
+  CreatorProfileSource,
+} from '../../src/server/modules/bilibili/creator-profile-source.js';
 
 export class FakeCreatorProfileSource implements CreatorProfileSource {
   public readonly name = 'fake';

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
-import { buildApp } from '../../src/server/app.js';
+import { buildApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { verificationRooms } from '../../src/server/infrastructure/db/schema/index.js';
 import {
@@ -9,12 +9,13 @@ import {
   type TemporaryStorage,
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth } from '../../src/server/modules/auth/auth.js';
-import { FakeLiveMessageSource } from '../../src/server/modules/bilibili/fake-live-message-source.js';
+import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
 import type {
   LiveMessageListener,
   RoomConnection,
 } from '../../src/server/modules/bilibili/live-message-source.js';
-import { createBindingRuntime } from '../../src/server/modules/binding/binding-runtime.js';
+import * as bindingRuntimeModule from '../../src/server/modules/binding/binding-runtime.js';
+import * as connectionsModule from '../../src/server/modules/bilibili/room-connection-manager.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
 import {
   registerTestUser,
@@ -77,17 +78,9 @@ integration('Bilibili binding runtime recovery', () => {
       password: TEST_PASSWORD,
     });
     initialSource = new GatedLiveMessageSource();
-    const runtime = createBindingRuntime({
-      clock: { now: () => new Date() },
-      config,
-      database,
-      idleGraceMs: 0,
-      reconnectDelaysMs: [1],
-      source: initialSource,
-    });
     app = await buildApp({
       auth,
-      bindingRuntime: runtime,
+      liveMessageSource: initialSource,
       config,
       database,
       startBackground: false,
@@ -133,31 +126,36 @@ integration('Bilibili binding runtime recovery', () => {
     const source = new FakeLiveMessageSource();
     source.failNextConnections(roomId);
     const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
-    const runtime = createBindingRuntime({
-      clock: { now: () => new Date() },
-      config,
-      database,
-      idleGraceMs: 0,
-      reconnectDelaysMs: [1],
-      source,
-    });
+    const runtimeFactory = vi.spyOn(bindingRuntimeModule, 'createBindingRuntime');
+    const Connections = connectionsModule.RoomConnectionManager;
+    vi.spyOn(connectionsModule, 'RoomConnectionManager').mockImplementation(
+      class extends Connections {
+        constructor(options: connectionsModule.RoomConnectionManagerOptions) {
+          super({ ...options, idleGraceMs: 0, reconnectDelaysMs: [100] });
+          return new Connections({ ...options, idleGraceMs: 0, reconnectDelaysMs: [100] });
+        }
+      },
+    );
     app = await buildApp({
       auth: createAuth({ config, database }),
-      bindingRuntime: runtime,
+      liveMessageSource: source,
       config,
       database,
       startBackground: false,
       storage: storage.driver,
     });
+    const runtime = runtimeFactory.mock.results[0]!.value as bindingRuntimeModule.BindingRuntime;
+    vi.restoreAllMocks();
 
     await expect(runtime.start()).resolves.toBeUndefined();
-    expect(runtime.connections.getState(roomId)).toBe('UNHEALTHY');
+    const [failedRoom] = await database.orm
+      .select()
+      .from(verificationRooms)
+      .where(eq(verificationRooms.biliRoomId, roomId));
+    expect(failedRoom?.healthStatus).toBe('UNHEALTHY');
     const live = await app.inject({ method: 'GET', url: '/health/live' });
     expect(live.statusCode).toBe(200);
     await expect.poll(() => source.activeConnectionCount(roomId), { timeout: 1_000 }).toBe(1);
-    await expect
-      .poll(() => runtime.connections.getState(roomId), { timeout: 1_000 })
-      .toBe('HEALTHY');
 
     await expect
       .poll(

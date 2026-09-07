@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 
 import { expect, test as base, type Page } from '@playwright/test';
 
-import { buildApp } from '../../../src/server/app.js';
+import { buildApp } from '../../helpers/test-app.js';
 import type {
   AppDatabase,
   DatabaseService,

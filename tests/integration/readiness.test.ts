@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
-import { buildApp } from '../../src/server/app.js';
+import { buildApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
   createTemporaryStorage,

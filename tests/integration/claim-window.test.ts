@@ -20,8 +20,11 @@ import {
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
 import { AuditService } from '../../src/server/modules/audit/audit-service.js';
-import { FakeGuardRosterSource } from '../../src/server/modules/bilibili/fake-guard-roster-source.js';
-import { GiftOrderService } from '../../src/server/modules/gifts/order-service.js';
+import { FakeGuardRosterSource } from '../helpers/fake-guard-roster-source.js';
+import { GiftClaimService } from '../../src/server/modules/gifts/claim-service.js';
+import { GiftFulfillmentExportService } from '../../src/server/modules/gifts/fulfillment-export-service.js';
+import { GiftOrderQueryService } from '../../src/server/modules/gifts/order-query-service.js';
+
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
 import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
 import { insertTestBilibiliBinding, insertTestCreator } from '../helpers/creator-fixture.js';
@@ -42,7 +45,10 @@ integration('claim windows and capacity', () => {
   let addressId: string;
   let releases: GiftReleaseService;
   let snapshots: SnapshotService;
-  let orders: GiftOrderService;
+  let queries: GiftOrderQueryService;
+  let claims: GiftClaimService;
+  let exporter: GiftFulfillmentExportService;
+
   let addresses: AddressService;
   let encryption: EncryptionKeyRing;
   let current = new Date('2026-09-01T00:00:00Z');
@@ -108,7 +114,9 @@ integration('claim windows and capacity', () => {
       clock,
       releases.eligibility,
     );
-    orders = new GiftOrderService(fixture.database, encryption, addresses, clock);
+    queries = new GiftOrderQueryService(fixture.database, encryption, clock);
+    claims = new GiftClaimService(fixture.database, encryption, addresses, clock);
+    exporter = new GiftFulfillmentExportService(fixture.database, encryption, clock);
   });
 
   afterAll(async () => {
@@ -146,7 +154,7 @@ integration('claim windows and capacity', () => {
   }
 
   const submit = (id: string) =>
-    orders.submit(
+    claims.submit(
       recipientId,
       id,
       { addressId, expectedVersion: 1, options: { color: '蓝色' } },
@@ -158,27 +166,27 @@ integration('claim windows and capacity', () => {
       claimStartAt: '2026-09-02T00:00:00Z',
       claimDeadlineAt: '2026-09-03T00:00:00Z',
     });
-    expect((await orders.getForUser(recipientId, order.id)).status).toBe('UPCOMING');
+    expect((await queries.getForUser(recipientId, order.id)).status).toBe('UPCOMING');
     await expect(submit(order.id)).rejects.toMatchObject({
       code: 'GIFT_ORDER_CLAIM_WINDOW_CLOSED',
     });
     current = new Date('2026-09-02T00:00:00Z');
     expect(
-      (await orders.listForUser(recipientId, { filter: 'CLAIMABLE', limit: 20 })).items.map(
+      (await queries.listForUser(recipientId, { filter: 'CLAIMABLE', limit: 20 })).items.map(
         (it) => it.id,
       ),
     ).toContain(order.id);
     current = new Date('2026-09-03T00:00:00Z');
-    expect(await orders.getForUser(recipientId, order.id)).toMatchObject({
+    expect(await queries.getForUser(recipientId, order.id)).toMatchObject({
       status: 'EXPIRED',
       expiredAt: current,
       expiryReason: 'DEADLINE',
       version: 1,
     });
     expect(
-      (await orders.listForUser(recipientId, { filter: 'CLAIMABLE', limit: 20 })).items,
+      (await queries.listForUser(recipientId, { filter: 'CLAIMABLE', limit: 20 })).items,
     ).toHaveLength(0);
-    expect((await orders.overviewForCreator(creatorId)).counts.expired).toBe(1);
+    expect((await queries.overviewForCreator(creatorId)).counts.expired).toBe(1);
     await expect(submit(order.id)).rejects.toMatchObject({
       code: 'GIFT_ORDER_CLAIM_WINDOW_CLOSED',
     });
@@ -198,11 +206,11 @@ integration('claim windows and capacity', () => {
       await publish(`${year}-${month}-01`);
     }
     expect(
-      (await orders.listForUser(recipientId, { filter: 'ALL', limit: 12 })).items.some(
+      (await queries.listForUser(recipientId, { filter: 'ALL', limit: 12 })).items.some(
         (row) => row.id === urgent.order.id,
       ),
     ).toBe(false);
-    expect(await orders.overviewForUser(recipientId)).toMatchObject({
+    expect(await queries.overviewForUser(recipientId)).toMatchObject({
       counts: { claimable: 14, expired: 1 },
       urgent: { id: urgent.order.id },
     });
@@ -259,7 +267,7 @@ integration('claim windows and capacity', () => {
       spy.mockRestore();
       expect(settled[0]?.status).toBe('fulfilled');
       expect(settled[1]?.status).toBe(first === 'claim' ? 'fulfilled' : 'rejected');
-      expect(await orders.getForUser(recipientId, order.id)).toMatchObject(
+      expect(await queries.getForUser(recipientId, order.id)).toMatchObject(
         first === 'claim'
           ? { status: 'SUBMITTED', expiryReason: null }
           : { status: 'EXPIRED', expiryReason: 'RELEASE_CLOSED' },
@@ -285,7 +293,7 @@ integration('claim windows and capacity', () => {
     ).toEqual([{ value: 90_000 }]);
     await releases.close(creatorId, releaseId, context());
     expect(
-      (await orders.listForCreator(creatorId, { status: 'EXPIRED', limit: 100 })).items,
+      (await queries.listForCreator(creatorId, { status: 'EXPIRED', limit: 100 })).items,
     ).toHaveLength(100);
     expect(
       await database
@@ -348,7 +356,7 @@ integration('claim windows and capacity', () => {
         .where(eq(giftOrders.giftReleaseId, releaseId));
     });
     await releases.close(creatorId, releaseId, context());
-    const exported = await orders.exportFulfillment(
+    const exported = await exporter.exportRelease(
       { id: creatorId, displayName: 'Creator', timezone: 'Asia/Shanghai' },
       releaseId,
       context(),

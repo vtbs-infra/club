@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { buildApp } from '../../src/server/app.js';
+import { buildApp } from '../helpers/test-app.js';
 import { APPLICATION_VERSION } from '../../src/server/application-version.js';
 import { InMemoryRateLimiter } from '../../src/server/infrastructure/security/request-security.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';

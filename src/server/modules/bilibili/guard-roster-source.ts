@@ -1,4 +1,5 @@
-export type GuardTier = 'CAPTAIN' | 'ADMIRAL' | 'GOVERNOR';
+import type { GuardTier } from '../../../shared/contracts/common.js';
+export type { GuardTier } from '../../../shared/contracts/common.js';
 
 export const GUARD_ROSTER_PAGE_BYTE_LIMIT = 2 * 1024 * 1024;
 

@@ -131,13 +131,13 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
             </div>
           </div>
           <div className="count-list">
-            {Object.keys(data.snapshotRunCounts).length === 0 ? (
+            {data.snapshotRunCounts.length === 0 ? (
               <p className="quiet-line">暂无名单任务。</p>
             ) : (
-              Object.entries(data.snapshotRunCounts).map(([status, count]) => (
+              data.snapshotRunCounts.map(({ status, value }) => (
                 <div key={status}>
                   <StatusBadge {...snapshotRunPresentation(status)} />
-                  <strong>{count}</strong>
+                  <strong>{value}</strong>
                 </div>
               ))
             )}

@@ -3,7 +3,7 @@ import type {
   GuardRosterMember,
   GuardRosterPage,
   GuardRosterSource,
-} from './guard-roster-source.js';
+} from '../../src/server/modules/bilibili/guard-roster-source.js';
 
 export interface FakeRosterScenario {
   readonly pages: ReadonlyMap<number, GuardRosterPage>;

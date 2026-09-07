@@ -12,7 +12,7 @@ import {
   createTemporaryStorage,
   type TemporaryStorage,
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
-import { FakeGuardRosterSource } from '../../src/server/modules/bilibili/fake-guard-roster-source.js';
+import { FakeGuardRosterSource } from '../helpers/fake-guard-roster-source.js';
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
 import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
 import { insertTestCreator } from '../helpers/creator-fixture.js';

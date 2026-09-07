@@ -1,4 +1,4 @@
-import { FormatRegistry, Type } from '@sinclair/typebox';
+import { FormatRegistry, Type, type Static } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 FormatRegistry.Set('http-url', (value) => {
@@ -21,11 +21,8 @@ const ConfigSchema = Type.Object(
     authSecret: Type.String({ minLength: 32 }),
     addressEncryptionActiveKeyVersion: Type.Integer({ minimum: 1 }),
     addressEncryptionKeyRing: Type.String({ minLength: 1 }),
-    bilibiliLiveSource: Type.Union([Type.Literal('fake'), Type.Literal('public-web')]),
-    bilibiliRosterSource: Type.Union([Type.Literal('fake'), Type.Literal('public-web')]),
     host: Type.String({ minLength: 1 }),
     port: Type.Integer({ minimum: 1, maximum: 65_535 }),
-    storageDriver: Type.Literal('local'),
     storageLocalPath: Type.String({ minLength: 1 }),
     logLevel: Type.Union([
       Type.Literal('fatal'),
@@ -41,22 +38,7 @@ const ConfigSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export interface AppConfig {
-  readonly nodeEnv: 'development' | 'test' | 'production';
-  readonly appUrl: string;
-  readonly databaseUrl: string;
-  readonly authSecret: string;
-  readonly addressEncryptionActiveKeyVersion: number;
-  readonly addressEncryptionKeyRing: string;
-  readonly bilibiliLiveSource: 'fake' | 'public-web';
-  readonly bilibiliRosterSource: 'fake' | 'public-web';
-  readonly host: string;
-  readonly port: number;
-  readonly storageDriver: 'local';
-  readonly storageLocalPath: string;
-  readonly logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
-  readonly trustProxy: boolean;
-}
+export type AppConfig = Readonly<Static<typeof ConfigSchema>>;
 
 export class ConfigurationError extends Error {
   public constructor(message: string) {
@@ -100,12 +82,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     addressEncryptionActiveKeyVersion: Number(env.ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION ?? '1'),
     addressEncryptionKeyRing:
       env.ADDRESS_ENCRYPTION_KEY_RING ?? (nodeEnv === 'production' ? undefined : developmentKey),
-    bilibiliLiveSource: env.BILIBILI_LIVE_SOURCE ?? (nodeEnv === 'test' ? 'fake' : 'public-web'),
-    bilibiliRosterSource:
-      env.BILIBILI_ROSTER_SOURCE ?? (nodeEnv === 'test' ? 'fake' : 'public-web'),
     host: env.HOST ?? '0.0.0.0',
     port: parsePort(env.PORT),
-    storageDriver: env.STORAGE_DRIVER ?? 'local',
     storageLocalPath: env.STORAGE_LOCAL_PATH ?? './data/club',
     logLevel: env.LOG_LEVEL ?? 'info',
     trustProxy: parseBoolean(env.TRUST_PROXY),

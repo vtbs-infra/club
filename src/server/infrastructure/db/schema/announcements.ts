@@ -1,3 +1,4 @@
+import type { Announcement } from '../../../../shared/contracts/announcements.js';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -19,14 +20,14 @@ export const announcements = pgTable(
   'announcements',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    scope: text('scope').notNull(),
+    scope: text('scope').$type<Announcement['scope']>().notNull(),
     creatorId: uuid('creator_id').references(() => creators.id, { onDelete: 'restrict' }),
     title: text('title').notNull(),
     body: text('body').notNull(),
-    severity: text('severity').default('INFO').notNull(),
+    severity: text('severity').$type<Announcement['severity']>().default('INFO').notNull(),
     pinned: boolean('pinned').default(false).notNull(),
     publicVisible: boolean('public_visible').default(false).notNull(),
-    status: text('status').default('DRAFT').notNull(),
+    status: text('status').$type<Announcement['status']>().default('DRAFT').notNull(),
     publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
     withdrawnAt: timestamp('withdrawn_at', { mode: 'date', withTimezone: true }),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }),

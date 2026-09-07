@@ -1,3 +1,5 @@
+import type { GiftRelease } from '../../../../shared/contracts/gifts.js';
+import type { GuardTier, StoredGiftOrderStatus } from './shared.js';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -31,9 +33,12 @@ export const giftReleases = pgTable(
     publicVisible: boolean('public_visible').default(false).notNull(),
     claimStartAt: timestamp('claim_start_at', { mode: 'date', withTimezone: true }).notNull(),
     claimDeadlineAt: timestamp('claim_deadline_at', { mode: 'date', withTimezone: true }).notNull(),
-    fulfillmentMode: text('fulfillment_mode').default('HIGHEST_ONLY').notNull(),
+    fulfillmentMode: text('fulfillment_mode')
+      .$type<GiftRelease['fulfillmentMode']>()
+      .default('HIGHEST_ONLY')
+      .notNull(),
     formSchema: jsonb('form_schema').$type<readonly GiftReleaseField[]>().default([]).notNull(),
-    status: text('status').default('DRAFT').notNull(),
+    status: text('status').$type<GiftRelease['status']>().default('DRAFT').notNull(),
     publishedAt: timestamp('published_at', { mode: 'date', withTimezone: true }),
     closedAt: timestamp('closed_at', { mode: 'date', withTimezone: true }),
     createdByUserId: uuid('created_by_user_id')
@@ -66,7 +71,10 @@ export const giftCoverObjects = pgTable(
     giftReleaseId: uuid('gift_release_id').references(() => giftReleases.id, {
       onDelete: 'restrict',
     }),
-    state: text('state').default('STAGED').notNull(),
+    state: text('state')
+      .$type<'STAGED' | 'ACTIVE' | 'DELETE_PENDING'>()
+      .default('STAGED')
+      .notNull(),
     byteLength: integer('byte_length').notNull(),
     ...timestamps,
   },
@@ -128,7 +136,7 @@ export const giftTierRules = pgTable(
     giftReleaseId: uuid('gift_release_id')
       .notNull()
       .references(() => giftReleases.id, { onDelete: 'cascade' }),
-    tier: text('tier').notNull(),
+    tier: text('tier').$type<GuardTier>().notNull(),
     giftPackageId: uuid('gift_package_id')
       .notNull()
       .references(() => giftPackages.id, { onDelete: 'cascade' }),
@@ -157,8 +165,8 @@ export const giftOrders = pgTable(
     userId: uuid('user_id').references(() => users.id, { onDelete: 'restrict' }),
     biliUid: text('bili_uid').notNull(),
     biliDisplayName: text('bili_display_name').notNull(),
-    tier: text('tier').notNull(),
-    status: text('status').default('UNCLAIMED').notNull(),
+    tier: text('tier').$type<GuardTier>().notNull(),
+    status: text('status').$type<StoredGiftOrderStatus>().default('UNCLAIMED').notNull(),
     submittedAt: timestamp('submitted_at', { mode: 'date', withTimezone: true }),
     shippedAt: timestamp('shipped_at', { mode: 'date', withTimezone: true }),
     carrierName: text('carrier_name'),
@@ -281,8 +289,8 @@ export const giftOrderStatusHistory = pgTable(
     giftOrderId: uuid('gift_order_id')
       .notNull()
       .references(() => giftOrders.id, { onDelete: 'restrict' }),
-    fromStatus: text('from_status'),
-    toStatus: text('to_status').notNull(),
+    fromStatus: text('from_status').$type<StoredGiftOrderStatus>(),
+    toStatus: text('to_status').$type<StoredGiftOrderStatus>().notNull(),
     actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
     reason: text('reason'),
     createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),

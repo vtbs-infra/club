@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 
-import type { buildApp } from '../../src/server/app.js';
+import type { buildApp } from './test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { users } from '../../src/server/infrastructure/db/schema/index.js';
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';

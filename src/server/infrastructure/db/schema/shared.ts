@@ -1,17 +1,10 @@
 import { integer, text, timestamp } from 'drizzle-orm/pg-core';
 
-export type AccountRole = 'USER' | 'CREATOR' | 'PLATFORM_ADMIN';
-export type GuardTier = 'CAPTAIN' | 'ADMIRAL' | 'GOVERNOR';
-export type GiftReleaseStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED';
+export type { AccountRole, GuardTier } from '../../../../shared/contracts/common.js';
 export type { GiftOrderStatus } from '../../../../shared/contracts/gifts.js';
 
-export interface GiftReleaseField {
-  readonly key: string;
-  readonly label: string;
-  readonly type: 'TEXT' | 'TEXTAREA' | 'SELECT' | 'RADIO' | 'CHECKBOX';
-  readonly required: boolean;
-  readonly options?: readonly string[];
-}
+export type { GiftFormField as GiftReleaseField } from '../../../../shared/contracts/gifts.js';
+export type StoredGiftOrderStatus = 'UNCLAIMED' | 'SUBMITTED' | 'SHIPPED' | 'CANCELLED';
 
 export const timestamps = {
   createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),

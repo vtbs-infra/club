@@ -64,6 +64,8 @@ export const SnapshotAttemptSchema = Type.Object({
   sourceVersion: Type.String(),
 });
 
+export type SnapshotAttempt = Static<typeof SnapshotAttemptSchema>;
+
 export const SnapshotPageSchema = Type.Object({
   captureKind: Type.Union([Type.Literal('PAGE'), Type.Literal('RECHECK')]),
   compressedSize: Type.Integer({ minimum: 0 }),
@@ -80,6 +82,8 @@ export const SnapshotPageSchema = Type.Object({
   snapshotAttemptId: IdSchema,
   uncompressedSize: Type.Integer({ minimum: 0 }),
 });
+
+export type SnapshotPage = Static<typeof SnapshotPageSchema>;
 
 export const SnapshotAttemptMemberSchema = Type.Object({
   biliUid: Type.String(),

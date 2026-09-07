@@ -21,12 +21,18 @@ import {
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
 import { createRequireCreator, createRequireSession } from '../auth/guards.js';
-import type { GiftOrderService } from './order-service.js';
+import type { GiftClaimService } from './claim-service.js';
+import type { GiftFulfillmentService } from './fulfillment-service.js';
+import type { GiftFulfillmentExportService } from './fulfillment-export-service.js';
+import type { GiftOrderQueryService } from './order-query-service.js';
 
 interface GiftOrderRoutesOptions {
   readonly auth: AppAuth;
   readonly database: DatabaseService;
-  readonly service: GiftOrderService;
+  readonly claims: GiftClaimService;
+  readonly fulfillment: GiftFulfillmentService;
+  readonly exporter: GiftFulfillmentExportService;
+  readonly queries: GiftOrderQueryService;
 }
 
 const Parameters = Type.Object({ giftOrderId: IdSchema });
@@ -89,7 +95,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       preHandler: requireSession,
       schema: { response: { 200: UserOrderOverviewSchema }, tags: ['my-gifts'] },
     },
-    (request) => options.service.overviewForUser(session(request).user.id),
+    (request) => options.queries.overviewForUser(session(request).user.id),
   );
 
   app.get<{
@@ -109,7 +115,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       },
     },
     (request) =>
-      options.service.listForUser(session(request).user.id, {
+      options.queries.listForUser(session(request).user.id, {
         cursor: request.query.cursor,
         filter: request.query.filter ?? 'ALL',
         limit: request.query.limit ?? 24,
@@ -126,7 +132,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
         tags: ['my-gifts'],
       },
     },
-    (request) => options.service.getForUser(session(request).user.id, request.params.giftOrderId),
+    (request) => options.queries.getForUser(session(request).user.id, request.params.giftOrderId),
   );
 
   app.post<{
@@ -143,13 +149,15 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
         tags: ['my-gifts'],
       },
     },
-    (request) =>
-      options.service.submit(
+    async (request) => {
+      await options.claims.submit(
         session(request).user.id,
         request.params.giftOrderId,
         request.body,
         context(request),
-      ),
+      );
+      return options.queries.getForUser(session(request).user.id, request.params.giftOrderId);
+    },
   );
 
   app.get<{
@@ -170,7 +178,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       },
     },
     (request) =>
-      options.service.listForCreator(request.creatorProfile!.id, {
+      options.queries.listForCreator(request.creatorProfile!.id, {
         cursor: request.query.cursor,
         limit: request.query.limit ?? 50,
         search: request.query.search,
@@ -187,7 +195,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
         tags: ['creator-orders'],
       },
     },
-    (request) => options.service.overviewForCreator(request.creatorProfile!.id),
+    (request) => options.queries.overviewForCreator(request.creatorProfile!.id),
   );
 
   app.get<{ Querystring: { cursor?: string; limit?: number } }>(
@@ -204,7 +212,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       },
     },
     (request) =>
-      options.service.listFulfillmentReleases(request.creatorProfile!.id, {
+      options.queries.listFulfillmentReleases(request.creatorProfile!.id, {
         cursor: request.query.cursor,
         limit: request.query.limit ?? 50,
       }),
@@ -220,7 +228,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       },
     },
     async (request, reply) => {
-      const exported = await options.service.exportFulfillment(
+      const exported = await options.exporter.exportRelease(
         request.creatorProfile!,
         request.body.releaseId,
         context(request),
@@ -252,7 +260,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       },
     },
     (request) =>
-      options.service.getForCreator(
+      options.queries.getForCreator(
         request.creatorProfile!.id,
         request.params.giftOrderId,
         context(request),
@@ -273,13 +281,19 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
         tags: ['creator-orders'],
       },
     },
-    (request) =>
-      options.service.ship(
+    async (request) => {
+      await options.fulfillment.ship(
         request.creatorProfile!.id,
         request.params.giftOrderId,
         request.body,
         context(request),
-      ),
+      );
+      return options.queries.getForCreator(
+        request.creatorProfile!.id,
+        request.params.giftOrderId,
+        context(request),
+      );
+    },
   );
 
   app.patch<{ Body: typeof CorrectShippingSchema.static; Params: { giftOrderId: string } }>(
@@ -293,13 +307,19 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
         tags: ['creator-orders'],
       },
     },
-    (request) =>
-      options.service.correctShipping(
+    async (request) => {
+      await options.fulfillment.correctShipping(
         request.creatorProfile!.id,
         request.params.giftOrderId,
         request.body,
         context(request),
-      ),
+      );
+      return options.queries.getForCreator(
+        request.creatorProfile!.id,
+        request.params.giftOrderId,
+        context(request),
+      );
+    },
   );
 
   app.post<{ Body: { reason: string }; Params: { giftOrderId: string } }>(
@@ -317,13 +337,13 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       },
     },
     async (request) => {
-      await options.service.cancel(
+      await options.fulfillment.cancel(
         request.creatorProfile!.id,
         request.params.giftOrderId,
         request.body.reason,
         context(request),
       );
-      return options.service.getForCreator(
+      return options.queries.getForCreator(
         request.creatorProfile!.id,
         request.params.giftOrderId,
         context(request),

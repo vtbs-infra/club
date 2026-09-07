@@ -1,3 +1,4 @@
+import { SnapshotRunStatusSchema } from './snapshots.js';
 import { Type, type Static } from '@sinclair/typebox';
 
 import { DateTimeSchema, IdSchema, Nullable } from './common.js';
@@ -9,6 +10,8 @@ export const RuntimeStateSchema = Type.Union([
   Type.Literal('DEGRADED'),
   Type.Literal('STOPPED'),
 ]);
+
+export type RuntimeState = Static<typeof RuntimeStateSchema>;
 
 export const RuntimeStatusSchema = Type.Object({
   lastErrorAt: Nullable(DateTimeSchema),
@@ -54,7 +57,9 @@ export const SystemStatusSchema = Type.Object({
     media: RuntimeStatusSchema,
     roster: RuntimeStatusSchema,
   }),
-  snapshotRunCounts: Type.Record(Type.String(), Type.Integer({ minimum: 0 })),
+  snapshotRunCounts: Type.Array(
+    Type.Object({ status: SnapshotRunStatusSchema, value: Type.Integer({ minimum: 0 }) }),
+  ),
   status: Type.Union([Type.Literal('ok'), Type.Literal('needs_setup'), Type.Literal('degraded')]),
   version: Type.String(),
 });

@@ -14,7 +14,7 @@ describe('loadConfig', () => {
 
     expect(config.port).toBe(8080);
     expect(config.trustProxy).toBe(true);
-    expect(config.storageDriver).toBe('local');
+    expect(config.storageLocalPath).toBe('./data/club');
   });
 
   it('rejects missing database configuration without leaking a URL', () => {

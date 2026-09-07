@@ -1,3 +1,4 @@
+import type { AccountRole } from '../../../../shared/contracts/common.js';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -20,7 +21,7 @@ export const users = pgTable(
     email: text('email').notNull(),
     emailVerified: boolean('email_verified').default(false).notNull(),
     image: text('image'),
-    role: text('role').default('USER').notNull(),
+    role: text('role').$type<AccountRole>().default('USER').notNull(),
     ...timestamps,
   },
   (table) => [

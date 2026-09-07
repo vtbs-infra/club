@@ -18,7 +18,7 @@ import {
   buildFakeRosterScenario,
   FakeGuardRosterSource,
   type FakeRosterScenario,
-} from '../../src/server/modules/bilibili/fake-guard-roster-source.js';
+} from '../helpers/fake-guard-roster-source.js';
 import type {
   BilibiliCreatorProfile,
   CreatorProfileSource,

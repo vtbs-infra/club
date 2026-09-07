@@ -1,8 +1,8 @@
 import { and, count, desc, eq, isNull, or } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
-import { buildApp } from '../../src/server/app.js';
+import { buildApp } from '../helpers/test-app.js';
 import type {
   AdminBilibiliBindingPage,
   BindingConflictPage,
@@ -21,11 +21,9 @@ import {
   type TemporaryStorage,
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth } from '../../src/server/modules/auth/auth.js';
-import { FakeLiveMessageSource } from '../../src/server/modules/bilibili/fake-live-message-source.js';
-import {
-  createBindingRuntime,
-  type BindingRuntime,
-} from '../../src/server/modules/binding/binding-runtime.js';
+import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
+import * as bindingRuntimeModule from '../../src/server/modules/binding/binding-runtime.js';
+import * as connectionsModule from '../../src/server/modules/bilibili/room-connection-manager.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
 import {
   registerTestUser,
@@ -65,7 +63,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   let database: DatabaseService;
   let integrationDatabase: IntegrationDatabase;
-  let runtime: BindingRuntime;
+  let runtime: bindingRuntimeModule.BindingRuntime;
   let source: FakeLiveMessageSource;
   let storage: TemporaryStorage;
   let adminCookie: string;
@@ -126,22 +124,26 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       password: TEST_PASSWORD,
     });
     source = new FakeLiveMessageSource();
-    runtime = createBindingRuntime({
-      clock: { now: () => new Date() },
-      config,
-      database,
-      idleGraceMs: 0,
-      reconnectDelaysMs: [1],
-      source,
-    });
+    const runtimeFactory = vi.spyOn(bindingRuntimeModule, 'createBindingRuntime');
+    const Connections = connectionsModule.RoomConnectionManager;
+    vi.spyOn(connectionsModule, 'RoomConnectionManager').mockImplementation(
+      class extends Connections {
+        constructor(options: connectionsModule.RoomConnectionManagerOptions) {
+          super({ ...options, idleGraceMs: 0, reconnectDelaysMs: [1] });
+          return new Connections({ ...options, idleGraceMs: 0, reconnectDelaysMs: [1] });
+        }
+      },
+    );
     app = await buildApp({
       auth,
-      bindingRuntime: runtime,
+      liveMessageSource: source,
       config,
       database,
       startBackground: false,
       storage: storage.driver,
     });
+    runtime = runtimeFactory.mock.results[0]!.value as bindingRuntimeModule.BindingRuntime;
+    vi.restoreAllMocks();
 
     for (const [name, email] of [
       ['Alice', 'alice@example.com'],
@@ -476,7 +478,7 @@ integration('platform verification rooms and Bilibili UID binding', () => {
       message: challenge.code,
       roomId,
     });
-    await runtime.bindings.reconcileConnections();
+    await runtime.tick();
     const state = await app.inject({
       headers: { cookie: daveCookie },
       method: 'GET',

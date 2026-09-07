@@ -84,9 +84,7 @@ export class GiftEligibilityService {
       .from(giftTierRules)
       .where(eq(giftTierRules.giftReleaseId, release.id));
     const packageById = new Map(packages.map((package_) => [package_.id, package_]));
-    const ruleByTier = new Map(
-      rules.map((rule) => [rule.tier as GuardTier, rule.giftPackageId] as const),
-    );
+    const ruleByTier = new Map(rules.map((rule) => [rule.tier, rule.giftPackageId] as const));
     let insertedCount = 0;
     for (const memberBatch of databaseWriteBatches(members)) {
       const memberById = new Map(memberBatch.map((member) => [member.id, member] as const));
@@ -120,7 +118,7 @@ export class GiftEligibilityService {
       const orderItems = inserted.flatMap((order) => {
         const member = memberById.get(order.snapshotMemberId);
         if (!member) throw new Error('Inserted gift order lost its snapshot member.');
-        const tier = member.tier as GuardTier;
+        const tier = member.tier;
         const eligibleTiers =
           release.fulfillmentMode === 'CUMULATIVE' ? TIERS.slice(0, TIER_INDEX[tier] + 1) : [tier];
         const eligiblePackageIds = [

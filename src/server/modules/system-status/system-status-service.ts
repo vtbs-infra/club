@@ -23,10 +23,6 @@ interface SystemStatusServiceOptions {
   readonly version: string;
 }
 
-function countRecord(rows: readonly { readonly status: string; readonly value: number }[]) {
-  return Object.fromEntries(rows.map((row) => [row.status, row.value]));
-}
-
 export class SystemStatusService {
   public constructor(private readonly options: SystemStatusServiceOptions) {}
 
@@ -55,7 +51,7 @@ export class SystemStatusService {
           media: giftMediaRuntime,
           roster: snapshotRuntime,
         },
-        snapshotRunCounts: {},
+        snapshotRunCounts: [],
         status: 'degraded' as const,
         version: this.options.version,
       };
@@ -126,7 +122,7 @@ export class SystemStatusService {
         media: giftMediaRuntime,
         roster: snapshotRuntime,
       },
-      snapshotRunCounts: countRecord(runCounts),
+      snapshotRunCounts: runCounts,
       status:
         checks.schema === 'down' ||
         checks.storage === 'down' ||
