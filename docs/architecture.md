@@ -11,13 +11,12 @@ Browser
      -> TypeBox routes
      -> domain workflow services
      -> Drizzle ORM -> PostgreSQL 17
-     -> StorageDriver -> private local/object storage
-     -> Bilibili and tracking providers
+     -> StorageDriver -> private local storage
+     -> Bilibili adapters
 
 Application process
   -> binding runtime
   -> monthly snapshot runtime
-  -> fulfillment runtime
   -> gift cover cleanup runtime
 ```
 
@@ -43,7 +42,6 @@ src/server/
     binding/                    验证码和 B站 UID 绑定
     snapshots/                  月末名单任务、证据、定稿和查询
     gifts/                      发布、资格、领取、查询、履约和封面生命周期
-    fulfillment/                物流 Provider 与刷新 Runtime
     announcements/              平台和主播公告
     appearance/                 部署级主题读取、更新与审计
     portal/                     匿名公开礼物与公告查询
@@ -59,7 +57,7 @@ src/web/
 ```
 
 HTTP 路由只负责会话守卫、Schema、参数转换和状态码。跨表写入事务由对应工作流服务
-完整持有。
+完整持有。业务服务由 `app.ts` 统一装配，再传给路由和后台任务；Runtime 不创建或暴露业务服务。
 
 ## 公开门户
 
@@ -164,19 +162,21 @@ PostgreSQL 仅保存：
 第一页会在请求后续分页前校验页数、声明总数和响应大小上限。单页原始响应最大
 2 MiB，包含首页复核在内的整个 Attempt 最大 64 MiB。每页证据持久化后立即丢弃原始
 字节，抓取期间只保留一致性校验所需的归一化成员和分页元数据。系统校验分页元数据、重复
-UID、等级和首页复核；一致结果在同一事务中分块写入 Attempt 成员及定稿成员。
+UID、等级和首页复核；一致结果在同一事务中分块写入 Attempt 成员并封闭该次采集。
 
 ### 定稿
 
-- 准点且一致：自动写入不可变 `snapshot_members` 并定稿；
-- 迟到且一致：进入 `PENDING_APPROVAL`；
-- 不一致或 Provider 失败：记录稳定失败码并进入 `FAILED`；
-- 管理员确认迟到结果后才写入定稿成员；
-- 定稿事务触发礼物资格匹配。
+正式名单由任务的 `accepted_attempt_id` 指向同一任务内的一致、已完成抓取，成员只有
+`snapshot_attempt_members` 这一份权威集合。
 
-定稿成员、接受的 Attempt、证据页和已定稿任务由数据库触发器阻止修改或删除。
-`PENDING_APPROVAL` 会通过 Attempt 自身的稳定游标暴露候选成员，管理员可在不可逆定稿前
-按 UID 或抓取时昵称前缀核对实际资格。
+- 准点且一致：采集先提交为 `READY`，再单独执行定稿及资格事务；
+- 迟到且一致：进入 `PENDING_APPROVAL`，管理员检查候选成员后批准或拒绝；
+- 不一致或外部采集失败：记录失败码并进入 `FAILED`；
+- 定稿与资格生成在同一事务中完成，不能跳过资格效果；
+- 内部定稿失败保留 `READY`，后台重试同一份完整证据，不重新请求 B站或消耗抓取次数。
+
+采集完成后成员和证据集合封闭，数据库同时拒绝后续插入、更新和删除。定稿后不得替换接受的
+Attempt 或修改任务。触发器检查 Attempt 归属、一致性、实际成员数量、准点事实及迟到审批。
 
 ## 礼物发布与资格
 
@@ -190,19 +190,21 @@ UID、等级和首页复核；一致结果在同一事务中分块写入 Attempt
 
 发布请求携带当前完整表单和 `expectedVersion`。服务在一个事务中：
 
-1. 锁定草稿并验证乐观版本；
+1. 获取主播及资格月份的事务锁，再锁定草稿并验证乐观版本；
 2. 替换礼包、物品、等级规则和表单；
 3. 校验领取窗口与索引；
 4. 把发布状态改为 `PUBLISHED`；
 5. 对同月已定稿名单执行资格匹配；
 6. 写入审计日志。
 
-名单后定稿时调用同一个匹配服务。`gift_release_id + snapshot_member_id` 和
-`gift_release_id + bili_uid` 唯一约束保证每位成员只有一张礼物单。匹配在调用方事务中
-按有界成员批次生成礼物单和礼包快照，不依赖单条批量 SQL 承载整个月度名单。
+名单后定稿时调用同一个匹配服务。发布和定稿都先获取同一个主播及月份的事务锁，再锁定
+具体业务记录，保证两个前提并发完成时也不会漏单。每个礼物发布和 UID、成员的唯一约束
+防止重复生成；资格按有界批次生成，支持单份名单 30,000 名成员。
 
-关闭发布在一个事务中阻止后续资格匹配，并把仍处于 `CLAIMABLE` 的礼物单推进到
-`EXPIRED`。已经提交或进入履约流程的礼物单不被回退。
+`gift_order_items` 只保存已确定的套餐分配关系。已发布的套餐和物品不可变，详情与导出
+批量读取这些内容；不保存每单的完整套餐副本，也不在历史查询时重跑等级规则。
+
+关闭只更新发布状态、关闭时间与审计，并阻止后续资格生成，不逐单写入过期状态。
 
 ### 封面对象生命周期
 
@@ -225,7 +227,7 @@ STAGED -> ACTIVE -> DELETE_PENDING -> 删除
 
 领取事务：
 
-1. 锁定礼物单并检查版本、状态和领取窗口；
+1. 锁定礼物单，再对关联发布加共享锁，取得当前时间并检查版本、状态和领取窗口；
 2. 验证当前有效 UID 绑定与礼物单 UID 一致；
 3. 校验所有自定义领取字段；
 4. 解密用户选择的地址；
@@ -236,31 +238,31 @@ STAGED -> ACTIVE -> DELETE_PENDING -> 删除
 冻结地址只保留可选来源 ID，不依赖地址簿外键。地址簿记录可以修改或删除，历史订单仍
 可由授权主播读取相同快照。
 
-## 发货与物流
+## 领取状态与发货
 
-每张礼物单最多有一张 `shipments` 记录。
+数据库只保存真实流程状态 `UNCLAIMED / SUBMITTED / SHIPPED / CANCELLED`。
+未领取订单依据当前时间、发布的领取窗口及 `closed_at` 投影为 `UPCOMING`、
+`CLAIMABLE` 或 `EXPIRED`，同时返回到期时间与原因。详情、筛选、汇总使用同一 SQL
+表达式；截止和关闭立即生效，不依赖过期维护任务。用户首页另查全局汇总及最早临期订单，
+不从近期卡片页推断待办数量。
+
+领取持有关联发布的共享锁，关闭持有更新锁：先成功提交的领取保留为待发货；关闭先完成时，
+后续领取必须失败。已提交订单不会因截止或关闭而改变状态。
 
 ```text
-CLAIMABLE -> SUBMITTED -> SHIPPED -> COMPLETED
-     |            |
-     -> EXPIRED    -> CANCELLED
+待领取 -> 待发货 -> 已发货（平台流程终点）
+   |        |
+   v        v
+ 已过期   已取消
 ```
 
-`SUBMITTED` 同时是用户侧的“等待发货”和主播侧的“待发货”。主播创建运单时，礼物单
-在同一事务内直接进入 `SHIPPED`，状态历史只记录真实发生的转换。运单进度只包含
-`LABEL_CREATED -> IN_TRANSIT -> OUT_FOR_DELIVERY -> DELIVERED`，只能前进；Provider
-报告的物流异常是与进度正交的当前异常，恢复后清除异常但不会让进度回退。每次 Provider
-事件仍作为不可变事实保存。
+快递公司、运单号、首次发货人和时间直接保存在 `gift_orders`。确认发货从 `SUBMITTED`
+进入 `SHIPPED`。用户查看并复制单号。主播更正公司或单号时携带当前版本，审计记录修改
+前后内容，保留首次发货人、时间和状态。平台不查询物流轨迹或签收，不再提供人工完成步骤。
 
-物流 Runtime 和系统诊断共用同一个到期筛选，只刷新仍处于 `SHIPPED` 且已到计划时间的
-未送达运单。网络响应写回前会重新锁定并复核订单与运单，避免与人工操作竞争；确认送达后
-在同一事务内推进订单到 `COMPLETED`。主播人工完成礼物单时会终止该运单的后续刷新并
-清除当前异常。连续请求失败次数、最近错误和下次刷新时间保存在运单上。
-
-履约导出以礼物发布为边界，在只读、可重复读事务中读取该主播当前所有 `SUBMITTED`
-礼物单及其冻结地址、礼包快照和领取字段，事务结束后生成 XLSX。导出不创建批次、不占用
-对象存储，也不推进订单；审计日志只记录礼物发布、行数、生成时间和文件哈希，不记录
-明文个人信息。
+履约导出以礼物发布为边界，在只读、可重复读事务中读取当前所有 `SUBMITTED` 礼物单、
+冻结地址、套餐分配和领取字段，事务结束后生成 XLSX。导出不创建批次或改变订单状态；
+审计记录发布、行数、生成时间和文件哈希。30,000 条待发货订单的导出纳入集成验收。
 
 ## 公告与已读状态
 
@@ -282,7 +284,7 @@ DRAFT -> PUBLISHED -> WITHDRAWN
 
 ## Runtime 与健康状态
 
-四个后台 Runtime 统一报告：
+绑定、名单和封面回收三个后台 Runtime 统一报告：
 
 ```text
 state: STARTING | RUNNING | DEGRADED | STOPPED
@@ -294,7 +296,7 @@ lastErrorCode
 nextRetryAt
 ```
 
-每个 Runtime 独立启动和重试。初始化失败不会阻止其他 Runtime，Tick 错误进入结构化
+三个 Runtime 使用小型共同循环：任务不重叠，成功初始化只执行一次，每次完成后安排下一轮，失败按重试间隔再执行。绑定需求变化在运行中合并为后续一轮。每个 Runtime 独立启动和重试。初始化失败不会阻止其他 Runtime，Tick 错误进入结构化
 日志与状态。关闭时先停止创建新 Tick，再取消可取消的外部请求并等待所有已登记任务真正
 结束，最后才释放数据库和存储；进程级 watchdog 只负责处理违反取消约定的异常情况。
 
@@ -314,7 +316,7 @@ nextRetryAt
 
 - Fastify 请求和响应验证；
 - `/openapi.json`；
-- `Static<typeof Schema>` 浏览器类型。
+- `Static<typeof Schema>` 数据库字段和浏览器的有限状态类型。内部状态不通过字符串断言或未知状态标签静默降级。
 
 错误使用统一信封：
 
@@ -344,10 +346,10 @@ Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请�
 | ---------- | -------------------------------------------------------------------------------------------------------------- |
 | 认证       | `users`, `sessions`, `accounts`, `verifications`                                                               |
 | 主播与绑定 | `creators`, `verification_rooms`, `binding_challenges`, `bilibili_bindings`, `binding_conflicts`               |
-| 名单       | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`, `snapshot_members`         |
+| 名单       | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`                             |
 | 礼物       | `gift_releases`, `gift_cover_objects`, `gift_packages`, `gift_package_items`, `gift_tier_rules`, `gift_orders` |
 | 领取       | `gift_order_items`, `addresses`, `gift_order_addresses`, `gift_order_option_values`                            |
-| 状态与物流 | `gift_order_status_history`, `shipments`, `tracking_events`                                                    |
+| 状态历史   | `gift_order_status_history`                                                                                    |
 | 公告与审计 | `announcements`, `announcement_reads`, `audit_logs`                                                            |
 | 平台外观   | `platform_appearance`                                                                                          |
 

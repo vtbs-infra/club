@@ -1,5 +1,5 @@
 import { and, count, eq, inArray } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { describe as integration, afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
@@ -35,7 +35,6 @@ import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-ser
 import { insertTestCreator } from '../helpers/creator-fixture.js';
 import {
   createIntegrationDatabase,
-  integration,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
 

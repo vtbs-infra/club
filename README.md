@@ -9,8 +9,8 @@ VTubers, streamers, and their viewers.
 
 It connects a viewer's Bilibili UID to a platform account, captures each
 creator's monthly guard roster, creates gift orders for eligible UIDs, and
-supports the full flow from recipient submission to creator shipment and
-tracking.
+takes recipients from claiming to a creator-recorded shipping confirmation.
+The platform workflow ends at shipped; recipients can view and copy the tracking number.
 
 ## Highlights
 
@@ -20,7 +20,7 @@ tracking.
 - Optional monthly gift releases with tier-based packages
 - Automatic and idempotent gift-order generation
 - Address book, encrypted claim snapshots, and configurable claim fields
-- Release-scoped fulfillment export, one shipment per order, and tracking history
+- Release-scoped fulfillment export, shipping records, and audited corrections
 - Public gift and announcement portal with explicit visibility controls
 - Platform and creator announcements, plus four application-wide theme presets
 - Dedicated recipient, creator, and administrator interfaces
@@ -35,7 +35,7 @@ Bilibili message
   -> creator gift release
   -> recipient gift order
   -> claim and frozen address
-  -> shipment and tracking
+  -> shipping confirmation and a copyable tracking number
 ```
 
 Creators publish a release only for months in which they want to send a gift.
@@ -68,6 +68,8 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
   node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
 ```
 
+The administrator command creates a new account and rejects an existing email without changing it.
+
 Open <http://localhost:3000> and complete creator and verification-room setup
 from the administrator interface.
 
@@ -98,7 +100,7 @@ A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.
 
 The supported deployment runs one Club application instance. The application
 process serves the web interface and API and owns the roster, Bilibili-room,
-tracking, and gift-cover cleanup background runtimes.
+and gift-cover cleanup background runtimes.
 
 ## License
 

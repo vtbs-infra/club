@@ -8,12 +8,7 @@ Club 通过三个适配器边界连接 B站：
 | `CreatorProfileSource` | 读取主播显示名称和规范直播间     |
 | `GuardRosterSource`    | 获取主播月度大航海名单           |
 
-生产配置使用 `public-web` 实现，测试使用 `fake` 实现：
-
-```text
-BILIBILI_LIVE_SOURCE=public-web
-BILIBILI_ROSTER_SOURCE=public-web
-```
+应用固定装配公开 Web 实现；测试从 `tests/helpers` 显式注入替身，不通过环境变量切换。
 
 公开 Web 接口可能随 B站调整而变化。Provider 原始结构只存在于适配器内部，业务模块
 使用 Club 规范化后的类型。
@@ -124,8 +119,7 @@ UID。规范化结果只有三个字段：
 替代 Provider 结果。注册后，主播或平台管理员可以显式刷新昵称与直播间；刷新只更新未来
 且尚未开始的名单任务，已经执行或定稿的任务继续保留创建时冻结的主播信息。
 
-当 `BILIBILI_ROSTER_SOURCE=public-web` 时使用公开 Web 资料适配器；`fake` 模式使用确定性
-测试资料源。
+生产应用使用公开 Web 资料适配器；测试显式注入确定性资料源。
 
 ## 月度大航海名单
 
@@ -218,8 +212,8 @@ PostgreSQL 保存：
 - 成员数量；
 - 抓取时间；
 - Provider 分页元数据；
-- 规范化候选成员；
-- 定稿成员。
+- 每次抓取的规范化成员；
+- 月度任务接受的抓取 ID，正式名单直接读取这份成员集合。
 
 数据库和对象存储需要作为同一个备份集保存。
 
@@ -242,7 +236,7 @@ PostgreSQL 保存：
 tests/fixtures/bilibili/guard-roster-page.json
 ```
 
-CI 使用 `fake` Provider，不访问真实 B站服务。
+CI 在 B站边界显式注入 Fake 资料、名单和直播消息来源，不访问真实 B站服务。完整浏览器测试保留真实认证、HTTP、数据库和后台任务，不能证明当前 B站接口的可用性。
 
 ## Provider 变更处理
 

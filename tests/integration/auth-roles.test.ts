@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { describe as integration, afterAll, beforeAll, expect, it } from 'vitest';
 
 import { buildApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
@@ -21,7 +21,6 @@ import {
 import { createReleaseDraft } from '../helpers/gift-release.js';
 import {
   createIntegrationDatabase,
-  integration,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
 import { createTestConfig } from '../helpers/test-config.js';

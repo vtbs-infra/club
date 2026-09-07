@@ -87,7 +87,8 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
   node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
 ```
 
-密码至少 8 个字符。命令可以安全重复执行；已有同邮箱账号会被校准为平台管理员。
+密码至少 8 个字符。该命令只创建新管理员；邮箱已存在时明确拒绝，不修改已有账号。
+成功后移除临时管理员密码环境变量。
 
 ## 5. 启动 Club
 
@@ -165,7 +166,7 @@ docker compose logs --tail 200 app
 docker compose logs --tail 100 postgres
 ```
 
-管理后台 `/admin/system` 展示数据库、存储、验证直播间、名单调度、物流刷新和礼物封面
+管理后台 `/admin/system` 展示数据库、存储、验证直播间、名单调度和礼物封面
 回收状态。
 
 ## 下一步

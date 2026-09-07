@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import ExcelJS from 'exceljs';
 import { and, count, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { describe as integration, afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import {
   giftOrderItems,
@@ -31,7 +31,6 @@ import { insertTestBilibiliBinding, insertTestCreator } from '../helpers/creator
 import { createReleaseDraft } from '../helpers/gift-release.js';
 import {
   createIntegrationDatabase,
-  integration,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
 import { insertReadySnapshot } from '../helpers/snapshot-fixture.js';

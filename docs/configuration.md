@@ -96,17 +96,10 @@ openssl rand -base64 32
 丢失密钥会导致地址和领取选项永久无法解密。密钥环必须纳入独立加密备份，但不得与
 数据库备份存放在同一位置。
 
-## B站 Provider
+## B站来源
 
-| 变量                     | 可选值               | 说明           |
-| ------------------------ | -------------------- | -------------- |
-| `BILIBILI_LIVE_SOURCE`   | `public-web`、`fake` | 直播消息来源   |
-| `BILIBILI_ROSTER_SOURCE` | `public-web`、`fake` | 大航海名单来源 |
-
-正常部署使用 `public-web`。`fake` 只用于自动测试和本地确定性场景。
-
-主播资料读取与名单来源使用同一模式：`public-web` 会根据已验证 UID 查询 B站显示名称和
-规范直播间，`fake` 提供测试资料。主播资料没有独立环境变量。
+应用固定使用 B站公开 Web 适配器读取主播资料、大航海名单和直播消息。
+模拟来源仅在测试代码中显式注入，不提供生产来源选择开关。
 
 验证直播间不通过环境变量配置。平台管理员在“验证直播间”页面添加一个或多个固定房间，
 并用优先级控制默认分配。
@@ -115,7 +108,6 @@ openssl rand -base64 32
 
 | 变量                 | 当前值        | 说明                            |
 | -------------------- | ------------- | ------------------------------- |
-| `STORAGE_DRIVER`     | `local`       | 当前支持本地私有存储            |
 | `STORAGE_LOCAL_PATH` | `./data/club` | 本地路径；容器内为 `/data/club` |
 
 存储内容包括：
@@ -125,15 +117,6 @@ openssl rand -base64 32
 
 对象键保存于 PostgreSQL，但文件内容不应通过静态目录直接公开。Compose 使用
 `club-storage` 卷保存 `/data/club`。
-
-## 物流 Provider
-
-| 变量                | 可选值         | 说明              |
-| ------------------- | -------------- | ----------------- |
-| `TRACKING_PROVIDER` | `none`、`fake` | 物流刷新 Provider |
-
-`none` 保留主播录入的快递名称、运单号和公开查询链接，不主动刷新状态。`fake` 用于测试。
-Provider 生成或用户输入的公开查询链接只接受 HTTP/HTTPS。
 
 ## Compose 专用变量
 
@@ -149,7 +132,7 @@ COMPOSE_DATABASE_URL=postgres://club:...@postgres:5432/club
 `docker compose build app` 构建当前检出的源码。
 
 应用容器固定使用 `NODE_ENV=production`、`HOST=0.0.0.0`、
-`STORAGE_DRIVER=local` 和 `/data/club`。
+私有本地存储路径 `/data/club`。
 
 ## 管理员引导
 
@@ -166,15 +149,16 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
   --name Admin
 ```
 
-命令可安全地重复执行：已存在的同邮箱账号会被校准为平台管理员。
+该命令只创建新管理员。邮箱已存在时返回 `ADMIN_ACCOUNT_ALREADY_EXISTS`，不修改已有账号、身份或密码。创建成功后移除临时密码变量。
 
 ## 测试连接
 
-PostgreSQL 集成测试必须设置 `TEST_DATABASE_URL`：
+PostgreSQL 集成测试与完整浏览器业务测试必须设置 `TEST_DATABASE_URL`：
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgres://club:password@localhost:55432/postgres'
 pnpm test:integration
+pnpm test:e2e
 ```
 
 该账号需要创建和删除临时数据库的权限。测试套件不会把业务数据库作为 Fixture 库。

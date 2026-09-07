@@ -2,14 +2,14 @@ import { resolve } from 'node:path';
 
 import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, describe as integration } from 'vitest';
 
 import {
   createDatabase,
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
 import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
-import { integration, integrationDatabaseUrl } from '../helpers/integration-database.js';
+import { integrationDatabaseUrl } from '../helpers/integration-database.js';
 
 integration('database migration baseline', () => {
   let admin: ReturnType<typeof postgres>;

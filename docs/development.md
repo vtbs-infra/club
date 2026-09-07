@@ -72,7 +72,8 @@ src/web/app/App.tsx                   浏览器路由
 migrations/                           PostgreSQL 迁移
 tests/unit/                            纯逻辑与基础设施测试
 tests/integration/                     真实 PostgreSQL 测试
-tests/browser/                         Playwright 浏览器工作流测试
+tests/browser/                         Playwright 界面与请求意图测试
+tests/e2e/                             浏览器、真实服务端与 PostgreSQL 业务闭环
 tests/helpers/                         显式、跨场景复用的测试基础设施
 ```
 
@@ -95,7 +96,7 @@ tests/helpers/                         显式、跨场景复用的测试基础�
 - 审计记录；
 - 幂等与并发处理。
 
-Provider 原始类型停留在适配器内部。B站、物流和存储实现通过小接口接入业务服务。
+Provider 原始类型停留在适配器内部。B站和私有本地存储实现通过小接口接入业务服务。
 
 ### 错误
 
@@ -138,7 +139,11 @@ Schema 位于：
 src/server/infrastructure/db/schema/
 ```
 
-修改数据结构后：
+v0.2 发布前统一维护空库安装基线，重构中的数据库不可直接升级。
+基线包含定稿、不可变集合和业务状态等手写触发器，重新生成 DDL 时必须一并保留，并同步
+`schema-version.ts` 的迁移时间和 SHA-256。执行 `pnpm release:check` 检查基线与元数据一致。
+
+进入正式发布后的结构调整：
 
 ```powershell
 pnpm db:generate
@@ -177,7 +182,7 @@ pnpm test
 - Fastify 路由、OpenAPI 与生命周期。
 
 单元测试验证纯逻辑、适配器边界以及通过显式 Stub 组装的应用行为，不连接真实
-PostgreSQL、B站或物流服务。应用健康检查、HTTP Shell 和后台运行时生命周期分别测试，
+PostgreSQL 或 B站服务。应用健康检查、HTTP Shell 和后台运行时生命周期分别测试，
 使失败能够直接指向对应边界。
 
 ### PostgreSQL 集成测试
@@ -227,6 +232,21 @@ Shell 和按共享契约构造的 Mock API，覆盖注册反馈、手机仪表�
 
 对领取、主播发货、管理员流程或全局主题运行时进行界面修改时，应增加相应的浏览器场景。
 
+### 完整业务闭环
+
+```powershell
+$env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
+pnpm test:e2e
+```
+
+该命令构建生产 Web，使用真实 Fastify、Better Auth、独立 PostgreSQL 新库及本地私有存储，
+从浏览器注册和登录开始验证 UID 绑定、主播注册、自动名单定稿、礼物发布、手机端领取、
+XLSX 下载、确认发货、更正与复制单号。测试只替换 B站的三个外部来源；后台使用实际调度循环。
+缺少测试数据库连接时必须失败。CI 同时执行界面测试和完整业务闭环。
+
+容量集成测试覆盖 30,000 人名单、90,000 条累计套餐分配、关闭、查询，以及 30,000 条
+待发货订单导出。它证明这些场景的正确性，不代表所有部署硬件的延迟或吞吐保证。
+
 ### 公共测试助手
 
 - 公共助手只提取重复的技术搭建或稳定的测试数据词汇。
@@ -244,6 +264,7 @@ $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 pnpm build
 pnpm test:browser
+pnpm test:e2e
 docker compose build app
 ```
 

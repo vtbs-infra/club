@@ -1,5 +1,5 @@
 import { and, count, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { describe as integration, afterAll, beforeAll, expect, it } from 'vitest';
 
 import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
@@ -11,7 +11,6 @@ import {
 import { AnnouncementService } from '../../src/server/modules/announcements/announcement-service.js';
 import {
   createIntegrationDatabase,
-  integration,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
 

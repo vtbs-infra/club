@@ -162,7 +162,9 @@ export class BindingService {
         .insert(bindingChallenges)
         .values({
           codeDigest: digestBindingCode(code, this.codeSecret),
+          createdAt: now,
           expiresAt,
+          updatedAt: now,
           userId: input.userId,
           verificationRoomId: room.id,
         })
@@ -416,6 +418,7 @@ export class BindingService {
           .values({
             biliDisplayName: event.biliDisplayName,
             biliUid: event.biliUid,
+            boundAt: this.clock.now(),
             challengeId: challenge.id,
             userId: challenge.userId,
           })

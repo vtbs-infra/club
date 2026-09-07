@@ -53,6 +53,7 @@ pnpm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 pnpm test:browser
+pnpm test:e2e
 docker compose build --no-cache app
 ```
 
@@ -60,7 +61,7 @@ docker compose build --no-cache app
 
 - 格式、ESLint 和三套 TypeScript 检查通过；
 - 生产依赖没有高危或严重级别的已知漏洞，其余报告项已经逐项评估；
-- 单元、PostgreSQL 集成和 Playwright 工作流全部通过；
+- 单元、PostgreSQL 集成、Playwright 界面与完整业务闭环全部通过；
 - 空数据库能够应用完整基线；每个 Changelog 明确支持的来源版本都已实测升级；
 - 应用会拒绝迁移缺失或多出的不匹配数据库；
 - OpenAPI 包含当前正式路由且版本正确；
@@ -80,7 +81,7 @@ docker compose build --no-cache app
 5. 创建并发布礼物，确认名单与发布可以双向幂等生成礼物单；
 6. 使用默认或指定地址提交领取，确认历史地址快照不随地址簿变化；
 7. 导出待发货信息，确认导出前后礼物单状态不变；
-8. 录入运单并检查普通用户看到的物流信息；
+8. 确认发货并更正单号，检查普通用户看到的当前发货信息和复制功能；
 9. 替换并移除一张礼物封面，确认封面回收 Runtime 成功完成清理；
 10. 检查公开礼物、公开公告和四套全局主题；
 11. 在与 `APP_URL` 一致的 HTTPS 反向代理后验证登录和写请求；

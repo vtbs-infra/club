@@ -8,63 +8,53 @@ All notable Club changes are documented here. The format follows
 
 ## [0.2.0] - 2026-09-01
 
-### Added
-
-- An administrator binding-conflict inbox records the exact challenge and original binding observed
-  when a UID conflict occurs, then supports an audited resolve or dismiss decision without touching
-  a later binding for the same UID.
-- Gift cover objects now have a recoverable staged, active, and pending-deletion lifecycle. Failed
-  uploads or storage deletions remain visible to a bounded background cleanup runtime instead of
-  becoming untracked files.
-- Announcement drafts, published announcements, and withdrawn announcements have explicit states
-  and actions. Version-aware read records make edited or republished content unread again.
-- System diagnostics include cover cleanup, runtime health, roster evidence integrity, conflict
-  attention, and tracking work that is actually eligible for refresh.
-
 ### Changed
 
-- Creator registration promotes an ordinary user with an active verified Bilibili binding. UID,
-  display name, and canonical live room come from Bilibili and can be refreshed but not overridden;
-  administrators only configure settlement timezone and future monthly synchronization.
-- The scheduler performs only the first roster attempt. Failed or rejected work requires an
-  explicit administrator retry, shares the three-attempt budget, and becomes late when retried
-  outside the on-time window.
-- Roster intake rejects excessive page, member, or response bounds before fetching later pages and
-  applies one cancellation boundary to cookie initialization, pagination, and recheck.
-- Shipment progress is monotonic from label creation through delivery. A current provider exception
-  is stored independently, so stale provider data cannot erase progress or make refresh fail by
-  attempting a backward transition.
-- Gift orders, gift releases, announcements, roster history, roster members, evidence, creators,
-  binding conflicts, and audit logs use bounded domain reads. Addresses and verification rooms
-  remain direct configuration collections with enforced limits.
-- List responses carry summaries while packages, frozen claim data, shipment events, roster attempts,
-  and evidence details are loaded only from their owning detail workflows. Overview counts are
-  calculated in PostgreSQL instead of loading complete collections.
-- Closing a gift release expires still-claimable orders atomically. Manually completing an order
-  stops future tracking refresh without inventing a delivered carrier event.
+- A finalized monthly roster references one accepted, consistent capture. Completed evidence and
+  member collections are sealed; there is no second copy of the formal roster.
+- Capture success is saved before finalization. READY runs retry internal finalization without
+  refetching Bilibili data or consuming another capture attempt. Late results require approval.
+- Publication and roster finalization share a creator/month transaction lock and generate complete,
+  unique eligibility regardless of execution order or concurrency.
+- Unclaimed orders derive upcoming, claimable, or expired state from release windows and closure.
+  Claiming no longer depends on global expiry maintenance; closure does not write every order.
+- User dashboard counts and the most urgent gift come from a global database summary.
+- Orders store fixed package allocations and read immutable published content instead of duplicating
+  every package. Claim-time addresses and options remain independently frozen and encrypted.
+- Shipping confirmation ends the platform workflow. Carrier name and tracking number live on the
+  order; recipients can copy the number. Audited corrections preserve the original shipping actor,
+  timestamp, and SHIPPED status, with optimistic version checks.
+- Application composition constructs services explicitly. Three background runtimes share bounded
+  periodic execution, startup recovery, failure reporting, demand coalescing, and shutdown draining.
+- Database and UI state types use finite shared contracts. Bilibili fakes are explicitly injected
+  by tests; production exposes only the supported public-web sources and local private storage.
 
-### Reliability
+### Retained capabilities
 
-- Graceful shutdown stops new work, aborts active roster requests, records normal cancellation while
-  PostgreSQL is available, and waits for registered tasks before releasing database and storage
-  resources.
-- Business state changes and their audit records share transactions across late-roster decisions,
-  verification-room tests, binding-conflict handling, announcement commands, and fulfillment.
-- Readiness compares the ordered migration timestamps and SHA-256 hashes expected by the running
-  application. Release validation additionally requires the code manifest, SQL files, Drizzle
-  journal, and expected metadata snapshot filenames to agree on the migration sequence.
-- PostgreSQL integration tests now fail immediately when `TEST_DATABASE_URL` is missing and cannot
-  pass a release gate by silently skipping every database test.
+- Verified creator registration, immutable binding-conflict ownership, audited conflict decisions,
+  recoverable gift-cover cleanup, announcement lifecycle and versioned reads, public visibility,
+  encrypted personal data, and deployment-wide appearance presets.
+- Cursor-based operational lists, privacy-aware audit queries, precise migration identity checks,
+  and independent runtime readiness diagnostics.
+
+### Verification
+
+- Integration scenarios cover concurrent publication/finalization, claim/close races, retries,
+  immutable evidence, permissions, encryption, audit, and frozen historical content.
+- Capacity scenarios exercise 30,000 members, 90,000 cumulative allocations, and 30,000-row exports.
+- A mandatory PostgreSQL-backed browser workflow covers real authentication, binding, publication,
+  scheduled roster finalization, claim submission, export, shipping correction, and number copying.
+  Only Bilibili boundaries are replaced with test sources; live upstream availability is separate.
 
 ### Breaking changes
 
-- Database history is replaced by a single v0.2 fresh-install baseline. v0.2 requires an empty
-  PostgreSQL database and does not provide an in-place upgrade from v0.1.
-- Readiness requires the database migration set to match the application exactly; a database from
-  another Club version is rejected instead of being treated as partially compatible.
-- Operational list APIs now return cursor pages and separate summaries from details. Gift releases
-  expose a cover URL rather than an internal object key; shipments expose monotonic `progress` and
-  an independent `exceptionMessage`; announcement mutation uses explicit lifecycle commands.
+- v0.2 requires an empty PostgreSQL database with its single fresh-install baseline. No v0.1 or
+  intermediate-model upgrade, dual-write, or compatibility path is provided.
+- Separate shipment/tracking tables, carrier providers, tracking URLs and events, delivery sync,
+  expiry jobs, and the manual COMPLETED step are removed.
+- Source and storage-driver selectors are removed from environment configuration. Order APIs expose
+  one shipping record, derived claim-window status, and versioned shipping correction.
+- Administrator bootstrap creates a new account; it rejects an existing email without changing it.
 
 ## [0.1.0] - 2026-08-27
 

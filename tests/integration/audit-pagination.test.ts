@@ -1,12 +1,11 @@
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { describe as integration, afterAll, beforeAll, expect, it } from 'vitest';
 
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { auditLogs } from '../../src/server/infrastructure/db/schema/index.js';
 import { AuditQueryService } from '../../src/server/modules/audit/audit-query-service.js';
 import {
   createIntegrationDatabase,
-  integration,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
 

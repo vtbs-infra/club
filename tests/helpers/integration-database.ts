@@ -2,15 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import postgres from 'postgres';
-import { describe } from 'vitest';
 
 import {
   createDatabase,
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
 import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
-
-export const integration = describe;
 
 export interface IntegrationDatabase {
   readonly cleanup: () => Promise<void>;

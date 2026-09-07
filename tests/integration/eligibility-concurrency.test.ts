@@ -1,5 +1,5 @@
 import { count, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { describe as integration, afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
 import {
@@ -19,7 +19,6 @@ import { insertTestCreator } from '../helpers/creator-fixture.js';
 import { createReleaseDraft } from '../helpers/gift-release.js';
 import {
   createIntegrationDatabase,
-  integration,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
 import { insertReadySnapshot } from '../helpers/snapshot-fixture.js';
