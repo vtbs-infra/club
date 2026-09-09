@@ -6,6 +6,8 @@ import {
   AdminSnapshotPageSchema,
   CreatorSnapshotDetailSchema,
   SnapshotAttemptMemberPageSchema,
+  SnapshotApprovalInputSchema,
+  SnapshotRejectionInputSchema,
   SnapshotDetailSchema,
   SnapshotIntegrityResultPageSchema,
   SnapshotMemberPageSchema,
@@ -260,42 +262,47 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     },
   );
 
-  app.post<{ Body: Record<string, never>; Params: { snapshotRunId: string } }>(
+  app.post<{ Body: typeof SnapshotApprovalInputSchema.static; Params: { snapshotRunId: string } }>(
     '/api/v1/admin/rosters/:snapshotRunId/approve-late',
     {
       preHandler: requireAdmin,
       schema: {
-        body: EmptyBodySchema,
+        body: SnapshotApprovalInputSchema,
         params: RunParameters,
         response: { 204: Type.Null() },
         tags: ['admin-rosters'],
       },
     },
     async (request, reply) => {
-      await options.service.approveLate(request.params.snapshotRunId, auditContext(request));
+      await options.service.approveLate(
+        request.params.snapshotRunId,
+        request.body.expectedAttemptId,
+        auditContext(request),
+      );
       return reply.status(204).send();
     },
   );
 
-  app.post<{ Body: { reason: string }; Params: { snapshotRunId: string } }>(
+  app.post<{ Body: typeof SnapshotRejectionInputSchema.static; Params: { snapshotRunId: string } }>(
     '/api/v1/admin/rosters/:snapshotRunId/reject-late',
     {
       preHandler: requireAdmin,
       schema: {
-        body: Type.Object(
-          { reason: Type.String({ maxLength: 500, minLength: 3 }) },
-          { additionalProperties: false },
-        ),
+        body: SnapshotRejectionInputSchema,
         params: RunParameters,
         response: { 204: Type.Null() },
         tags: ['admin-rosters'],
       },
     },
     async (request, reply) => {
-      await options.service.rejectLate(request.params.snapshotRunId, {
-        ...auditContext(request),
-        reason: request.body.reason,
-      });
+      await options.service.rejectLate(
+        request.params.snapshotRunId,
+        request.body.expectedAttemptId,
+        {
+          ...auditContext(request),
+          reason: request.body.reason,
+        },
+      );
       return reply.status(204).send();
     },
   );

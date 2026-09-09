@@ -240,7 +240,7 @@ integration('gift order lifecycle', () => {
       createReleaseDraft('2026-06-01'),
       requestContext(creatorUserId, 'create-june'),
     );
-    await Promise.all([
+    const publications = await Promise.allSettled([
       releaseService.publish(
         creatorId,
         june.id,
@@ -253,6 +253,10 @@ integration('gift order lifecycle', () => {
         { ...createReleaseDraft('2026-06-01'), expectedVersion: june.version },
         requestContext(creatorUserId, 'publish-june-again'),
       ),
+    ]);
+    expect(publications.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(publications.filter((result) => result.status === 'rejected')).toMatchObject([
+      { reason: { code: 'GIFT_RELEASE_NOT_PUBLISHABLE', statusCode: 409 } },
     ]);
     const juneOrders = await database.orm
       .select()

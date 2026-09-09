@@ -10,6 +10,7 @@ import type {
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
+import { isUniqueViolation } from '../../infrastructure/db/errors.js';
 import {
   giftPackageItems,
   giftPackages,
@@ -157,12 +158,6 @@ function validateDraft(input: ReleaseDraftInput) {
   };
 }
 
-function uniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  if ('code' in error && error.code === '23505') return true;
-  return 'cause' in error && uniqueViolation(error.cause);
-}
-
 export class GiftReleaseService {
   private readonly audit: AuditService;
   public readonly eligibility: GiftEligibilityService;
@@ -234,54 +229,61 @@ export class GiftReleaseService {
   }
 
   public async get(creatorId: string, releaseId: string) {
-    const [selection] = await this.database.orm
-      .select({ coverObjectKey: giftCoverObjects.objectKey, release: giftReleases })
-      .from(giftReleases)
-      .leftJoin(
-        giftCoverObjects,
-        and(
-          eq(giftCoverObjects.giftReleaseId, giftReleases.id),
-          eq(giftCoverObjects.state, 'ACTIVE'),
-        ),
-      )
-      .where(and(eq(giftReleases.id, releaseId), eq(giftReleases.creatorId, creatorId)))
-      .limit(1);
-    const release = selection?.release;
-    if (!release) throw new AppError('GIFT_RELEASE_NOT_FOUND', 'Gift release not found.', 404);
-    const packages = await this.database.orm
-      .select()
-      .from(giftPackages)
-      .where(eq(giftPackages.giftReleaseId, release.id))
-      .orderBy(asc(giftPackages.sortOrder));
-    const packageIds = packages.map((package_) => package_.id);
-    const [items, rules] = await Promise.all([
-      packageIds.length === 0
-        ? []
-        : this.database.orm
-            .select()
-            .from(giftPackageItems)
-            .where(inArray(giftPackageItems.giftPackageId, packageIds))
-            .orderBy(asc(giftPackageItems.sortOrder)),
-      this.database.orm
+    return this.database.orm.transaction(async (transaction) => {
+      const [selection] = await transaction
+        .select({ coverObjectKey: giftCoverObjects.objectKey, release: giftReleases })
+        .from(giftReleases)
+        .leftJoin(
+          giftCoverObjects,
+          and(
+            eq(giftCoverObjects.giftReleaseId, giftReleases.id),
+            eq(giftCoverObjects.state, 'ACTIVE'),
+          ),
+        )
+        .where(and(eq(giftReleases.id, releaseId), eq(giftReleases.creatorId, creatorId)))
+        .limit(1)
+        .for('share', { of: giftReleases });
+      const release = selection?.release;
+      if (!release) throw new AppError('GIFT_RELEASE_NOT_FOUND', 'Gift release not found.', 404);
+      const packages = await transaction
         .select()
-        .from(giftTierRules)
-        .where(eq(giftTierRules.giftReleaseId, release.id)),
-    ]);
-    return {
-      ...release,
-      coverImageUrl: selection.coverObjectKey ? `/api/v1/gift-releases/${release.id}/cover` : null,
-      formFields: release.formSchema,
-      packages: packages.map((package_) => ({
-        ...package_,
-        items: items.filter((item) => item.giftPackageId === package_.id),
-      })),
-      tierPackageIndexes: Object.fromEntries(
-        rules.map((rule) => [
-          rule.tier,
-          packages.findIndex((package_) => package_.id === rule.giftPackageId),
-        ]),
-      ),
-    };
+        .from(giftPackages)
+        .where(eq(giftPackages.giftReleaseId, release.id))
+        .orderBy(asc(giftPackages.sortOrder));
+      const packageIds = packages.map((package_) => package_.id);
+      const [items, rules] = await Promise.all([
+        packageIds.length === 0
+          ? []
+          : transaction
+              .select()
+              .from(giftPackageItems)
+              .where(inArray(giftPackageItems.giftPackageId, packageIds))
+              .orderBy(asc(giftPackageItems.sortOrder)),
+        transaction.select().from(giftTierRules).where(eq(giftTierRules.giftReleaseId, release.id)),
+      ]);
+      const packageIndex = (tier: (typeof TIERS)[number]): number => {
+        const rule = rules.find((candidate) => candidate.tier === tier);
+        const index = packages.findIndex((candidate) => candidate.id === rule?.giftPackageId);
+        if (index < 0) throw new Error('Gift release configuration is missing a tier package.');
+        return index;
+      };
+      return {
+        ...release,
+        coverImageUrl: selection.coverObjectKey
+          ? `/api/v1/gift-releases/${release.id}/cover`
+          : null,
+        formFields: release.formSchema,
+        packages: packages.map((package_) => ({
+          ...package_,
+          items: items.filter((item) => item.giftPackageId === package_.id),
+        })),
+        tierPackageIndexes: {
+          CAPTAIN: packageIndex('CAPTAIN'),
+          ADMIRAL: packageIndex('ADMIRAL'),
+          GOVERNOR: packageIndex('GOVERNOR'),
+        },
+      };
+    });
   }
 
   private async replaceConfiguration(
@@ -361,7 +363,7 @@ export class GiftReleaseService {
       });
       return this.get(creatorId, release.id);
     } catch (error) {
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new AppError(
           'GIFT_RELEASE_MONTH_CONFLICT',
           'This creator already has a gift release for that month.',
@@ -444,7 +446,7 @@ export class GiftReleaseService {
       });
       return this.get(creatorId, releaseId);
     } catch (error) {
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new AppError(
           'GIFT_RELEASE_MONTH_CONFLICT',
           'This creator already has a gift release for that month.',
@@ -472,9 +474,6 @@ export class GiftReleaseService {
           .limit(1)
           .for('update');
         if (!release) throw new AppError('GIFT_RELEASE_NOT_FOUND', 'Gift release not found.', 404);
-        if (release.status === 'PUBLISHED') {
-          return;
-        }
         if (release.status !== 'DRAFT') {
           throw new AppError(
             'GIFT_RELEASE_NOT_PUBLISHABLE',
@@ -544,7 +543,7 @@ export class GiftReleaseService {
       });
       return this.get(creatorId, releaseId);
     } catch (error) {
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new AppError(
           'GIFT_RELEASE_MONTH_CONFLICT',
           'This creator already has a gift release for that month.',

@@ -90,13 +90,7 @@ export class AddressService {
       throw new AppError('ADDRESS_LABEL_INVALID', 'Address label is invalid.', 400);
     }
     return this.database.orm.transaction(async (transaction) => {
-      const [owner] = await transaction
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1)
-        .for('update');
-      if (!owner) throw new AppError('USER_NOT_FOUND', 'User account not found.', 404);
+      await this.lockOwner(userId, transaction);
       const [total] = await transaction
         .select({ value: count() })
         .from(addresses)
@@ -155,6 +149,7 @@ export class AddressService {
     context: RequestAuditContext,
   ) {
     return this.database.orm.transaction(async (transaction) => {
+      await this.lockOwner(userId, transaction);
       const row = await this.getOwned(userId, addressId, transaction, true);
       if (input.label !== undefined && (!input.label.trim() || input.label.length > 80)) {
         throw new AppError('ADDRESS_LABEL_INVALID', 'Address label is invalid.', 400);
@@ -226,6 +221,7 @@ export class AddressService {
 
   public async delete(userId: string, addressId: string, context: RequestAuditContext) {
     await this.database.orm.transaction(async (transaction) => {
+      await this.lockOwner(userId, transaction);
       const row = await this.getOwned(userId, addressId, transaction, true);
       await transaction
         .delete(addresses)
@@ -266,6 +262,15 @@ export class AddressService {
   ) {
     const row = await this.getOwned(userId, addressId, executor, false);
     return { payload: this.decrypt(row), row };
+  }
+
+  private async lockOwner(userId: string, executor: AppDatabase): Promise<void> {
+    const [owner] = await executor
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .for('update');
+    if (!owner) throw new AppError('USER_NOT_FOUND', 'User account not found.', 404);
   }
 
   private async getOwned(userId: string, addressId: string, executor: AppDatabase, lock: boolean) {

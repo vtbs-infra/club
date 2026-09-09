@@ -12,6 +12,8 @@ const errorMessages: Readonly<Record<string, string>> = {
   ANNOUNCEMENT_NOT_FOUND: '这条公告已不存在，或不在当前账号的管理范围内。',
   ANNOUNCEMENT_VERSION_CONFLICT: '公告已在其他页面被修改，请刷新后重新编辑。',
   AUTHENTICATION_REQUIRED: '登录状态已失效，请重新登录后继续。',
+  ANNOUNCEMENT_READ_VERSION_INVALID: '公告版本无效，请重新打开正文。',
+  SNAPSHOT_ATTEMPT_CONFLICT: '待审批的抓取批次已经变化，请重新加载并审阅名单。',
   BILIBILI_BINDING_EXISTS: '当前账号已经绑定 B站 UID；如需更换，请先解除现有绑定。',
   BILIBILI_BINDING_CONFLICT_CLOSED: '这项绑定冲突已经处理，请刷新列表。',
   BILIBILI_BINDING_CONFLICT_CURSOR_INVALID: '绑定冲突列表位置无效，请返回最新请求。',
@@ -96,6 +98,7 @@ export function errorMessage(error: unknown): string {
   if (error.status === 403) return '当前账号没有执行这项操作的权限。';
   if (error.status === 404) return '请求的内容已不存在，请刷新后重试。';
   if (error.status === 409) return '数据状态已经变化，请刷新后重试。';
+  if (error.status === 413) return '文件或请求内容超过大小限制，请缩小后重试。';
   if (error.status === 429) return '操作过于频繁，请稍后再试。';
   if (error.status >= 500) return '服务器暂时无法完成请求，请稍后重试。';
   return '操作未能完成，请检查填写内容后重试。';

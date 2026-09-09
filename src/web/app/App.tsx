@@ -1,10 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { lazy, Suspense } from 'react';
 import { Link, Outlet, RouterProvider, createBrowserRouter, useRouteError } from 'react-router-dom';
 
 import { ErrorState, LoadingState } from '../components/Ui';
 import { HomePage } from '../pages/HomePage';
 import { AppearanceProvider } from '../theme/AppearanceProvider';
+import { SessionQueryProvider } from './SessionQueryProvider';
 
 const ProtectedLayout = lazy(() =>
   import('../components/AppShell').then((module) => ({ default: module.ProtectedLayout })),
@@ -137,12 +137,6 @@ function RouteErrorPage() {
   );
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { refetchOnWindowFocus: false, retry: 1, staleTime: 15_000 },
-  },
-});
-
 const router = createBrowserRouter([
   {
     children: [
@@ -196,7 +190,7 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <SessionQueryProvider>
       <AppearanceProvider>
         <Suspense
           fallback={
@@ -208,6 +202,6 @@ export function App() {
           <RouterProvider router={router} />
         </Suspense>
       </AppearanceProvider>
-    </QueryClientProvider>
+    </SessionQueryProvider>
   );
 }

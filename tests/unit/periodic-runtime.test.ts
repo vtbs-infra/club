@@ -95,7 +95,7 @@ describe('periodic runtime', () => {
     expect(runtime.getStatus().state).toBe('STOPPED');
   });
 
-  it('restores snapshots before capture and aborts then drains captures during shutdown', async () => {
+  it('cleans temporary objects before capture and aborts then drains captures during shutdown', async () => {
     const events: string[] = [];
     const entered = deferred();
     const capture = deferred();
@@ -109,10 +109,6 @@ describe('periodic runtime', () => {
         },
       },
       service: {
-        recoverInterrupted: () => {
-          events.push('recover');
-          return Promise.resolve(0);
-        },
         precreateRuns: () => {
           events.push('precreate');
           return Promise.resolve(0);
@@ -138,7 +134,7 @@ describe('periodic runtime', () => {
     const closing = runtime.close();
     await starting;
     await vi.waitFor(() =>
-      expect(events).toEqual(['cleanup', 'recover', 'precreate', 'capture', 'abort', 'drain']),
+      expect(events).toEqual(['cleanup', 'precreate', 'capture', 'abort', 'drain']),
     );
     idle.resolve();
     await closing;

@@ -19,6 +19,14 @@ export function GiftDetailPage() {
     enabled: Boolean(giftOrderId),
     queryFn: () => getMyGift(giftOrderId),
     queryKey: ['gifts', 'mine', giftOrderId],
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const order = query.state.data;
+      if (!order || !['UPCOMING', 'CLAIMABLE'].includes(order.status)) return false;
+      const boundary =
+        order.status === 'UPCOMING' ? order.release.claimStartAt : order.release.claimDeadlineAt;
+      return Math.min(2_147_483_647, Math.max(1_000, Date.parse(boundary) - Date.now()));
+    },
   });
   const addresses = useQuery({
     enabled: gift.data?.status === 'CLAIMABLE',

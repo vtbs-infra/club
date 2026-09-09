@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import multipart from '@fastify/multipart';
 import { describe, expect, it } from 'vitest';
 
 import { buildApp } from '../helpers/test-app.js';
@@ -20,6 +21,58 @@ interface OpenApiDocument {
 }
 
 describe('application HTTP shell', () => {
+  it('preserves parser and upload client errors without exposing unexpected server errors', async () => {
+    const storage = await createTemporaryStorage();
+    const app = await buildApp({
+      config: createTestConfig(),
+      database: fakeDatabase(),
+      storage: storage.driver,
+    });
+    await app.register(multipart);
+    app.post('/test-upload', async (request) => {
+      const file = await request.file({ limits: { fileSize: 4 } });
+      await file?.toBuffer();
+      return {};
+    });
+    app.get('/test-error', () => {
+      throw Object.assign(new Error('private database details'), { statusCode: 400 });
+    });
+    try {
+      const headers = { origin: 'http://localhost:3000', 'content-type': 'application/json' };
+      const invalid = await app.inject({
+        method: 'POST',
+        url: '/api/v1/me/addresses',
+        headers,
+        payload: '{',
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(invalid.json<ErrorResponse>().error.code).toBe('FST_ERR_CTP_INVALID_JSON_BODY');
+      const large = await app.inject({
+        method: 'POST',
+        url: '/api/v1/me/addresses',
+        headers,
+        payload: JSON.stringify({ value: 'x'.repeat(1_048_576) }),
+      });
+      expect(large.statusCode).toBe(413);
+      expect(large.json<ErrorResponse>().error.code).toBe('FST_ERR_CTP_BODY_TOO_LARGE');
+      const upload = await app.inject({
+        method: 'POST',
+        url: '/test-upload',
+        headers: { 'content-type': 'multipart/form-data; boundary=fixture' },
+        payload:
+          '--fixture\r\nContent-Disposition: form-data; name="file"; filename="test.png"\r\nContent-Type: image/png\r\n\r\n12345\r\n--fixture--\r\n',
+      });
+      expect(upload.statusCode).toBe(413);
+      expect(upload.json<ErrorResponse>().error.code).toBe('FST_REQ_FILE_TOO_LARGE');
+      const unexpected = await app.inject({ method: 'GET', url: '/test-error' });
+      expect(unexpected.statusCode).toBe(500);
+      expect(unexpected.body).not.toContain('private database details');
+    } finally {
+      await app.close();
+      await storage.cleanup();
+    }
+  });
+
   it('generates OpenAPI from route schemas', async () => {
     const storage = await createTemporaryStorage();
     const app = await buildApp({

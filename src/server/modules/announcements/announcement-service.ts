@@ -498,13 +498,20 @@ export class AnnouncementService {
     });
   }
 
-  public async markRead(userId: string, announcementId: string): Promise<void> {
+  public async markRead(userId: string, announcementId: string, version: number): Promise<void> {
     const announcement = await this.getVisible(userId, announcementId);
+    if (!Number.isSafeInteger(version) || version < 1 || version > announcement.version) {
+      throw new AppError(
+        'ANNOUNCEMENT_READ_VERSION_INVALID',
+        'The read acknowledgement version is invalid.',
+        400,
+      );
+    }
     await this.database.orm
       .insert(announcementReads)
       .values({
         announcementId,
-        announcementVersion: announcement.version,
+        announcementVersion: version,
         userId,
       })
       .onConflictDoNothing();

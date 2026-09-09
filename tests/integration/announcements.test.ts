@@ -88,7 +88,7 @@ integration('announcement lifecycle', () => {
     });
     expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 2 }]);
 
-    await service.markRead(recipientUserId, draft.id);
+    await service.markRead(recipientUserId, draft.id, published.version);
     expect(await visible()).toMatchObject([{ id: draft.id, read: true, version: 2 }]);
 
     clock.current = new Date('2026-08-01T01:00:00.000Z');
@@ -107,7 +107,13 @@ integration('announcement lifecycle', () => {
     });
     expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 3 }]);
 
-    await service.markRead(recipientUserId, draft.id);
+    // A late acknowledgement of the displayed old body must not consume the new version.
+    await service.markRead(recipientUserId, draft.id, published.version);
+    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 3 }]);
+    await expect(
+      service.markRead(recipientUserId, draft.id, updated.version + 1),
+    ).rejects.toMatchObject({ code: 'ANNOUNCEMENT_READ_VERSION_INVALID' });
+    await service.markRead(recipientUserId, draft.id, updated.version);
     expect(await visible()).toMatchObject([{ id: draft.id, read: true, version: 3 }]);
     expect(
       (

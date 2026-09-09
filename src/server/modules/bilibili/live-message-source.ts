@@ -17,5 +17,9 @@ export interface RoomConnection {
 }
 
 export interface LiveMessageSource {
-  connectRoom(roomId: string, listener: LiveMessageListener): Promise<RoomConnection>;
+  connectRoom(
+    roomId: string,
+    listener: LiveMessageListener,
+    signal: AbortSignal,
+  ): Promise<RoomConnection>;
 }

@@ -146,15 +146,25 @@ export class SnapshotService {
       .select({ id: snapshotRuns.id })
       .from(snapshotRuns)
       .where(eq(snapshotRuns.status, 'RUNNING'));
-    for (const run of running) {
+    let recovered = 0;
+    for (const candidate of running) {
+      if (this.activeCaptures.has(candidate.id)) continue;
       await this.database.orm.transaction(async (transaction) => {
+        const [run] = await transaction
+          .select()
+          .from(snapshotRuns)
+          .where(eq(snapshotRuns.id, candidate.id))
+          .for('update');
+        // Ownership includes the transaction that starts an attempt, so recovery cannot
+        // mistake a newly committed RUNNING row for abandoned work.
+        if (!run || run.status !== 'RUNNING' || this.activeCaptures.has(run.id)) return;
         await transaction
           .update(snapshotAttempts)
           .set({
             captureCompletedAt: this.clock.now(),
             consistencyStatus: 'INCONSISTENT',
             failureCode: 'PROCESS_INTERRUPTED',
-            failureMessage: 'The application stopped before this attempt completed.',
+            failureMessage: 'Capture execution ended before its result was durably recorded.',
           })
           .where(
             and(
@@ -166,13 +176,15 @@ export class SnapshotService {
           .update(snapshotRuns)
           .set({ status: 'FAILED', updatedAt: this.clock.now() })
           .where(eq(snapshotRuns.id, run.id));
+        recovered += 1;
       });
     }
-    return running.length;
+    return recovered;
   }
 
   public async runDue(): Promise<number> {
     if (this.shuttingDown) return 0;
+    await this.recoverInterrupted();
     const due = await this.database.orm
       .select({ id: snapshotRuns.id, status: snapshotRuns.status })
       .from(snapshotRuns)
@@ -421,12 +433,18 @@ export class SnapshotService {
       run.scheduledCutoffAt,
       run.onTimeWindowEndAt,
     );
-    await this.database.orm
-      .update(snapshotAttempts)
-      .set({ captureStartedAt, punctuality })
-      .where(eq(snapshotAttempts.id, attemptId));
-    const signal = AbortSignal.any([shutdownSignal, AbortSignal.timeout(this.maxDurationMs)]);
+    const captureController = new AbortController();
+    const signal = AbortSignal.any([
+      shutdownSignal,
+      AbortSignal.timeout(this.maxDurationMs),
+      captureController.signal,
+    ]);
     try {
+      signal.throwIfAborted();
+      await this.database.orm
+        .update(snapshotAttempts)
+        .set({ captureStartedAt, punctuality })
+        .where(eq(snapshotAttempts.id, attemptId));
       const fetch = (pageNumber: number) =>
         this.source.fetchPage({
           creatorUid: run.creatorBilibiliUid,
@@ -448,8 +466,22 @@ export class SnapshotService {
           { length: Math.min(4, first.declaredPageCount - start + 1) },
           (_, offset) => start + offset,
         );
-        const chunk = await Promise.all(numbers.map(fetch));
+        // Cancel siblings on the first failure and drain them before sealing the attempt.
+        const results = await Promise.allSettled(
+          numbers.map(async (number) => {
+            try {
+              return await fetch(number);
+            } catch (error) {
+              captureController.abort(error);
+              throw error;
+            }
+          }),
+        );
         signal.throwIfAborted();
+        const chunk = results.map((result) => {
+          if (result.status === 'rejected') throw result.reason;
+          return result.value;
+        });
         responseBytes = this.addResponseBytes(responseBytes, chunk);
         for (const page of chunk) {
           await this.persistPage(run.id, attemptId, page, 'PAGE');
@@ -500,6 +532,14 @@ export class SnapshotService {
     } catch (error) {
       const captureFailure = failure(signal.aborted ? signal.reason : error);
       await this.database.orm.transaction(async (transaction) => {
+        const [current] = await transaction
+          .select({ status: snapshotRuns.status })
+          .from(snapshotRuns)
+          .where(eq(snapshotRuns.id, run.id))
+          .for('update');
+        // A commit may have succeeded even if its acknowledgement was lost.
+        // Never overwrite an already sealed capture with failure recovery.
+        if (current?.status !== 'RUNNING') return;
         await transaction
           .update(snapshotAttempts)
           .set({
@@ -520,35 +560,53 @@ export class SnapshotService {
     if (punctuality === 'ON_TIME') await this.finalizeReady(run.id);
   }
 
-  private startExecution(attemptId: string, run: CaptureRun): Promise<void> {
+  private startExecution(runId: string, request: AttemptRequest) {
+    if (this.activeCaptures.has(runId)) {
+      throw new AppError(
+        'SNAPSHOT_CAPTURE_NOT_ALLOWED',
+        'This snapshot is already executing.',
+        409,
+      );
+    }
     const controller = new AbortController();
     if (this.shuttingDown) controller.abort(shutdownFailure());
-    const execution = this.executeCapture(attemptId, run, controller.signal);
+    const started = Promise.withResolvers<{ attemptId: string }>();
+    const execution = Promise.resolve().then(async () => {
+      try {
+        const { attemptId, run } = await this.beginAttempt(runId, request);
+        started.resolve({ attemptId });
+        await this.executeCapture(attemptId, run, controller.signal);
+      } catch (error) {
+        started.reject(error);
+        throw error;
+      }
+    });
     const active = { controller, execution };
-    this.activeCaptures.set(attemptId, active);
+    this.activeCaptures.set(runId, active);
     const remove = () => {
-      if (this.activeCaptures.get(attemptId) === active) this.activeCaptures.delete(attemptId);
+      if (this.activeCaptures.get(runId) === active) this.activeCaptures.delete(runId);
     };
     void execution.then(remove, remove);
-    return execution;
+    return { execution, started: started.promise };
   }
 
   public async capture(runId: string): Promise<void> {
-    const { attemptId, run } = await this.beginAttempt(runId, { initiatedBy: 'SCHEDULER' });
-    await this.startExecution(attemptId, run);
+    const { started, execution } = this.startExecution(runId, { initiatedBy: 'SCHEDULER' });
+    await started;
+    await execution;
   }
 
   public async queueCapture(
     runId: string,
     context: RequestAuditContext,
   ): Promise<{ attemptId: string }> {
-    const { attemptId, run } = await this.beginAttempt(runId, {
+    const { started, execution } = this.startExecution(runId, {
       context,
       initiatedBy: 'ADMIN',
     });
-    const execution = this.startExecution(attemptId, run);
+    const result = await started;
     void execution.catch((error: unknown) => this.onBackgroundError?.(error));
-    return { attemptId };
+    return result;
   }
 
   public beginShutdown(): void {
@@ -568,11 +626,18 @@ export class SnapshotService {
     await this.finalize(runId, null);
   }
 
-  public async approveLate(runId: string, context: RequestAuditContext): Promise<void> {
-    await this.finalize(runId, context);
+  public async approveLate(
+    runId: string,
+    expectedAttemptId: string,
+    context: RequestAuditContext,
+  ): Promise<void> {
+    await this.finalize(runId, { ...context, expectedAttemptId });
   }
 
-  private async finalize(runId: string, context: RequestAuditContext | null): Promise<void> {
+  private async finalize(
+    runId: string,
+    context: (RequestAuditContext & { expectedAttemptId: string }) | null,
+  ): Promise<void> {
     await this.database.orm.transaction(async (transaction) => {
       const [scope] = await transaction
         .select()
@@ -586,7 +651,16 @@ export class SnapshotService {
         .where(eq(snapshotRuns.id, runId))
         .for('update');
       if (!run) throw new AppError('SNAPSHOT_NOT_FOUND', 'Snapshot run not found.', 404);
-      if (run.status === 'FINALIZED') return;
+      if (run.status === 'FINALIZED') {
+        if (context && run.acceptedAttemptId !== context.expectedAttemptId) {
+          throw new AppError(
+            'SNAPSHOT_ATTEMPT_CONFLICT',
+            'The reviewed capture is no longer current. Reload and review it again.',
+            409,
+          );
+        }
+        return;
+      }
       const expectedStatus = context ? 'PENDING_APPROVAL' : 'READY';
       if (run.status !== expectedStatus) {
         throw new AppError(
@@ -609,6 +683,13 @@ export class SnapshotService {
         .limit(1);
       if (!attempt?.captureCompletedAt)
         throw new Error('A ready snapshot requires a completed consistent attempt.');
+      if (context && attempt.id !== context.expectedAttemptId) {
+        throw new AppError(
+          'SNAPSHOT_ATTEMPT_CONFLICT',
+          'The reviewed capture is no longer current. Reload and review it again.',
+          409,
+        );
+      }
       const now = this.clock.now();
       await transaction
         .update(snapshotRuns)
@@ -641,17 +722,40 @@ export class SnapshotService {
     });
   }
 
-  public async rejectLate(runId: string, context: RequestAuditContext & { reason: string }) {
+  public async rejectLate(
+    runId: string,
+    expectedAttemptId: string,
+    context: RequestAuditContext & { reason: string },
+  ) {
     return this.database.orm.transaction(async (transaction) => {
       const [run] = await transaction
+        .select()
+        .from(snapshotRuns)
+        .where(and(eq(snapshotRuns.id, runId), eq(snapshotRuns.status, 'PENDING_APPROVAL')))
+        .for('update');
+      if (!run) throw new AppError('SNAPSHOT_NOT_REJECTABLE', 'No late attempt is pending.', 409);
+      const [attempt] = await transaction
+        .select({ id: snapshotAttempts.id })
+        .from(snapshotAttempts)
+        .where(eq(snapshotAttempts.snapshotRunId, runId))
+        .orderBy(desc(snapshotAttempts.attemptNumber))
+        .limit(1);
+      if (attempt?.id !== expectedAttemptId) {
+        throw new AppError(
+          'SNAPSHOT_ATTEMPT_CONFLICT',
+          'The reviewed capture is no longer current. Reload and review it again.',
+          409,
+        );
+      }
+      const [updated] = await transaction
         .update(snapshotRuns)
         .set({ status: 'REJECTED', updatedAt: this.clock.now() })
-        .where(and(eq(snapshotRuns.id, runId), eq(snapshotRuns.status, 'PENDING_APPROVAL')))
+        .where(eq(snapshotRuns.id, runId))
         .returning();
-      if (!run) throw new AppError('SNAPSHOT_NOT_REJECTABLE', 'No late attempt is pending.', 409);
       await this.audit.record(
         {
           action: 'snapshot.late-rejected',
+          afterSummary: { attemptId: expectedAttemptId },
           actorUserId: context.actorUserId,
           creatorId: run.creatorId,
           ipAddress: context.ipAddress,
@@ -662,7 +766,7 @@ export class SnapshotService {
         },
         transaction,
       );
-      return run;
+      return updated!;
     });
   }
 }

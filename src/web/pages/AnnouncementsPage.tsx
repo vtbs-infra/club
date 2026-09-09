@@ -25,6 +25,7 @@ export function AnnouncementsPage() {
   const [parameters, setParameters] = useSearchParams();
   const openId = parameters.get('open');
   const handledOpenId = useRef<string | null>(null);
+  const acknowledgedVersion = useRef<string | null>(null);
   const announcements = useInfiniteQuery({
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) => getAnnouncements({ cursor: pageParam }),
@@ -48,6 +49,7 @@ export function AnnouncementsPage() {
   useEffect(() => {
     if (!openId) {
       handledOpenId.current = null;
+      acknowledgedVersion.current = null;
       return;
     }
     if (!announcements.data || handledOpenId.current === openId) return;
@@ -58,8 +60,27 @@ export function AnnouncementsPage() {
 
     handledOpenId.current = openId;
     document.getElementById(`announcement-${openId}`)?.scrollIntoView({ block: 'center' });
-    if (!announcement.read) markRead(announcement.id);
-  }, [announcements.data, markRead, openId]);
+  }, [announcements.data, openId]);
+
+  useEffect(() => {
+    if (
+      !announcements.isSuccess ||
+      !announcements.data.pages.some((page) => page.items.some((item) => item.id === openId))
+    )
+      return;
+    if (!detail.isSuccess || detail.data.id !== openId || detail.data.read) return;
+    const key = `${detail.data.id}:${detail.data.version}`;
+    if (acknowledgedVersion.current === key) return;
+    acknowledgedVersion.current = key;
+    markRead({ announcementId: detail.data.id, version: detail.data.version });
+  }, [
+    announcements.data,
+    announcements.isSuccess,
+    detail.data,
+    detail.isSuccess,
+    markRead,
+    openId,
+  ]);
 
   if (announcements.isPending) return <LoadingState label="正在读取公告…" />;
   if (announcements.isError) return <ErrorState error={announcements.error} />;
@@ -76,7 +97,6 @@ export function AnnouncementsPage() {
       },
       { replace: true },
     );
-    if (nextOpenId && !announcement.read) markRead(announcement.id);
   };
   return (
     <div className="stack-lg">

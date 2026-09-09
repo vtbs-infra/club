@@ -1,16 +1,16 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Gift, ShieldCheck, Sparkles } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { getIdentity, registerAccount, signIn } from '../api/client';
+import { useSession } from '../app/session-context';
 import { ProductBrand } from '../components/ProductBrand';
 import { ErrorNotice, InlineNotice } from '../components/Ui';
 
 export function AuthPage({ mode }: { readonly mode: 'login' | 'register' }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const queryClient = useQueryClient();
+  const { acceptIdentity } = useSession();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +30,7 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' }) {
       } else {
         await signIn(email, password);
         const identity = await getIdentity();
-        queryClient.setQueryData(['identity'], identity);
+        acceptIdentity(identity);
         setPassword('');
         await navigate('/app', { replace: true });
       }

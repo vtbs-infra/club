@@ -5,6 +5,7 @@ export type RoomConnectionState = NonNullable<BilibiliChallenge['connectionState
 
 interface ManagedRoom {
   connection: RoomConnection | null;
+  controller: AbortController | null;
   desired: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
   reconnectAttempt: number;
@@ -28,6 +29,8 @@ export class RoomConnectionManager {
   private readonly idleGraceMs: number;
   private readonly reconnectDelaysMs: readonly number[];
   private readonly rooms = new Map<string, ManagedRoom>();
+  private readonly operations = new Set<Promise<void>>();
+  private readonly shutdown = new AbortController();
   private closed = false;
 
   public constructor(private readonly options: RoomConnectionManagerOptions) {
@@ -49,6 +52,15 @@ export class RoomConnectionManager {
     }
   }
 
+  private track(operation: Promise<void>): Promise<void> {
+    this.operations.add(operation);
+    const finished = () => {
+      this.operations.delete(operation);
+    };
+    void operation.then(finished, finished);
+    return operation;
+  }
+
   private scheduleReconnect(roomId: string, room: ManagedRoom): void {
     if (this.closed || !room.desired || room.reconnectTimer) return;
     const delay =
@@ -59,38 +71,63 @@ export class RoomConnectionManager {
       room.reconnectTimer = null;
       void this.connect(roomId, room);
     }, delay);
+    room.reconnectTimer.unref();
   }
 
-  private async connect(roomId: string, room: ManagedRoom): Promise<void> {
-    if (this.closed || !room.desired || room.connection || room.state === 'CONNECTING') return;
-    await this.publishState(roomId, room, 'CONNECTING', null);
-    try {
-      const connection = await this.options.source.connectRoom(roomId, {
-        onDisconnect: async (error) => {
-          room.connection = null;
-          await this.publishState(roomId, room, 'UNHEALTHY', error);
+  private connect(roomId: string, room: ManagedRoom): Promise<void> {
+    if (this.closed || !room.desired || room.connection || room.state === 'CONNECTING')
+      return Promise.resolve();
+    const controller = new AbortController();
+    room.controller = controller;
+    room.state = 'CONNECTING';
+    const signal = AbortSignal.any([controller.signal, this.shutdown.signal]);
+    return this.track(
+      Promise.resolve().then(async () => {
+        if (signal.aborted) return;
+        await this.publishState(roomId, room, 'CONNECTING', null);
+        try {
+          const connection = await this.options.source.connectRoom(
+            roomId,
+            {
+              onDisconnect: (error) =>
+                this.track(
+                  Promise.resolve().then(async () => {
+                    if (signal.aborted || room.controller !== controller) return;
+                    const previous = room.connection;
+                    room.connection = null;
+                    controller.abort();
+                    await previous?.close();
+                    if (this.closed || this.rooms.get(roomId) !== room) return;
+                    await this.publishState(roomId, room, 'UNHEALTHY', error);
+                    this.scheduleReconnect(roomId, room);
+                  }),
+                ),
+              onMessage: this.options.onMessage,
+            },
+            signal,
+          );
+          if (signal.aborted) {
+            await connection.close();
+            return;
+          }
+          room.connection = connection;
+          room.reconnectAttempt = 0;
+          await this.publishState(roomId, room, 'HEALTHY', null);
+        } catch (error) {
+          if (signal.aborted) return;
+          const normalized = error instanceof Error ? error : new Error('Room connection failed.');
+          await this.publishState(roomId, room, 'UNHEALTHY', normalized);
           this.scheduleReconnect(roomId, room);
-        },
-        onMessage: this.options.onMessage,
-      });
-      if (this.closed || !room.desired) {
-        await connection.close();
-        return;
-      }
-      room.connection = connection;
-      room.reconnectAttempt = 0;
-      await this.publishState(roomId, room, 'HEALTHY', null);
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error('Room connection failed.');
-      await this.publishState(roomId, room, 'UNHEALTHY', normalized);
-      this.scheduleReconnect(roomId, room);
-    }
+        }
+      }),
+    );
   }
 
   public async ensureRoom(roomId: string): Promise<void> {
     if (this.closed) return;
     const room = this.rooms.get(roomId) ?? {
       connection: null,
+      controller: null,
       desired: true,
       idleTimer: null,
       reconnectAttempt: 0,
@@ -113,7 +150,8 @@ export class RoomConnectionManager {
     if (room.idleTimer) clearTimeout(room.idleTimer);
     room.idleTimer = setTimeout(() => {
       if (room.desired) return;
-      void room.connection?.close();
+      room.controller?.abort();
+      void this.track(Promise.resolve().then(() => room.connection?.close()));
       this.rooms.delete(roomId);
     }, this.idleGraceMs);
     room.idleTimer.unref();
@@ -121,33 +159,50 @@ export class RoomConnectionManager {
 
   public async reconcile(requiredRoomIds: readonly string[]): Promise<void> {
     const required = new Set(requiredRoomIds);
-    for (const roomId of required) await this.ensureRoom(roomId);
     for (const roomId of this.rooms.keys()) {
       if (!required.has(roomId)) this.releaseRoom(roomId);
     }
+    await Promise.all([...required].map((roomId) => this.ensureRoom(roomId)));
   }
 
   public getState(roomId: string): RoomConnectionState | null {
     return this.rooms.get(roomId)?.state ?? null;
   }
 
-  public async testRoom(roomId: string): Promise<void> {
-    const connection = await this.options.source.connectRoom(roomId, {
-      onDisconnect: () => undefined,
-      onMessage: () => undefined,
-    });
-    await connection.close();
+  public testRoom(roomId: string): Promise<void> {
+    return this.track(
+      Promise.resolve().then(async () => {
+        this.shutdown.signal.throwIfAborted();
+        const connection = await this.options.source.connectRoom(
+          roomId,
+          {
+            onDisconnect: () => undefined,
+            onMessage: () => undefined,
+          },
+          this.shutdown.signal,
+        );
+        await connection.close();
+      }),
+    );
   }
 
   public async close(): Promise<void> {
     this.closed = true;
+    this.shutdown.abort();
     const closures: Promise<void>[] = [];
     for (const room of this.rooms.values()) {
       if (room.idleTimer) clearTimeout(room.idleTimer);
       if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
-      if (room.connection) closures.push(Promise.resolve(room.connection.close()));
+      if (room.connection) closures.push(Promise.resolve().then(() => room.connection!.close()));
     }
     this.rooms.clear();
-    await Promise.all(closures);
+    const results = await Promise.allSettled(closures);
+    while (this.operations.size > 0) await Promise.allSettled([...this.operations]);
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length)
+      throw new AggregateError(
+        failures.map((result): unknown => result.reason),
+        'Room connections could not close.',
+      );
   }
 }

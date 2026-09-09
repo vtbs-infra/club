@@ -12,7 +12,7 @@ export function createSnapshotRuntime(input: {
   readonly clock: Clock;
   readonly service: Pick<
     SnapshotService,
-    'recoverInterrupted' | 'precreateRuns' | 'runDue' | 'beginShutdown' | 'waitForIdle'
+    'precreateRuns' | 'runDue' | 'beginShutdown' | 'waitForIdle'
   >;
   readonly reportError?: (error: unknown, operation: string) => void;
   readonly storage: Pick<StorageDriver, 'cleanupStaleTemporaryObjects'>;
@@ -25,7 +25,6 @@ export function createSnapshotRuntime(input: {
       await input.storage.cleanupStaleTemporaryObjects(
         new Date(input.clock.now().getTime() - 60 * 60_000),
       );
-      await input.service.recoverInterrupted();
     },
     async run() {
       await input.service.precreateRuns();

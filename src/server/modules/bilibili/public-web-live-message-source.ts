@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 
 import {
-  BilibiliApiClient,
   LiveWS,
   parseLiveConfig,
   type DataXliveGetDanmuInfo,
   type MessageData,
 } from 'bilibili-live-danmaku';
+import { PublicWebClient } from './public-web-client.js';
 
 import type {
   LiveMessageEvent,
@@ -120,27 +120,27 @@ export function normalizePublicWebHistoryMessage(
 }
 
 export class PublicWebLiveMessageSource implements LiveMessageSource {
-  private readonly client = new BilibiliApiClient();
-  private initializePromise: Promise<void> | null = null;
+  private readonly client: PublicWebClient;
 
   public constructor(
     private readonly connectTimeoutMs = 15_000,
     private readonly historyPollIntervalMs = 2_000,
-  ) {}
-
-  private initializeClient(): Promise<void> {
-    this.initializePromise ??= this.client.initCookie().catch((error: unknown) => {
-      this.initializePromise = null;
-      throw error;
-    });
-    return this.initializePromise;
+    fetchImplementation: typeof fetch = globalThis.fetch,
+  ) {
+    this.client = new PublicWebClient(fetchImplementation);
   }
 
-  private async getRecentMessages(canonicalRoomId: number): Promise<PublicWebHistoryMessage[]> {
+  private async getRecentMessages(
+    canonicalRoomId: number,
+    signal: AbortSignal,
+  ): Promise<PublicWebHistoryMessage[]> {
+    const client = await this.client.forOperation(
+      AbortSignal.any([signal, AbortSignal.timeout(this.connectTimeoutMs)]),
+    );
     const url = new URL('https://api.live.bilibili.com/xlive/web-room/v1/dM/gethistory');
     url.searchParams.set('roomid', String(canonicalRoomId));
     url.searchParams.set('room_type', '0');
-    const response = await this.client.request(url, {
+    const response = await client.request(url, {
       headers: {
         Accept: 'application/json',
         Origin: 'https://live.bilibili.com',
@@ -148,9 +148,8 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
       },
       method: 'GET',
     });
-    if (!response.ok) {
+    if (!response.ok)
       throw new Error(`Bilibili message history failed with HTTP ${response.status}.`);
-    }
     const payload: unknown = await response.json();
     if (!isRecord(payload) || payload.code !== 0) {
       const code = isRecord(payload) ? String(payload.code) : 'invalid-response';
@@ -159,124 +158,140 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
     return historyMessages(payload);
   }
 
-  public async connectRoom(roomId: string, listener: LiveMessageListener): Promise<RoomConnection> {
+  public async connectRoom(
+    roomId: string,
+    listener: LiveMessageListener,
+    signal: AbortSignal,
+  ): Promise<RoomConnection> {
     const requestedRoomId = Number(roomId);
     if (!Number.isSafeInteger(requestedRoomId) || requestedRoomId <= 0) {
       throw new Error('Bilibili room IDs must be positive integers.');
     }
-    await this.initializeClient();
-    const room = await this.client.liveRoomInit({ id: requestedRoomId });
+    const controller = new AbortController();
+    const lifetime = AbortSignal.any([signal, controller.signal]);
+    const setup = AbortSignal.any([lifetime, AbortSignal.timeout(this.connectTimeoutMs)]);
+    const client = await this.client.forOperation(setup);
+    const room = await client.liveRoomInit({ id: requestedRoomId });
     const roomData: unknown = room.data;
     const canonicalRoomId = Number(isRecord(roomData) ? roomData.room_id : Number.NaN);
     if (room.code !== 0 || !Number.isSafeInteger(canonicalRoomId) || canonicalRoomId <= 0) {
       throw new Error(`Bilibili room lookup failed with code ${room.code}.`);
     }
-    const danmaku = await this.client.xliveGetDanmuInfo({ id: canonicalRoomId });
+    const danmaku = await client.xliveGetDanmuInfo({ id: canonicalRoomId });
     const danmakuData: unknown = danmaku.data;
     if (danmaku.code !== 0 || !isDanmakuConfiguration(danmakuData)) {
       throw new Error(`Bilibili danmaku configuration failed with code ${danmaku.code}.`);
     }
     const liveConfig = parseLiveConfig(danmakuData);
+    setup.throwIfAborted();
 
     return new Promise<RoomConnection>((resolve, reject) => {
       let connected = false;
-      let closedByClient = false;
-      let disconnectNotified = false;
-      let historyPollInFlight = false;
-      let historyTimer: ReturnType<typeof setInterval> | null = null;
+      let closed = false;
       let settled = false;
+      let closing: Promise<void> | null = null;
+      let historyTimer: ReturnType<typeof setInterval> | null = null;
+      let historyRequest: Promise<void> | null = null;
+      const deliveries = new Set<Promise<void>>();
       const seenHistoryEvents = new Set<string>();
       const live = new LiveWS(canonicalRoomId, {
         address: liveConfig.address,
         key: liveConfig.key,
         protover: 3,
       });
-      const stopHistoryPolling = () => {
+      const close = (): Promise<void> => {
+        if (closing) return closing;
+        closed = true;
         if (historyTimer) clearInterval(historyTimer);
         historyTimer = null;
+        setup.removeEventListener('abort', onAbort);
+        lifetime.removeEventListener('abort', onAbort);
+        closing = Promise.resolve().then(async () => {
+          await Promise.allSettled([...deliveries, ...(historyRequest ? [historyRequest] : [])]);
+        });
+        controller.abort();
+        live.close();
+        return closing;
       };
-      const rememberHistoryEvent = (eventId: string) => {
-        seenHistoryEvents.add(eventId);
-        if (seenHistoryEvents.size <= HISTORY_EVENT_LIMIT) return;
-        const oldest = seenHistoryEvents.values().next().value;
-        if (typeof oldest === 'string') seenHistoryEvents.delete(oldest);
+      const onAbort = () => {
+        if (!settled) {
+          settled = true;
+          const reason: unknown = setup.reason ?? lifetime.reason;
+          const error =
+            reason instanceof Error
+              ? reason
+              : new Error('Bilibili connection cancelled.', { cause: reason });
+          void close().then(() => reject(error), reject);
+        } else {
+          void close();
+        }
+      };
+      const disconnect = (error: Error | null) => {
+        if (closed) return;
+        if (!settled) {
+          settled = true;
+          const failure =
+            error ?? new Error('Bilibili closed the connection before authentication completed.');
+          void close().then(() => reject(failure), reject);
+          return;
+        }
+        void close();
+        if (connected) void Promise.resolve(listener.onDisconnect(error)).catch(() => undefined);
       };
       const pollHistory = async () => {
-        if (closedByClient || historyPollInFlight) return;
-        historyPollInFlight = true;
         try {
-          const messages = await this.getRecentMessages(canonicalRoomId);
+          const messages = await this.getRecentMessages(canonicalRoomId, lifetime);
           const events = messages
             .map((message) => normalizePublicWebHistoryMessage(roomId, message))
             .filter((event): event is LiveMessageEvent => event !== null)
             .sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime());
           for (const event of events) {
-            if (closedByClient || seenHistoryEvents.has(event.eventId)) continue;
-            await Promise.resolve(listener.onMessage(event));
-            rememberHistoryEvent(event.eventId);
+            if (closed || seenHistoryEvents.has(event.eventId)) continue;
+            await listener.onMessage(event);
+            seenHistoryEvents.add(event.eventId);
+            if (seenHistoryEvents.size > HISTORY_EVENT_LIMIT) {
+              const oldest = seenHistoryEvents.values().next().value;
+              if (oldest !== undefined) seenHistoryEvents.delete(oldest);
+            }
           }
         } catch {
-          // WebSocket delivery remains primary; history polling retries on the next interval.
-        } finally {
-          historyPollInFlight = false;
+          // WebSocket delivery remains primary; the next bounded history poll retries.
         }
       };
-      const startHistoryPolling = () => {
-        if (historyTimer || closedByClient) return;
-        void pollHistory();
-        historyTimer = setInterval(() => void pollHistory(), this.historyPollIntervalMs);
-        historyTimer.unref();
+      const requestHistory = () => {
+        if (closed || historyRequest) return;
+        historyRequest = pollHistory().finally(() => {
+          historyRequest = null;
+        });
       };
-      const timeout = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        closedByClient = true;
-        stopHistoryPolling();
-        live.close();
-        reject(new Error('Timed out while connecting to the Bilibili live-message server.'));
-      }, this.connectTimeoutMs);
-
+      setup.addEventListener('abort', onAbort, { once: true });
+      lifetime.addEventListener('abort', onAbort, { once: true });
       live.addEventListener('CONNECT_SUCCESS', () => {
-        if (settled) return;
+        if (settled || closed) return;
         settled = true;
         connected = true;
-        clearTimeout(timeout);
-        startHistoryPolling();
-        resolve({
-          close: () => {
-            if (closedByClient) return;
-            closedByClient = true;
-            stopHistoryPolling();
-            live.close();
-          },
-        });
+        setup.removeEventListener('abort', onAbort);
+        requestHistory();
+        historyTimer = setInterval(requestHistory, this.historyPollIntervalMs);
+        historyTimer.unref();
+        resolve({ close });
       });
       live.addEventListener('DANMU_MSG', (event) => {
+        if (closed) return;
         const normalized = normalizePublicWebDanmaku(roomId, event.data);
-        if (normalized) void Promise.resolve(listener.onMessage(normalized)).catch(() => undefined);
+        if (!normalized) return;
+        const delivery = Promise.resolve().then(() => listener.onMessage(normalized));
+        deliveries.add(delivery);
+        const finished = () => {
+          deliveries.delete(delivery);
+        };
+        void delivery.then(finished, finished);
       });
-      live.ws.addEventListener('close', () => {
-        clearTimeout(timeout);
-        stopHistoryPolling();
-        if (!settled) {
-          settled = true;
-          reject(new Error('Bilibili closed the connection before authentication completed.'));
-          return;
-        }
-        if (connected && !closedByClient && !disconnectNotified) {
-          disconnectNotified = true;
-          void Promise.resolve(listener.onDisconnect(null)).catch(() => undefined);
-        }
-      });
-      live.ws.addEventListener('error', () => {
-        stopHistoryPolling();
-        if (connected && !closedByClient && !disconnectNotified) {
-          disconnectNotified = true;
-          void Promise.resolve(
-            listener.onDisconnect(new Error('Bilibili live-message connection failed.')),
-          ).catch(() => undefined);
-        }
-      });
+      live.ws.addEventListener('close', () => disconnect(null));
+      live.ws.addEventListener('error', () =>
+        disconnect(new Error('Bilibili live-message connection failed.')),
+      );
+      if (setup.aborted) onAbort();
     });
   }
 }

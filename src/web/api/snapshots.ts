@@ -109,16 +109,23 @@ export function retryAdminRoster(snapshotRunId: string): Promise<{ readonly atte
   });
 }
 
-export function approveAdminRoster(snapshotRunId: string): Promise<void> {
+export function approveAdminRoster(
+  snapshotRunId: string,
+  expectedAttemptId: string,
+): Promise<void> {
   return apiRequest(`/api/v1/admin/rosters/${snapshotRunId}/approve-late`, {
-    body: JSON.stringify({}),
+    body: JSON.stringify({ expectedAttemptId }),
     method: 'POST',
   });
 }
 
-export function rejectAdminRoster(snapshotRunId: string, reason: string): Promise<void> {
+export function rejectAdminRoster(
+  snapshotRunId: string,
+  expectedAttemptId: string,
+  reason: string,
+): Promise<void> {
   return apiRequest(`/api/v1/admin/rosters/${snapshotRunId}/reject-late`, {
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ expectedAttemptId, reason }),
     method: 'POST',
   });
 }

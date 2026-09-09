@@ -32,9 +32,12 @@ export function getAnnouncement(announcementId: string): Promise<Announcement> {
   return apiRequest(`/api/v1/me/announcements/${announcementId}`);
 }
 
-export function markAnnouncementRead(announcementId: string): Promise<void> {
-  return apiRequest(`/api/v1/me/announcements/${announcementId}/read`, {
-    body: JSON.stringify({}),
+export function markAnnouncementRead(input: {
+  readonly announcementId: string;
+  readonly version: number;
+}): Promise<void> {
+  return apiRequest(`/api/v1/me/announcements/${input.announcementId}/read`, {
+    body: JSON.stringify({ version: input.version }),
     method: 'POST',
   });
 }

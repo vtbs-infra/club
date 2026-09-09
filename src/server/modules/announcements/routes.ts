@@ -5,6 +5,7 @@ import {
   AnnouncementContentSchema,
   AnnouncementContentUpdateSchema,
   AnnouncementSchema,
+  AnnouncementReadInputSchema,
   AnnouncementSummaryPageSchema,
   AnnouncementVersionCommandSchema,
 } from '../../../shared/contracts/announcements.js';
@@ -82,19 +83,23 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
       options.service.getVisible(session(request).user.id, request.params.announcementId),
   );
 
-  app.post<{ Body: Record<string, never>; Params: { announcementId: string } }>(
+  app.post<{ Body: typeof AnnouncementReadInputSchema.static; Params: { announcementId: string } }>(
     '/api/v1/me/announcements/:announcementId/read',
     {
       preHandler: requireSession,
       schema: {
-        body: Type.Object({}, { additionalProperties: false }),
+        body: AnnouncementReadInputSchema,
         params: Parameters,
         response: { 204: Type.Null() },
         tags: ['announcements'],
       },
     },
     async (request, reply) => {
-      await options.service.markRead(session(request).user.id, request.params.announcementId);
+      await options.service.markRead(
+        session(request).user.id,
+        request.params.announcementId,
+        request.body.version,
+      );
       return reply.status(204).send();
     },
   );

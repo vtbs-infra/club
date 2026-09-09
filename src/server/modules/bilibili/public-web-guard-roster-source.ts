@@ -1,4 +1,4 @@
-import { BilibiliApiClient } from 'bilibili-live-danmaku';
+import { PublicWebClient } from './public-web-client.js';
 
 import {
   GUARD_ROSTER_PAGE_BYTE_LIMIT,
@@ -71,31 +71,14 @@ function parseMember(value: unknown): GuardRosterMember {
 export class PublicWebGuardRosterSource implements GuardRosterSource {
   public readonly name = 'bilibili-public-web';
   public readonly version = 'topListNew-v2';
-  private readonly client: BilibiliApiClient;
-  private initialized = false;
+  private readonly client: PublicWebClient;
 
-  public constructor(private readonly fetchImplementation: typeof fetch = globalThis.fetch) {
-    this.client = new BilibiliApiClient({ fetch: fetchImplementation });
-  }
-
-  private async initialize(signal: AbortSignal): Promise<void> {
-    if (this.initialized) return;
-    signal.throwIfAborted();
-    const initializer = new BilibiliApiClient({
-      fetch: (input, init) =>
-        this.fetchImplementation(input, {
-          ...init,
-          signal,
-        }),
-    });
-    await initializer.initCookie();
-    signal.throwIfAborted();
-    this.client.setCookie(initializer.cookie);
-    this.initialized = true;
+  public constructor(fetchImplementation: typeof fetch = globalThis.fetch) {
+    this.client = new PublicWebClient(fetchImplementation);
   }
 
   public async fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage> {
-    await this.initialize(input.signal);
+    const client = await this.client.forOperation(input.signal);
     const url = new URL('https://api.live.bilibili.com/xlive/app-room/v2/guardTab/topListNew');
     for (const [key, value] of Object.entries({
       page: String(input.pageNumber),
@@ -107,7 +90,7 @@ export class PublicWebGuardRosterSource implements GuardRosterSource {
     })) {
       url.searchParams.set(key, value);
     }
-    const response = await this.client.request(url, {
+    const response = await client.request(url, {
       headers: { referer: `https://live.bilibili.com/${input.roomId}` },
       signal: input.signal,
     });

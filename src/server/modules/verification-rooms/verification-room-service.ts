@@ -2,6 +2,7 @@ import { asc, count, eq, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
+import { isUniqueViolation } from '../../infrastructure/db/errors.js';
 import { verificationRooms } from '../../infrastructure/db/schema/index.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
@@ -22,15 +23,6 @@ export interface UpdateVerificationRoomInput extends RequestAuditContext {
 }
 
 export const VERIFICATION_ROOM_LIMIT = 20;
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === '23505'
-  );
-}
 
 export class VerificationRoomService {
   private readonly audit: AuditService;
@@ -123,16 +115,17 @@ export class VerificationRoomService {
         .select()
         .from(verificationRooms)
         .where(eq(verificationRooms.id, input.roomId))
-        .limit(1);
+        .limit(1)
+        .for('update');
       if (!before) {
         throw new AppError('VERIFICATION_ROOM_NOT_FOUND', 'Verification room not found.', 404);
       }
       const [room] = await transaction
         .update(verificationRooms)
         .set({
-          displayName: input.displayName ?? before.displayName,
-          enabled: input.enabled ?? before.enabled,
-          priority: input.priority ?? before.priority,
+          ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+          ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+          ...(input.priority === undefined ? {} : { priority: input.priority }),
           updatedAt: new Date(),
         })
         .where(eq(verificationRooms.id, input.roomId))

@@ -1,4 +1,5 @@
-import { BilibiliApiClient } from 'bilibili-live-danmaku';
+import type { BilibiliApiClient } from 'bilibili-live-danmaku';
+import { PublicWebClient } from './public-web-client.js';
 
 import {
   CreatorProfileSourceError,
@@ -70,21 +71,15 @@ export function parseCreatorRoomProfile(
 export class PublicWebCreatorProfileSource implements CreatorProfileSource {
   public readonly name = 'bilibili-public-web';
   public readonly version = 'room-profile-v1';
-  private readonly client = new BilibiliApiClient();
-  private initializePromise: Promise<void> | null = null;
+  private readonly client: PublicWebClient;
 
-  private initialize(): Promise<void> {
-    this.initializePromise ??= this.client.initCookie().catch((error: unknown) => {
-      this.initializePromise = null;
-      throw error;
-    });
-    return this.initializePromise;
+  public constructor(fetchImplementation: typeof fetch = globalThis.fetch) {
+    this.client = new PublicWebClient(fetchImplementation);
   }
 
-  private async request(url: URL, signal: AbortSignal): Promise<unknown> {
-    const response = await this.client.request(url, {
+  private async request(client: BilibiliApiClient, url: URL): Promise<unknown> {
+    const response = await client.request(url, {
       headers: { referer: 'https://live.bilibili.com/' },
-      signal,
     });
     if (!response.ok) {
       throw new Error(`Bilibili creator profile request failed with HTTP ${response.status}.`);
@@ -94,15 +89,15 @@ export class PublicWebCreatorProfileSource implements CreatorProfileSource {
 
   public async fetchByUid(biliUid: string, signal: AbortSignal): Promise<BilibiliCreatorProfile> {
     if (!/^[0-9]{1,32}$/.test(biliUid)) throw new Error('Invalid Bilibili UID.');
-    await this.initialize();
+    const client = await this.client.forOperation(signal);
     const lookupUrl = new URL('https://api.live.bilibili.com/room/v1/Room/getRoomInfoOld');
     lookupUrl.searchParams.set('mid', biliUid);
-    const roomAlias = parseCreatorRoomLookup(await this.request(lookupUrl, signal));
+    const roomAlias = parseCreatorRoomLookup(await this.request(client, lookupUrl));
 
     const profileUrl = new URL(
       'https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom',
     );
     profileUrl.searchParams.set('room_id', roomAlias);
-    return parseCreatorRoomProfile(await this.request(profileUrl, signal), biliUid);
+    return parseCreatorRoomProfile(await this.request(client, profileUrl), biliUid);
   }
 }

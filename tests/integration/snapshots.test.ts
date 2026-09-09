@@ -393,7 +393,7 @@ integration('month-end snapshot capture', () => {
       .where(eq(snapshotRuns.id, run.id));
     expect(before?.value).toBe(0);
 
-    await service.approveLate(run.id, {
+    await service.approveLate(run.id, (await service.queries.getDetail(run.id)).attempts[0]!.id, {
       actorUserId: ownerId,
       ipAddress: '127.0.0.1',
       requestId: 'late-approval-test',
@@ -455,7 +455,7 @@ integration('month-end snapshot capture', () => {
     );
     expect(searchedCandidates.items.map((candidate) => candidate.biliUid)).toEqual(['10000042']);
 
-    await service.approveLate(run.id, {
+    await service.approveLate(run.id, (await service.queries.getDetail(run.id)).attempts[0]!.id, {
       actorUserId: ownerId,
       ipAddress: '127.0.0.1',
       requestId: 'large-late-approval-test',
@@ -489,7 +489,7 @@ integration('month-end snapshot capture', () => {
       failureCode: 'DUPLICATE_UID',
     });
     await expect(
-      service.approveLate(run.id, {
+      service.approveLate(run.id, (await service.queries.getDetail(run.id)).attempts[0]!.id, {
         actorUserId: ownerId,
         ipAddress: '127.0.0.1',
         requestId: 'inconsistent-approval-test',

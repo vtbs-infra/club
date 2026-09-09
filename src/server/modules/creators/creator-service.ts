@@ -3,6 +3,7 @@ import { and, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizz
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
+import { isUniqueViolation } from '../../infrastructure/db/errors.js';
 import {
   bilibiliBindings,
   creators,
@@ -62,12 +63,6 @@ function encodeCursor(row: CreatorCursor): string {
 
 function escapedPrefix(value: string): string {
   return `${value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-}
-
-function uniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  if ('code' in error && error.code === '23505') return true;
-  return 'cause' in error && uniqueViolation(error.cause);
 }
 
 function normalizeTimezone(value: string): string {
@@ -371,7 +366,7 @@ export class CreatorService {
         return { ...creator, email: locked.email, userName: locked.name };
       });
     } catch (error) {
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new AppError(
           'CREATOR_IDENTITY_CONFLICT',
           'This account, Bilibili UID, or live room is already assigned.',
@@ -542,7 +537,7 @@ export class CreatorService {
         return this.record(updated.id, transaction);
       });
     } catch (error) {
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new AppError(
           'CREATOR_ROOM_CONFLICT',
           'The refreshed Bilibili live room is already assigned to another creator.',

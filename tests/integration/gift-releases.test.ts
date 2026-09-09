@@ -70,5 +70,18 @@ integration('gift release lifecycle', () => {
       title: '直接发布时输入的新标题',
       version: draft.version + 1,
     });
+    await expect(
+      releaseService.publish(
+        creatorId,
+        draft.id,
+        {
+          ...initial,
+          title: '另一页面尚未发布的内容',
+          expectedVersion: draft.version,
+        },
+        { actorUserId: creatorUserId },
+      ),
+    ).rejects.toMatchObject({ code: 'GIFT_RELEASE_NOT_PUBLISHABLE' });
+    expect((await releaseService.get(creatorId, draft.id)).title).toBe('直接发布时输入的新标题');
   });
 });

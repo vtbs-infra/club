@@ -39,6 +39,11 @@ export const AnnouncementVersionCommandSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AnnouncementReadInputSchema = Type.Object(
+  { version: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+
 export const AnnouncementSchema = Type.Object({
   body: Type.String(),
   createdAt: DateTimeSchema,

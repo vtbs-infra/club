@@ -42,7 +42,7 @@ const failureLabel: Readonly<Record<string, string>> = {
   MISSING_PAGE: '来源返回的分页缺失或顺序异常',
   PAGE_LIMIT_EXCEEDED: '来源返回的分页数量异常',
   PAGE_SIZE_EXCEEDED: '来源返回的单页数据超过安全上限',
-  PROCESS_INTERRUPTED: '应用在抓取完成前停止',
+  PROCESS_INTERRUPTED: '抓取执行已中断，结果未能完整保存',
   PROCESS_SHUTDOWN: '应用关闭时取消了未完成的抓取',
   SOURCE_FAILURE: 'B站名单来源请求失败',
   UNKNOWN_TIER: '名单包含无法识别的大航海等级',
@@ -56,6 +56,7 @@ export function AdminRostersPage() {
   const [memberSearchInput, setMemberSearchInput] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [decisionAttemptId, setDecisionAttemptId] = useState<string | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
@@ -148,14 +149,14 @@ export function AdminRostersPage() {
   };
   const retry = useMutation({ mutationFn: () => retryAdminRoster(runId!), onSuccess: refresh });
   const approve = useMutation({
-    mutationFn: () => approveAdminRoster(runId!),
+    mutationFn: () => approveAdminRoster(runId!, decisionAttemptId!),
     onSuccess: async () => {
       setApproveOpen(false);
       await refresh();
     },
   });
   const reject = useMutation({
-    mutationFn: (reason: string) => rejectAdminRoster(runId!, reason),
+    mutationFn: (reason: string) => rejectAdminRoster(runId!, decisionAttemptId!, reason),
     onSuccess: async () => {
       setRejectOpen(false);
       setRejectReason('');
@@ -315,6 +316,7 @@ export function AdminRostersPage() {
                         approve.reset();
                         reject.reset();
                         setApproveOpen(true);
+                        setDecisionAttemptId(approvalAttempt!.id);
                       }}
                       type="button"
                     >
@@ -327,6 +329,7 @@ export function AdminRostersPage() {
                         approve.reset();
                         reject.reset();
                         setRejectOpen(true);
+                        setDecisionAttemptId(approvalAttempt!.id);
                       }}
                       type="button"
                     >

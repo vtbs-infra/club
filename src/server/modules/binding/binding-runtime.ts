@@ -24,8 +24,7 @@ export function createBindingRuntime(input: {
   return {
     ...runtime,
     async close() {
-      await runtime.close();
-      await input.connections.close();
+      await Promise.all([input.connections.close(), runtime.close()]);
     },
   };
 }

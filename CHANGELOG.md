@@ -6,6 +6,25 @@ All notable Club changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Replace private browser caches and page state across account changes and expired sessions.
+- Bind roster decisions to the reviewed attempt, recover abandoned captures on each scheduler pass,
+  and drain concurrent page requests before completing a failed attempt.
+- Bound Bilibili initialization and requests by operation cancellation; drain connection setup,
+  connectivity tests, history requests, and active message delivery during shutdown.
+- Keep release form versions tied to their loaded content and read full configurations consistently.
+  Repeated publication returns a conflict instead of acknowledging unapplied content.
+- Serialize address-book changes and verification-room edits; report duplicate rooms as conflicts.
+- Acknowledge the displayed announcement version after its body loads and refresh gift status at
+  claim-window boundaries. Permit local cover previews under production CSP and preserve HTTP
+  parser and upload errors as client errors.
+
+### Breaking changes
+
+- Roster approval and rejection require `expectedAttemptId`; announcement read requests require
+  `version`. Release detail responses always include form fields, packages, and all tier mappings.
+
 ## [0.2.0] - 2026-09-01
 
 ### Changed

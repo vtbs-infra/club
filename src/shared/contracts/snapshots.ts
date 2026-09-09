@@ -4,6 +4,15 @@ import { DateTimeSchema, GuardTierSchema, IdSchema, Nullable } from './common.js
 
 export const SNAPSHOT_ATTEMPT_LIMIT = 3;
 
+export const SnapshotApprovalInputSchema = Type.Object(
+  { expectedAttemptId: IdSchema },
+  { additionalProperties: false },
+);
+export const SnapshotRejectionInputSchema = Type.Object(
+  { expectedAttemptId: IdSchema, reason: Type.String({ minLength: 3, maxLength: 500 }) },
+  { additionalProperties: false },
+);
+
 export const SnapshotRunStatusSchema = Type.Union([
   Type.Literal('SCHEDULED'),
   Type.Literal('RUNNING'),

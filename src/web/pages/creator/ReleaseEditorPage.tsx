@@ -67,6 +67,7 @@ export function ReleaseEditorPage() {
   const identity = useQuery({ queryFn: getIdentity, queryKey: ['identity'] });
   const formRef = useRef<HTMLFormElement>(null);
   const initialized = useRef<string | null>(null);
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [eligibilityMonth, setEligibilityMonth] = useState(monthStart(PLATFORM_TIME_ZONE));
@@ -99,8 +100,15 @@ export function ReleaseEditorPage() {
   const timeZone = identity.data?.creator?.timezone ?? PLATFORM_TIME_ZONE;
 
   useEffect(() => {
-    if (!identity.data?.creator || !release.data || initialized.current === release.data.id) return;
+    if (!identity.data?.creator || !release.data) return;
+    if (
+      initialized.current === release.data.id &&
+      (editingVersion === release.data.version ||
+        (release.data.status === 'DRAFT' && hasUnsavedChanges))
+    )
+      return;
     initialized.current = release.data.id;
+    setEditingVersion(release.data.version);
     setTitle(release.data.title);
     setDescription(release.data.description);
     setEligibilityMonth(release.data.eligibilityMonth);
@@ -109,27 +117,23 @@ export function ReleaseEditorPage() {
     setFulfillmentMode(release.data.fulfillmentMode);
     setPublicVisible(release.data.publicVisible);
     setPackages(
-      release.data.packages?.map((package_) => ({
+      release.data.packages.map((package_) => ({
         description: package_.description,
         items: package_.items.map((item) => ({ ...item })),
         name: package_.name,
-      })) ?? [],
+      })),
     );
-    setTierPackageIndexes({
-      ADMIRAL: release.data.tierPackageIndexes?.ADMIRAL ?? 0,
-      CAPTAIN: release.data.tierPackageIndexes?.CAPTAIN ?? 0,
-      GOVERNOR: release.data.tierPackageIndexes?.GOVERNOR ?? 0,
-    });
+    setTierPackageIndexes({ ...release.data.tierPackageIndexes });
     setFields(
-      release.data.formFields?.map((field) => ({
+      release.data.formFields.map((field) => ({
         ...field,
         options: [...(field.options ?? [])],
-      })) ?? [],
+      })),
     );
     setCoverFile(null);
     setDirty(false);
     setValidationError(null);
-  }, [identity.data?.creator, release.data, timeZone]);
+  }, [editingVersion, hasUnsavedChanges, identity.data?.creator, release.data, timeZone]);
 
   useEffect(() => {
     if (!isNew || !identity.data?.creator || dirty || initialized.current === `new:${timeZone}`)
@@ -195,14 +199,14 @@ export function ReleaseEditorPage() {
         ? createCreatorRelease(input())
         : updateCreatorRelease(releaseId, {
             ...input(),
-            expectedVersion: release.data!.version,
+            expectedVersion: editingVersion!,
           }),
     onSuccess: async (saved) => {
+      queryClient.setQueryData(['creator', 'releases', saved.id], saved);
       setDirty(false);
       setValidationError(null);
       await queryClient.invalidateQueries({ queryKey: ['creator', 'releases'] });
       if (isNew) await navigate(`/creator/releases/${saved.id}`, { replace: true });
-      else queryClient.setQueryData(['creator', 'releases', releaseId], saved);
     },
   });
   const upload = useMutation({
@@ -219,7 +223,7 @@ export function ReleaseEditorPage() {
     mutationFn: () =>
       publishCreatorRelease(releaseId, {
         ...input(),
-        expectedVersion: release.data!.version,
+        expectedVersion: editingVersion!,
       }),
     onSuccess: async (published) => {
       setConfirmation(null);
@@ -250,6 +254,14 @@ export function ReleaseEditorPage() {
   if (identity.isError || !identity.data?.creator)
     return <ErrorState error={identity.error} title="暂时无法读取主播资料" />;
   if (!isNew && (release.isError || !release.data)) return <ErrorState error={release.error} />;
+  const inputsEditable =
+    editable &&
+    !save.isPending &&
+    !publish.isPending &&
+    !upload.isPending &&
+    !remove.isPending &&
+    !close.isPending &&
+    (isNew || editingVersion !== null);
 
   return (
     <div className="stack-lg release-editor-page">
@@ -322,6 +334,7 @@ export function ReleaseEditorPage() {
         onChange={markDirty}
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
+          if (!inputsEditable) return;
           if (!validateEditor()) return;
           save.mutate();
         }}
@@ -336,7 +349,7 @@ export function ReleaseEditorPage() {
           claimDeadlineAt={claimDeadlineAt}
           claimStartAt={claimStartAt}
           description={description}
-          editable={editable}
+          editable={inputsEditable}
           eligibilityMonth={eligibilityMonth}
           fulfillmentMode={fulfillmentMode}
           onClaimDeadlineAtChange={setClaimDeadlineAt}
@@ -353,7 +366,7 @@ export function ReleaseEditorPage() {
         <CoverSection
           coverImageUrl={release.data?.coverImageUrl}
           coverPreviewUrl={coverPreviewUrl}
-          editable={editable}
+          editable={inputsEditable}
           isNew={isNew}
           onFileChange={setCoverFile}
           onUpload={() => upload.mutate()}
@@ -363,20 +376,20 @@ export function ReleaseEditorPage() {
           uploadPending={upload.isPending}
         />
         <PackageEditorSection
-          editable={editable}
+          editable={inputsEditable}
           onDirty={markDirty}
           packages={packages}
           setPackages={setPackages}
           setTierPackageIndexes={setTierPackageIndexes}
         />
         <TierRulesSection
-          editable={editable}
+          editable={inputsEditable}
           packages={packages}
           setTierPackageIndexes={setTierPackageIndexes}
           tierPackageIndexes={tierPackageIndexes}
         />
         <ClaimFieldsSection
-          editable={editable}
+          editable={inputsEditable}
           fields={fields}
           onDirty={markDirty}
           setFields={setFields}

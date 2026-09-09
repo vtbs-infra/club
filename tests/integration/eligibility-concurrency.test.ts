@@ -119,7 +119,8 @@ integration('publication and roster finalization coordination', () => {
         await Promise.all([leader, follower]);
         spy.mockRestore();
       }
-      await Promise.all([publish(), finalize(), finalize()]);
+      await expect(publish()).rejects.toMatchObject({ code: 'GIFT_RELEASE_NOT_PUBLISHABLE' });
+      await Promise.all([finalize(), finalize()]);
       expect(
         await fixture.database.orm
           .select({ value: count() })

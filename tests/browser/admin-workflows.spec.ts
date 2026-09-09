@@ -126,6 +126,7 @@ test('resolves the exact binding recorded by a UID conflict', async ({ appUrl, p
 });
 
 test('shows the exact late-attempt members before approval', async ({ appUrl, page }) => {
+  let approvalInput: Record<string, unknown> | null = null;
   const creatorId = testId(60);
   const runId = testId(61);
   const attemptId = testId(62);
@@ -197,6 +198,10 @@ test('shows the exact late-attempt members before approval', async ({ appUrl, pa
     if (pathname === '/api/v1/me') return adminIdentity();
     if (pathname === '/api/v1/admin/rosters') return rosterPage;
     if (pathname === `/api/v1/admin/rosters/${runId}`) return detail;
+    if (pathname === `/api/v1/admin/rosters/${runId}/approve-late`) {
+      approvalInput = requestJsonObject(request);
+      return {};
+    }
     if (pathname === `/api/v1/admin/rosters/${runId}/attempts/${attemptId}/members`) {
       return candidates;
     }
@@ -208,7 +213,10 @@ test('shows the exact late-attempt members before approval', async ({ appUrl, pa
   await expect(page.getByRole('heading', { name: '待确认成员' })).toBeVisible();
   await expect(page.getByText('待确认舰长')).toBeVisible();
   await page.getByRole('button', { name: '确认并冻结' }).click();
-  await expect(page.getByRole('dialog', { name: '确认冻结这次迟到名单？' })).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: '确认冻结这次迟到名单？' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: '确认并冻结' }).click();
+  await expect.poll(() => approvalInput).toEqual({ expectedAttemptId: attemptId });
 });
 
 test('registers a creator from verified identity without editable Bilibili fields', async ({

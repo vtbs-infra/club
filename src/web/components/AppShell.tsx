@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Bell,
@@ -22,10 +22,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Suspense, useState } from 'react';
-import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { getIdentity, signOut, type AccountRole, type Identity } from '../api/client';
 import { ApiError } from '../api/http';
+import { useSession } from '../app/session-context';
 import { ProductBrand } from './ProductBrand';
 import { ErrorState, LoadingState } from './Ui';
 
@@ -125,7 +126,8 @@ function Shell({
   readonly identity: Identity;
 }) {
   const location = useLocation();
-  const queryClient = useQueryClient();
+  const { endSession } = useSession();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const navigation =
     area === 'admin' ? adminNavigation : area === 'creator' ? creatorNavigation : userNavigation;
@@ -232,11 +234,8 @@ function Shell({
                       type="button"
                       onClick={async () => {
                         await signOut();
-                        queryClient.removeQueries({
-                          predicate: (query) => query.queryKey[0] !== 'appearance',
-                        });
-                        queryClient.getMutationCache().clear();
-                        window.location.replace('/login');
+                        endSession();
+                        await navigate('/login', { replace: true });
                       }}
                     >
                       <LogOut aria-hidden="true" size={16} />

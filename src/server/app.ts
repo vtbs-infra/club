@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 import Fastify, { LogController, type FastifyError } from 'fastify';
 import pino, { type DestinationStream } from 'pino';
 
-import { AppError } from '../shared/errors/app-error.js';
+import { publicHttpError } from './infrastructure/security/http-error.js';
 import { APPLICATION_VERSION } from './application-version.js';
 import { loadConfig, type AppConfig } from './config/env.js';
 import { SystemClock, type Clock } from './infrastructure/clock/clock.js';
@@ -209,7 +209,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     void reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=()');
     void reply.header(
       'content-security-policy',
-      "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; img-src 'self' data: https:; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'; form-action 'self'; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; style-src 'self' 'unsafe-inline'; script-src 'self'",
     );
     if (
       request.url.startsWith('/api/') ||
@@ -264,19 +264,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   }
 
   app.setErrorHandler(async (error: FastifyError, request, reply) => {
-    const statusCode = error instanceof AppError ? error.statusCode : error.validation ? 400 : 500;
-    const code =
-      error instanceof AppError
-        ? error.code
-        : error.validation
-          ? 'VALIDATION_ERROR'
-          : 'INTERNAL_SERVER_ERROR';
-    const message =
-      error instanceof AppError
-        ? error.message
-        : error.validation
-          ? 'The request did not match the expected schema.'
-          : 'An unexpected error occurred.';
+    const { statusCode, code, message } = publicHttpError(error);
 
     if (statusCode >= 500) request.log.error({ err: error }, 'request failed');
     else request.log.info({ code, statusCode }, 'request rejected');
