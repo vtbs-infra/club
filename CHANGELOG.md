@@ -6,26 +6,7 @@ All notable Club changes are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- Replace private browser caches and page state across account changes and expired sessions.
-- Bind roster decisions to the reviewed attempt, recover abandoned captures on each scheduler pass,
-  and drain concurrent page requests before completing a failed attempt.
-- Bound Bilibili initialization and requests by operation cancellation; drain connection setup,
-  connectivity tests, history requests, and active message delivery during shutdown.
-- Keep release form versions tied to their loaded content and read full configurations consistently.
-  Repeated publication returns a conflict instead of acknowledging unapplied content.
-- Serialize address-book changes and verification-room edits; report duplicate rooms as conflicts.
-- Acknowledge the displayed announcement version after its body loads and refresh gift status at
-  claim-window boundaries. Permit local cover previews under production CSP and preserve HTTP
-  parser and upload errors as client errors.
-
-### Breaking changes
-
-- Roster approval and rejection require `expectedAttemptId`; announcement read requests require
-  `version`. Release detail responses always include form fields, packages, and all tier mappings.
-
-## [0.2.0] - 2026-09-01
+## [0.2.0] - 2026-09-09
 
 ### Changed
 
@@ -48,6 +29,20 @@ All notable Club changes are documented here. The format follows
 - Database and UI state types use finite shared contracts. Bilibili fakes are explicitly injected
   by tests; production exposes only the supported public-web sources and local private storage.
 
+### Fixed
+
+- Replace private browser caches and page state across account changes and expired sessions.
+- Bind roster decisions to the reviewed attempt, recover abandoned captures on each scheduler pass,
+  and drain concurrent page requests before completing a failed attempt.
+- Bound Bilibili initialization and requests by operation cancellation; drain connection setup,
+  connectivity tests, history requests, and active message delivery during shutdown.
+- Keep release form versions tied to their loaded content and read full configurations consistently.
+  Repeated publication returns a conflict instead of acknowledging unapplied content.
+- Serialize address-book changes and verification-room edits; report duplicate rooms as conflicts.
+- Acknowledge the displayed announcement version after its body loads and refresh gift status at
+  claim-window boundaries. Permit local cover previews under production CSP and preserve HTTP
+  parser and upload errors as client errors.
+
 ### Retained capabilities
 
 - Verified creator registration, immutable binding-conflict ownership, audited conflict decisions,
@@ -67,6 +62,8 @@ All notable Club changes are documented here. The format follows
 
 ### Breaking changes
 
+- Roster approval and rejection require `expectedAttemptId`; announcement read requests require
+  `version`. Release detail responses always include form fields, packages, and all tier mappings.
 - v0.2 requires an empty PostgreSQL database with its single fresh-install baseline. No v0.1 or
   intermediate-model upgrade, dual-write, or compatibility path is provided.
 - Separate shipment/tracking tables, carrier providers, tracking URLs and events, delivery sync,

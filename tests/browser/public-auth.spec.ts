@@ -105,6 +105,11 @@ test('clears the credential form when the user signs out', async ({ appUrl, page
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return recipientIdentity({ id: testId(11) });
     if (pathname === '/api/v1/me/bilibili-binding') return null;
+    if (pathname === '/api/v1/me/gifts/overview')
+      return {
+        counts: { claimable: 0, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
+        urgent: null,
+      };
     if (pathname === '/api/v1/me/gifts' || pathname === '/api/v1/me/announcements') {
       return { items: [], nextCursor: null };
     }
@@ -117,6 +122,7 @@ test('clears the credential form when the user signs out', async ({ appUrl, page
   await page.getByLabel('密码').fill('correct-horse-battery-staple');
   await page.getByRole('button', { name: '登录' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole('heading', { name: '欢迎回来，测试用户！' })).toBeVisible();
 
   await page.getByRole('button', { name: '测试用户的账号菜单' }).click();
   await page.getByRole('menuitem', { name: '退出登录' }).click();
