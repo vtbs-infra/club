@@ -1,11 +1,11 @@
-import { eq } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import type { LightMyRequestResponse } from 'fastify';
 
 import type { buildApp } from './test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
-import { users } from '../../src/server/infrastructure/db/schema/index.js';
+import { passwordCredentials, users } from '../../src/server/infrastructure/db/schema/index.js';
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';
-import { insertTestBilibiliBinding } from './creator-fixture.js';
+import { hashPassword } from '../../src/server/modules/auth/password.js';
 
 export const TEST_ORIGIN = 'http://localhost:3000';
 export const TEST_PASSWORD = 'correct-horse-battery-staple';
@@ -23,48 +23,46 @@ export function sessionCookie(response: LightMyRequestResponse): string {
   return cookie;
 }
 
-export async function registerTestUser(input: {
-  readonly app: InjectableApp;
+/** Business fixtures start with an already verified identity; auth tests exercise the public registration flow. */
+export async function seedTestUser(input: {
   readonly database: DatabaseService;
-  readonly email: string;
+  readonly username: string;
   readonly name: string;
+  readonly bilibiliUid?: string;
   readonly password?: string;
 }): Promise<string> {
-  const response = await input.app.inject({
-    method: 'POST',
-    payload: {
-      email: input.email,
-      name: input.name,
-      password: input.password ?? TEST_PASSWORD,
-    },
-    url: '/api/auth/sign-up/email',
+  const bilibiliUid =
+    input.bilibiliUid ??
+    BigInt(
+      '0x' + createHash('sha256').update(input.username).digest('hex').slice(0, 12),
+    ).toString();
+  const passwordHash = await hashPassword(input.password ?? TEST_PASSWORD);
+  return input.database.orm.transaction(async (transaction) => {
+    const [user] = await transaction
+      .insert(users)
+      .values({ username: input.username, name: input.name, bilibiliUid })
+      .returning();
+    if (!user) throw new Error('User fixture insert returned no row.');
+    await transaction.insert(passwordCredentials).values({ userId: user.id, passwordHash });
+    return user.id;
   });
-  if (response.statusCode !== 200) {
-    throw new Error(
-      `Registration failed for ${input.email}: ${response.statusCode} ${response.body}`,
-    );
-  }
-  const [user] = await input.database.orm
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, input.email))
-    .limit(1);
-  if (!user) throw new Error(`Registration did not create ${input.email}.`);
-  return user.id;
 }
 
 export async function signInTestUser(input: {
   readonly app: InjectableApp;
-  readonly email: string;
+  readonly username: string;
   readonly password?: string;
 }): Promise<string> {
   const response = await input.app.inject({
     method: 'POST',
-    payload: { email: input.email, password: input.password ?? TEST_PASSWORD },
-    url: '/api/auth/sign-in/email',
+    headers: { origin: TEST_ORIGIN },
+    payload: { username: input.username, password: input.password ?? TEST_PASSWORD },
+    url: '/api/v1/auth/login',
   });
   if (response.statusCode !== 200) {
-    throw new Error(`Sign-in failed for ${input.email}: ${response.statusCode} ${response.body}`);
+    throw new Error(
+      `Sign-in failed for ${input.username}: ${response.statusCode} ${response.body}`,
+    );
   }
   return sessionCookie(response);
 }
@@ -72,15 +70,8 @@ export async function signInTestUser(input: {
 export async function promoteTestCreator(input: {
   readonly adminCookie: string;
   readonly app: InjectableApp;
-  readonly database: DatabaseService;
-  readonly suffix: string;
   readonly userId: string;
 }): Promise<CreatorRecord> {
-  await insertTestBilibiliBinding(input.database, {
-    biliDisplayName: `Creator 91${input.suffix}`,
-    biliUid: `91${input.suffix}`,
-    userId: input.userId,
-  });
   const response = await input.app.inject({
     headers: { cookie: input.adminCookie, origin: TEST_ORIGIN },
     method: 'POST',

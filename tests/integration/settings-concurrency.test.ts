@@ -27,7 +27,7 @@ describe('serialized settings changes', () => {
     await fixture.database.orm.insert(users).values({
       id: actorUserId,
       name: 'Admin',
-      email: 'admin@example.com',
+      username: 'admin',
       role: 'PLATFORM_ADMIN',
     });
   });

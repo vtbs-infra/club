@@ -12,7 +12,7 @@ import type { AnnouncementContent } from '../../src/shared/contracts/announcemen
 import type { PortalHome } from '../../src/shared/contracts/portal.js';
 import {
   promoteTestCreator,
-  registerTestUser,
+  seedTestUser,
   signInTestUser,
   TEST_ORIGIN,
   TEST_PASSWORD,
@@ -41,9 +41,8 @@ integration('public portal visibility', () => {
     const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
     const auth = createAuth({ config, database });
     await bootstrapPlatformAdmin({
-      auth,
       database,
-      email: 'admin@example.com',
+      username: 'admin',
       name: 'Platform Admin',
       password: TEST_PASSWORD,
     });
@@ -55,36 +54,32 @@ integration('public portal visibility', () => {
       storage: storage.driver,
     });
 
-    const creatorOneUserId = await registerTestUser({
-      app,
+    const creatorOneUserId = await seedTestUser({
       database,
-      email: 'creator-one@example.com',
+      username: 'creator_one',
+      bilibiliUid: '91001',
       name: 'Creator Account One',
     });
-    const creatorTwoUserId = await registerTestUser({
-      app,
+    const creatorTwoUserId = await seedTestUser({
       database,
-      email: 'creator-two@example.com',
+      username: 'creator_two',
+      bilibiliUid: '91002',
       name: 'Creator Account Two',
     });
-    adminCookie = await signInTestUser({ app, email: 'admin@example.com' });
+    adminCookie = await signInTestUser({ app, username: 'admin' });
     const creatorOne = await promoteTestCreator({
       adminCookie,
       app,
-      database,
-      suffix: '001',
       userId: creatorOneUserId,
     });
     creatorOneId = creatorOne.id;
     await promoteTestCreator({
       adminCookie,
       app,
-      database,
-      suffix: '002',
       userId: creatorTwoUserId,
     });
-    creatorOneCookie = await signInTestUser({ app, email: 'creator-one@example.com' });
-    creatorTwoCookie = await signInTestUser({ app, email: 'creator-two@example.com' });
+    creatorOneCookie = await signInTestUser({ app, username: 'creator_one' });
+    creatorTwoCookie = await signInTestUser({ app, username: 'creator_two' });
   });
 
   afterAll(async () => {

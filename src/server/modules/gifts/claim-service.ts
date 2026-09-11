@@ -44,7 +44,7 @@ export class GiftClaimService {
   }
 
   private async verifiedIdentity(userId: string, executor: AppDatabase = this.database.orm) {
-    const [binding] = await executor
+    const [identity] = await executor
       .select({
         biliDisplayName: users.name,
         biliUid: users.bilibiliUid,
@@ -52,7 +52,7 @@ export class GiftClaimService {
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    return binding?.biliUid ? { ...binding, biliUid: binding.biliUid } : null;
+    return identity?.biliUid ? { ...identity, biliUid: identity.biliUid } : null;
   }
 
   private validateOptions(
@@ -127,8 +127,8 @@ export class GiftClaimService {
           409,
         );
       }
-      const binding = await this.verifiedIdentity(userId, transaction);
-      if (!binding || binding.biliUid !== order.biliUid) {
+      const identity = await this.verifiedIdentity(userId, transaction);
+      if (!identity || identity.biliUid !== order.biliUid) {
         throw new AppError(
           'BILIBILI_UID_REQUIRED',
           'Bind the Bilibili UID associated with this gift before claiming it.',

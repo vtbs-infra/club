@@ -25,9 +25,9 @@ import { formatDate, formatMonth, relativeDeadline } from '../lib/format';
 
 const processSteps = [
   {
-    copy: '在平台指定直播间发送一次性验证码，完成 B站 UID 绑定。',
+    copy: '在平台指定直播间发送一次性验证码，验证 B站 UID 后完成注册。',
     icon: Link2,
-    title: '绑定账号',
+    title: '验证身份',
   },
   {
     copy: '名单和主播发布的礼物匹配后，礼物单会自动出现。',
@@ -160,7 +160,7 @@ export function HomePage() {
               <span className="portal-hero-title-accent">都在这里。</span>
             </h1>
             <p className="portal-hero-intro">
-              绑定你的 B站 UID，平台会自动匹配舰长礼物资格。从确认领取、填写地址到查看单号，
+              注册时验证 B站 UID，平台会自动匹配舰长礼物资格。从确认领取、填写地址到查看单号，
               每一步都清楚可见。
             </p>
             <div className="portal-hero-actions">
@@ -350,7 +350,7 @@ export function HomePage() {
           <p>
             {signedIn
               ? '你的礼物资格、领取记录和发货记录都集中在工作台。'
-              : '创建账号并绑定 B站 UID，后续礼物资格会自动匹配到你的工作台。'}
+              : '验证 B站 UID 并创建账号，后续礼物资格会自动匹配到你的工作台。'}
           </p>
         </div>
         <div className="portal-final-actions">

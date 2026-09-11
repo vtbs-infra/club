@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Gift,
   LayoutDashboard,
-  Link2,
   LogOut,
   MapPin,
   Megaphone,
@@ -193,7 +192,7 @@ function Shell({
                 >
                   <DropdownMenu.Label className="account-popover-header">
                     <strong>{identity.user.name}</strong>
-                    <small>{identity.user.email}</small>
+                    <small>{identity.user.username}</small>
                   </DropdownMenu.Label>
                   {identity.user.role === 'CREATOR' ? (
                     <DropdownMenu.Item asChild>
@@ -213,12 +212,6 @@ function Shell({
                         <Link to="/account">
                           <UserRound aria-hidden="true" size={16} />
                           <span>账号</span>
-                        </Link>
-                      </DropdownMenu.Item>
-                      <DropdownMenu.Item asChild>
-                        <Link to="/account/bilibili">
-                          <Link2 aria-hidden="true" size={16} />
-                          <span>B站绑定</span>
                         </Link>
                       </DropdownMenu.Item>
                       <DropdownMenu.Item asChild>

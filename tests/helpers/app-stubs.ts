@@ -1,5 +1,5 @@
 import type { AppDatabase, DatabaseService } from '../../src/server/infrastructure/db/database.js';
-import type { BindingRuntime } from '../../src/server/modules/binding/binding-runtime.js';
+import type { IdentityRuntime } from '../../src/server/modules/auth/identity-runtime.js';
 import type { GiftMediaRuntime } from '../../src/server/modules/gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../../src/server/modules/snapshots/snapshot-runtime.js';
 
@@ -28,9 +28,9 @@ export function runtimeStatus(state: 'DEGRADED' | 'RUNNING' | 'STOPPED') {
   };
 }
 
-export function bindingRuntimeStub(
-  overrides: Partial<Pick<BindingRuntime, 'close' | 'getStatus' | 'start'>> = {},
-): BindingRuntime {
+export function identityRuntimeStub(
+  overrides: Partial<Pick<IdentityRuntime, 'close' | 'getStatus' | 'start'>> = {},
+): IdentityRuntime {
   return {
     close: () => Promise.resolve(),
     getStatus: () => runtimeStatus('STOPPED'),

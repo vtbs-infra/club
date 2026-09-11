@@ -13,7 +13,7 @@ import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-boo
 import type { Identity } from '../../src/shared/contracts/creators.js';
 import {
   promoteTestCreator,
-  registerTestUser,
+  seedTestUser,
   signInTestUser,
   TEST_ORIGIN,
   TEST_PASSWORD,
@@ -38,9 +38,8 @@ integration('exclusive platform roles and creator ownership', () => {
     const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
     const auth = createAuth({ config, database });
     await bootstrapPlatformAdmin({
-      auth,
       database,
-      email: 'admin@example.com',
+      username: 'admin',
       name: 'Platform Admin',
       password: TEST_PASSWORD,
     });
@@ -60,37 +59,25 @@ integration('exclusive platform roles and creator ownership', () => {
   });
 
   it('promotes one creator profile and scopes creator APIs to its session', async () => {
-    const recipientId = await registerTestUser({
-      app,
+    const recipientId = await seedTestUser({
       database,
-      email: 'recipient@example.com',
+      username: 'recipient',
       name: 'Recipient',
     });
-    const creatorOneUserId = await registerTestUser({
-      app,
+    const creatorOneUserId = await seedTestUser({
       database,
-      email: 'creator-one@example.com',
+      username: 'creator_one',
+      bilibiliUid: '91001',
       name: 'Creator Account One',
     });
-    const creatorTwoUserId = await registerTestUser({
-      app,
+    const creatorTwoUserId = await seedTestUser({
       database,
-      email: 'creator-two@example.com',
+      username: 'creator_two',
+      bilibiliUid: '91002',
       name: 'Creator Account Two',
     });
-    const recipientCookie = await signInTestUser({ app, email: 'recipient@example.com' });
-    const adminCookie = await signInTestUser({ app, email: 'admin@example.com' });
-
-    const unboundPromotion = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: { timezone: 'Asia/Shanghai', userId: recipientId },
-      url: '/api/v1/admin/creators',
-    });
-    expect(unboundPromotion.statusCode).toBe(409);
-    expect(unboundPromotion.json()).toMatchObject({
-      error: { code: 'CREATOR_BILIBILI_BINDING_REQUIRED' },
-    });
+    const recipientCookie = await signInTestUser({ app, username: 'recipient' });
+    const adminCookie = await signInTestUser({ app, username: 'admin' });
 
     const identity = await app.inject({
       headers: { cookie: recipientCookie },
@@ -99,7 +86,7 @@ integration('exclusive platform roles and creator ownership', () => {
     });
     expect(identity.json<Identity>()).toMatchObject({
       creator: null,
-      user: { email: 'recipient@example.com', role: 'USER' },
+      user: { username: 'recipient', role: 'USER' },
     });
     expect(
       (
@@ -123,15 +110,11 @@ integration('exclusive platform roles and creator ownership', () => {
     const creatorOne = await promoteTestCreator({
       adminCookie,
       app,
-      database,
-      suffix: '001',
       userId: creatorOneUserId,
     });
     await promoteTestCreator({
       adminCookie,
       app,
-      database,
-      suffix: '002',
       userId: creatorTwoUserId,
     });
     const [recipient] = await database.orm
@@ -164,8 +147,8 @@ integration('exclusive platform roles and creator ownership', () => {
     });
     expect(duplicatePromotion.statusCode).toBe(409);
 
-    const creatorOneCookie = await signInTestUser({ app, email: 'creator-one@example.com' });
-    const creatorTwoCookie = await signInTestUser({ app, email: 'creator-two@example.com' });
+    const creatorOneCookie = await signInTestUser({ app, username: 'creator_one' });
+    const creatorTwoCookie = await signInTestUser({ app, username: 'creator_two' });
     const creatorIdentity = await app.inject({
       headers: { cookie: creatorOneCookie },
       method: 'GET',
@@ -188,21 +171,6 @@ integration('exclusive platform roles and creator ownership', () => {
         })
       ).statusCode,
     ).toBe(200);
-    const creatorBinding = await app.inject({
-      headers: { cookie: creatorOneCookie },
-      method: 'GET',
-      url: '/api/v1/me/bilibili-binding',
-    });
-    const immutableUnbind = await app.inject({
-      headers: { cookie: creatorOneCookie, origin: TEST_ORIGIN },
-      method: 'DELETE',
-      url: '/api/v1/me/bilibili-binding',
-    });
-    expect(immutableUnbind.statusCode).toBe(409);
-    expect(immutableUnbind.json()).toMatchObject({
-      error: { code: 'CREATOR_BILIBILI_BINDING_IMMUTABLE' },
-    });
-    expect(creatorBinding.json()).toMatchObject({ biliUid: '91001' });
     expect(
       (
         await app.inject({

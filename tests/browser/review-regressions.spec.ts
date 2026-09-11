@@ -16,7 +16,6 @@ import { expect, freezeBrowserTime, test, TEST_NOW } from './support/test.js';
 function defaultReply(path: string): unknown {
   if (path === '/api/v1/appearance') return { themePreset: 'moe' };
   if (path === '/api/v1/portal/home') return portalHome();
-  if (path === '/api/v1/me/bilibili-binding') return null;
   if (path === '/api/v1/me/gifts/overview')
     return {
       urgent: null,
@@ -42,7 +41,7 @@ test('drops all private cached data when an expired session signs into another a
   });
   await page.route('**/api/**', async (route) => {
     const path = requestPath(route.request());
-    if (path === '/api/auth/sign-in/email') {
+    if (path === '/api/v1/auth/login') {
       account = 'B';
       return fulfillJson(route, {});
     }
@@ -73,7 +72,7 @@ test('drops all private cached data when an expired session signs into another a
     await page.clock.fastForward(20_000);
     await page.locator('a.brand').first().click();
     await page.getByRole('link', { name: '登录', exact: true }).first().click();
-    await page.getByLabel('邮箱').fill('b@example.com');
+    await page.getByLabel('用户名').fill('b');
     await page.getByLabel('密码').fill('fixture-password');
     await page.getByRole('button', { name: '登录', exact: true }).click();
     await expect(page).toHaveURL(`${appUrl}/dashboard`);

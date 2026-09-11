@@ -8,8 +8,8 @@ describe('errorMessage', () => {
     expect(errorMessage(new ApiError('raw', 400, 'ANNOUNCEMENT_EXPIRY_INVALID'))).toBe(
       '公告失效时间必须晚于发布时间。',
     );
-    expect(errorMessage(new ApiError('raw', 403, 'BILIBILI_BINDING_REQUIRED'))).toBe(
-      '请先绑定这份礼物资格对应的 B站 UID。',
+    expect(errorMessage(new ApiError('raw', 403, 'BILIBILI_UID_REQUIRED'))).toBe(
+      '该账号没有领取所需的 B站身份。',
     );
   });
 

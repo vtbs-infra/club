@@ -10,7 +10,7 @@ import { auditLogs, giftOrders } from '../../src/server/infrastructure/db/schema
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
-import type { IssuedBilibiliChallenge } from '../../src/shared/contracts/binding.js';
+import type { IdentityChallenge } from '../../src/shared/contracts/auth.js';
 import type { CreatorRecord, Identity } from '../../src/shared/contracts/creators.js';
 import type { GiftOrderSummaryPage, GiftRelease } from '../../src/shared/contracts/gifts.js';
 import type { AdminSnapshotPage } from '../../src/shared/contracts/snapshots.js';
@@ -89,9 +89,8 @@ test('registers, verifies, publishes, claims, exports, ships and corrects using 
   const pageErrors: string[] = [];
   try {
     await bootstrapPlatformAdmin({
-      auth,
       database: fixture.database,
-      email: 'admin@e2e.test',
+      username: 'admin',
       name: '平台管理员',
       password: PASSWORD,
     });
@@ -103,64 +102,60 @@ test('registers, verifies, publishes, claims, exports, ships and corrects using 
       page.on('pageerror', (error) => pageErrors.push(error.message));
       await page.clock.setFixedTime(NOW);
     }
-    async function login(page: Page, email: string) {
+    async function login(page: Page, username: string) {
       await page.goto(`${appUrl}/login`);
-      await page.getByLabel('邮箱', { exact: true }).fill(email);
+      await page.getByLabel('用户名', { exact: true }).fill(username);
       await page.getByLabel('密码', { exact: true }).fill(PASSWORD);
       await page.getByRole('button', { name: '登录', exact: true }).click();
       await expect(page).toHaveURL(/\/(dashboard|admin|creator)$/);
     }
-    async function register(page: Page, email: string, name: string) {
-      await page.goto(`${appUrl}/register`);
-      await page.getByLabel('昵称').fill(name);
-      await page.getByLabel('邮箱', { exact: true }).fill(email);
-      await page.getByLabel('密码', { exact: true }).fill(PASSWORD);
-      await page.getByRole('button', { name: '创建账号', exact: true }).click();
-      await expect(page.getByText('账号已创建，请使用刚才填写的邮箱和密码登录。')).toBeVisible();
-      await login(page, email);
-    }
     async function post<T>(page: Page, path: string, data: unknown) {
       return json<T>(await page.request.post(appUrl + path, { data, headers: { origin: appUrl } }));
     }
-    async function bind(page: Page, biliUid: string, name: string) {
-      await page.goto(`${appUrl}/account/bilibili`);
+    async function register(page: Page, username: string, name: string, biliUid: string) {
+      await page.goto(`${appUrl}/register`);
       const issued = page.waitForResponse(
         (response) =>
-          response.url().endsWith('/api/v1/me/bilibili-challenges') &&
+          response.url().endsWith('/api/v1/auth/challenges') &&
           response.request().method() === 'POST',
       );
-      await page.getByRole('button', { name: '开始验证', exact: true }).click();
+      await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
       const response = await issued;
       expect(response.status()).toBe(201);
-      const challenge = (await response.json()) as IssuedBilibiliChallenge;
+      const challenge = (await response.json()) as IdentityChallenge;
       const roomId = challenge.room.link.split('/').at(-1)!;
       await expect.poll(() => source.activeConnectionCount(roomId)).toBe(1);
       await source.emitMessage({
         biliDisplayName: name,
         biliUid,
-        message: challenge.code,
+        message: challenge.code!,
         occurredAt: NOW,
         roomId,
       });
-      await expect(page.getByText('已完成 B站身份验证')).toBeVisible();
+      await expect(page.getByText('已验证 UID ' + biliUid)).toBeVisible();
+      await page.getByLabel('昵称').fill(name);
+      await page.getByLabel('用户名', { exact: true }).fill(username);
+      await page.getByLabel('新密码', { exact: true }).fill(PASSWORD);
+      await page.getByLabel('确认密码', { exact: true }).fill(PASSWORD);
+      await page.getByRole('button', { name: '创建账号', exact: true }).click();
+      await expect(page.getByText('账号已创建，请使用用户名和密码登录。')).toBeVisible();
+      await login(page, username);
     }
 
-    await login(admin, 'admin@e2e.test');
+    await login(admin, 'admin');
     await post(admin, '/api/v1/admin/verification-rooms', {
       biliRoomId: '990000',
       displayName: '验证直播间',
       priority: 1,
     });
-    await register(creator, 'creator@e2e.test', '主播账号');
-    await bind(creator, '880001', '主播账号');
+    await register(creator, 'creator', '主播账号', '880001');
     const identity = await json<Identity>(await creator.request.get(`${appUrl}/api/v1/me`));
     const registeredCreator = await post<CreatorRecord>(admin, '/api/v1/admin/creators', {
       userId: identity.user.id,
       timezone: 'Asia/Shanghai',
       monthlySyncEnabled: true,
     });
-    await register(recipient, 'recipient@e2e.test', '礼物用户');
-    await bind(recipient, '880002', '礼物用户');
+    await register(recipient, 'recipient', '礼物用户', '880002');
     expect((await recipient.request.get(`${appUrl}/api/v1/admin/creators`)).status()).toBe(403);
 
     const release = await post<GiftRelease>(creator, '/api/v1/creator/releases', {

@@ -38,7 +38,10 @@ describe('database schema version', () => {
 
   it('rejects migration contents that differ from the application identity', async () => {
     const workspace = await migrationWorkspace();
-    await appendFile(join(workspace, 'migrations', '0000_v0_2_baseline.sql'), '\n-- changed\n');
+    await appendFile(
+      join(workspace, 'migrations', '0000_username_uid_baseline.sql'),
+      '\n-- changed\n',
+    );
     await expect(assertCheckedInMigrationIdentity(workspace)).rejects.toThrow(
       'application migration identity does not match',
     );

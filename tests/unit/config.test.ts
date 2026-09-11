@@ -6,7 +6,7 @@ describe('loadConfig', () => {
   it('loads and coerces a complete environment', () => {
     const config = loadConfig({
       APP_URL: 'https://club.example.com',
-      BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+      AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
       DATABASE_URL: 'postgres://club:secret@postgres:5432/club',
       PORT: '8080',
       TRUST_PROXY: 'true',
@@ -24,7 +24,7 @@ describe('loadConfig', () => {
   it('rejects ambiguous boolean values', () => {
     expect(() =>
       loadConfig({
-        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
         DATABASE_URL: 'postgres://localhost/club',
         TRUST_PROXY: 'sometimes',
       }),
@@ -35,7 +35,7 @@ describe('loadConfig', () => {
     expect(() =>
       loadConfig({
         APP_URL: 'file:///tmp/club',
-        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
         DATABASE_URL: 'postgres://localhost/club',
       }),
     ).toThrow(/appUrl/);
@@ -44,7 +44,7 @@ describe('loadConfig', () => {
   it('requires a valid active encryption key in production', () => {
     expect(() =>
       loadConfig({
-        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
         DATABASE_URL: 'postgres://localhost/club',
         NODE_ENV: 'production',
       }),
@@ -53,7 +53,7 @@ describe('loadConfig', () => {
       loadConfig({
         ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION: '2',
         ADDRESS_ENCRYPTION_KEY_RING: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-        BETTER_AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
+        AUTH_SECRET: 'a-test-secret-that-is-at-least-32-characters',
         DATABASE_URL: 'postgres://localhost/club',
         NODE_ENV: 'production',
       }),

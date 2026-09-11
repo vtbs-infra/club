@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PublicWebCreatorProfileSource } from '../../src/server/modules/bilibili/public-web-creator-profile-source.js';
 import { PublicWebLiveMessageSource } from '../../src/server/modules/bilibili/public-web-live-message-source.js';
 import { RoomConnectionManager } from '../../src/server/modules/bilibili/room-connection-manager.js';
-import { createBindingRuntime } from '../../src/server/modules/binding/binding-runtime.js';
+import { createIdentityRuntime } from '../../src/server/modules/auth/identity-runtime.js';
 import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
 
 const { sockets } = vi.hoisted(() => ({
@@ -77,10 +77,10 @@ describe('Bilibili operation lifetime', () => {
       source: new PublicWebLiveMessageSource(60_000, 1000, network.fetch),
       onMessage: () => undefined,
     });
-    const runtime = createBindingRuntime({
+    const runtime = createIdentityRuntime({
       clock: { now: () => new Date() },
       connections,
-      bindings: { reconcileConnections: () => connections.reconcile(['100']) },
+      identities: { reconcileConnections: () => connections.reconcile(['100']) },
     });
     const starting = runtime.start();
     const signal = await network.entered;

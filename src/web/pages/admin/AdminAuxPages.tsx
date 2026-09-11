@@ -36,10 +36,6 @@ const auditActionLabel: Readonly<Record<string, string>> = {
   'address.created': '新增收货地址',
   'address.deleted': '删除收货地址',
   'address.updated': '修改收货地址',
-  'bilibili-binding.conflict-binding-removed': '解除冲突中的原绑定',
-  'bilibili-binding.conflict-dismissed': '驳回绑定冲突',
-  'bilibili-binding.conflict-opened': '记录绑定冲突',
-  'bilibili-binding.conflict-resolved': '解决绑定冲突',
   'creator.created': '注册主播',
   'creator.updated': '修改主播',
   'gift-order.cancelled': '取消礼物单',
@@ -68,7 +64,7 @@ export function AdminAnnouncementsPage() {
 }
 
 function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
-  const bindingRuntime = runtimeStatePresentation[data.runtimes.binding.state];
+  const identityRuntime = runtimeStatePresentation[data.runtimes.identity.state];
   const mediaRuntime = runtimeStatePresentation[data.runtimes.media.state];
   const rosterRuntime = runtimeStatePresentation[data.runtimes.roster.state];
   return (
@@ -90,14 +86,14 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
         />
         <MetricCard
           description={
-            data.runtimes.binding.lastTickAt
-              ? `最近 ${formatDate(data.runtimes.binding.lastTickAt, true)}`
+            data.runtimes.identity.lastTickAt
+              ? `最近 ${formatDate(data.runtimes.identity.lastTickAt, true)}`
               : '尚无执行记录'
           }
           icon={RadioTower}
           label="验证连接"
-          tone={runtimeMetricTone(bindingRuntime.tone)}
-          value={bindingRuntime.label}
+          tone={runtimeMetricTone(identityRuntime.tone)}
+          value={identityRuntime.label}
         />
         <MetricCard
           description={
@@ -241,7 +237,7 @@ function AuditLogPanel({
               <summary>
                 <time>{formatDate(item.createdAt, true)}</time>
                 <strong>{auditActionLabel[item.action] ?? item.action}</strong>
-                <span>{item.actorName ?? item.actorEmail ?? '系统'}</span>
+                <span>{item.actorName ?? item.actorUsername ?? '系统'}</span>
               </summary>
               <dl className="detail-grid">
                 <div>

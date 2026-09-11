@@ -47,6 +47,12 @@ export const CreateChallengeBodySchema = Type.Union([
   ),
 ]);
 export type CreateChallengeBody = Static<typeof CreateChallengeBodySchema>;
+export const RoomConnectionStateSchema = Type.Union([
+  Type.Literal('CONNECTING'),
+  Type.Literal('HEALTHY'),
+  Type.Literal('UNHEALTHY'),
+]);
+export type RoomConnectionState = Static<typeof RoomConnectionStateSchema>;
 export const ChallengeSchema = Type.Object(
   {
     id: IdSchema,
@@ -55,7 +61,7 @@ export const ChallengeSchema = Type.Object(
     expiresAt: DateTimeSchema,
     code: Type.Optional(Type.String()),
     room: Type.Object({ displayName: Type.String(), link: Type.String() }),
-    connectionState: Nullable(Type.String()),
+    connectionState: Nullable(RoomConnectionStateSchema),
     biliUid: Nullable(BiliUidSchema),
     username: Nullable(UsernameSchema),
   },

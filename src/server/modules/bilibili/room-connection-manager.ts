@@ -1,7 +1,7 @@
 import type { LiveMessageEvent, LiveMessageSource, RoomConnection } from './live-message-source.js';
-import type { BilibiliChallenge } from '../../../shared/contracts/binding.js';
+import type { RoomConnectionState } from '../../../shared/contracts/auth.js';
 
-export type RoomConnectionState = NonNullable<BilibiliChallenge['connectionState']>;
+export type { RoomConnectionState } from '../../../shared/contracts/auth.js';
 
 interface ManagedRoom {
   connection: RoomConnection | null;

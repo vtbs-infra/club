@@ -83,8 +83,9 @@ integration('database migration baseline', () => {
       await migrateDatabase(database, resolve('migrations'));
       for (const table of [
         'users',
-        'bilibili_bindings',
-        'binding_conflicts',
+        'password_credentials',
+        'sessions',
+        'identity_challenges',
         'creators',
         'snapshot_runs',
         'snapshot_pages',
@@ -99,7 +100,9 @@ integration('database migration baseline', () => {
       }
       expect(await tableExists(database, 'idempotency_records')).toBe(false);
       expect(await tableExists(database, 'shipment_items')).toBe(false);
-      expect(await columnExists(database, 'creators', 'binding_id')).toBe(true);
+      expect(await columnExists(database, 'creators', 'binding_id')).toBe(false);
+      expect(await columnExists(database, 'users', 'username')).toBe(true);
+      expect(await columnExists(database, 'users', 'bilibili_uid')).toBe(true);
       expect(await columnExists(database, 'creators', 'active')).toBe(false);
       expect(await columnExists(database, 'creators', 'archived_at')).toBe(false);
       expect(await columnExists(database, 'gift_orders', 'processing_at')).toBe(false);
@@ -120,7 +123,7 @@ integration('database migration baseline', () => {
         'announcement_reads_append_only',
         'announcements_lifecycle',
         'audit_logs_append_only',
-        'binding_conflicts_lifecycle',
+        'users_preserve_identity',
         'gift_order_addresses_append_only',
         'gift_order_items_append_only',
         'gift_order_option_values_append_only',

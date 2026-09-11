@@ -127,7 +127,7 @@ export class AnnouncementService {
   }
 
   private async visibleCondition(userId: string): Promise<SQL> {
-    const [binding] = await this.database.orm
+    const [identity] = await this.database.orm
       .select({ biliUid: users.bilibiliUid })
       .from(users)
       .where(eq(users.id, userId))
@@ -136,8 +136,8 @@ export class AnnouncementService {
       .selectDistinct({ creatorId: giftOrders.creatorId })
       .from(giftOrders)
       .where(
-        binding?.biliUid
-          ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
+        identity?.biliUid
+          ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, identity.biliUid))
           : eq(giftOrders.userId, userId),
       );
     const now = this.clock.now();

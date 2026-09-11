@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, ClockAlert, Gift, Link2, MapPin, Sparkles, Truck } from 'lucide-react';
+import { ArrowRight, ClockAlert, Gift, MapPin, Sparkles, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import {
   getAddresses,
   getAnnouncements,
-  getBinding,
   getIdentity,
   getMyGifts,
   getMyGiftOverview,
@@ -32,7 +31,6 @@ export function DashboardPage() {
     queryKey: ['gifts', 'overview'],
     refetchInterval: 30_000,
   });
-  const binding = useQuery({ queryFn: getBinding, queryKey: ['me', 'bilibili-binding'] });
   const addresses = useQuery({ queryFn: getAddresses, queryKey: ['me', 'addresses'] });
 
   if (identity.isPending) return <LoadingState label="正在准备仪表盘…" />;
@@ -114,19 +112,7 @@ export function DashboardPage() {
           title="礼物待办暂时无法加载"
         />
       ) : null}
-      {binding.isError ? (
-        <div className="stack-md">
-          <ErrorNotice error={binding.error} />
-          <button
-            className="button secondary small"
-            onClick={() => void binding.refetch()}
-            type="button"
-          >
-            重试 B站绑定状态
-          </button>
-        </div>
-      ) : null}
-      {addresses.isError && binding.data && claimableCount > 0 ? (
+      {addresses.isError && claimableCount > 0 ? (
         <div className="stack-md">
           <ErrorNotice error={addresses.error} />
           <button
@@ -139,25 +125,10 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      {!binding.isPending && !binding.isError && !binding.data ? (
-        <section className="action-callout">
-          <div className="callout-icon">
-            <Link2 aria-hidden="true" size={22} />
-          </div>
-          <div>
-            <strong>绑定 B站账号，自动找回你的礼物</strong>
-            <p>只需前往平台指定直播间发送一次性验证码。</p>
-          </div>
-          <Link className="button primary" to="/account/bilibili">
-            开始绑定
-            <ArrowRight aria-hidden="true" size={16} />
-          </Link>
-        </section>
-      ) : !addresses.isPending &&
-        !addresses.isError &&
-        binding.data &&
-        claimableCount > 0 &&
-        addresses.data.length === 0 ? (
+      {!addresses.isPending &&
+      !addresses.isError &&
+      claimableCount > 0 &&
+      addresses.data.length === 0 ? (
         <section className="action-callout">
           <div className="callout-icon">
             <MapPin aria-hidden="true" size={22} />
@@ -223,20 +194,7 @@ export function DashboardPage() {
           />
         ) : gifts.data.items.length === 0 ? (
           <EmptyState
-            action={
-              binding.data === null ? (
-                <Link className="button secondary" to="/account/bilibili">
-                  绑定 B站账号
-                </Link>
-              ) : null
-            }
-            description={
-              binding.data
-                ? '主播发布礼物并完成月末名单同步后，属于你的礼物会自动出现。'
-                : binding.data === null
-                  ? '完成 B站 UID 绑定后，系统会匹配现在和过去属于你的礼物。'
-                  : '礼物单会在这里显示；B站绑定状态暂时无法读取。'
-            }
+            description="主播发布礼物并完成月末名单同步后，属于你的礼物会自动出现。"
             icon={Gift}
             title="目前没有礼物单"
           />

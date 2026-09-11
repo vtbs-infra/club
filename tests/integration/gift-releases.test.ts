@@ -23,7 +23,7 @@ integration('gift release lifecycle', () => {
     database = integrationDatabase.database;
     const [account] = await database.orm
       .insert(users)
-      .values({ email: 'creator@example.com', name: 'Creator', role: 'CREATOR' })
+      .values({ username: 'creator', bilibiliUid: '90001', name: 'Creator', role: 'CREATOR' })
       .returning({ id: users.id });
     creatorUserId = account!.id;
     creatorId = (

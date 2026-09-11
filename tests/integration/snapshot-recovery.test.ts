@@ -40,7 +40,8 @@ describe('snapshot execution ownership and reviewed evidence', () => {
     sequence += 1;
     await fixture.database.orm.insert(users).values({
       id: userId,
-      email: `${userId}@example.com`,
+      username: `reviewer_${sequence}`,
+      bilibiliUid: String(50000 + sequence),
       name: 'Reviewer',
       role: 'PLATFORM_ADMIN',
     });

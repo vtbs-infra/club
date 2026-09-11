@@ -2,7 +2,6 @@ import { mockApi, requestJsonObject, requestPath } from './support/api.js';
 import {
   addressRecord,
   announcement,
-  bilibiliBinding,
   giftOrder,
   recipientIdentity,
   testId,
@@ -28,7 +27,6 @@ test('lands a recipient on the mobile dashboard', async ({ appUrl, page }) => {
     if (pathname === '/api/v1/me/announcements') {
       return { items: [announcement()], nextCursor: null };
     }
-    if (pathname === '/api/v1/me/bilibili-binding') return bilibiliBinding();
     if (pathname === '/api/v1/me/addresses') return [];
     return undefined;
   });
@@ -46,7 +44,7 @@ test('lands a recipient on the mobile dashboard', async ({ appUrl, page }) => {
   await expect(page.getByRole('menu')).toBeVisible();
   await expect(page.getByRole('menuitem', { name: '账号', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('menuitem', { name: 'B站绑定' })).toBeFocused();
+  await expect(page.getByRole('menuitem', { name: '收货地址' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
   await expect(accountTrigger).toBeFocused();

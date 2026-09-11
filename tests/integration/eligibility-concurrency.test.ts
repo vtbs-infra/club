@@ -38,7 +38,8 @@ integration('publication and roster finalization coordination', () => {
     const [user] = await fixture.database.orm
       .insert(users)
       .values({
-        email: 'eligibility@example.test',
+        username: 'eligibility',
+        bilibiliUid: '910001',
         name: 'Eligibility creator',
         role: 'CREATOR',
       })

@@ -1,5 +1,4 @@
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';
-import type { AdminBilibiliBindingPage } from '../../src/shared/contracts/binding.js';
 import type {
   AdminSnapshotPage,
   SnapshotAttemptMemberPage,
@@ -9,8 +8,6 @@ import type {
 import { mockApi, requestJsonObject, requestPath } from './support/api.js';
 import {
   adminIdentity,
-  bilibiliBinding,
-  bindingConflict,
   systemStatus,
   testId,
   testTime,
@@ -30,15 +27,9 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     if (pathname === '/api/v1/me') return adminIdentity();
     if (pathname === '/api/v1/admin/creators') return { items: [], nextCursor: null };
     if (pathname === '/api/v1/admin/users') {
-      return [userRecord({ bilibiliBinding: bilibiliBinding() })];
+      return [userRecord()];
     }
     if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
-    if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
-      return { items: [], nextCursor: null };
-    }
-    if (pathname === '/api/v1/admin/bilibili-bindings') {
-      return { items: [], nextCursor: null };
-    }
     if (pathname === '/api/v1/admin/announcements') return { items: [], nextCursor: null };
     if (pathname === '/api/v1/admin/system') return systemStatus();
     if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
@@ -69,60 +60,6 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     .filter({ hasText: '健康' });
   await expect(systemHealth).toBeVisible();
   expect((await systemHealth.boundingBox())?.width).toBeLessThan(90);
-});
-
-test('resolves the exact binding recorded by a UID conflict', async ({ appUrl, page }) => {
-  const conflict = bindingConflict();
-  const activeBindings = {
-    items: [
-      {
-        biliDisplayName: '当前B站用户',
-        biliUid: '77889900',
-        boundAt: testTime(-4),
-        id: testId(70),
-        user: {
-          email: 'owner@example.com',
-          id: testId(71),
-          name: '当前归属用户',
-          role: 'USER',
-        },
-      },
-    ],
-    nextCursor: null,
-  } satisfies AdminBilibiliBindingPage;
-  let openConflicts = [conflict];
-  let resolutionPayload: Record<string, unknown> | null = null;
-  await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return adminIdentity();
-    if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
-    if (pathname === '/api/v1/admin/bilibili-binding-conflicts') {
-      return { items: openConflicts, nextCursor: null };
-    }
-    if (pathname === '/api/v1/admin/bilibili-bindings') return activeBindings;
-    if (
-      pathname === `/api/v1/admin/bilibili-binding-conflicts/${conflict.id}/resolve` &&
-      request.method() === 'POST'
-    ) {
-      resolutionPayload = requestJsonObject(request);
-      openConflicts = [];
-      return null;
-    }
-    return undefined;
-  });
-
-  await page.goto(`${appUrl}/admin/verification`);
-  await expect(page.getByRole('heading', { name: '有效的 B站 UID 归属' })).toBeVisible();
-  await expect(page.getByText('当前归属用户')).toBeVisible();
-  await expect(page.getByText('UID 77889900')).toBeVisible();
-  await expect(page.getByText('申请用户', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '解除原绑定' }).click();
-  const dialog = page.getByRole('dialog', { name: '解决这项 UID 冲突？' });
-  await dialog.getByLabel('处理原因').fill('已核对 UID 归属证明');
-  await dialog.getByRole('button', { name: '确认解决' }).click();
-
-  await expect.poll(() => resolutionPayload).toEqual({ reason: '已核对 UID 归属证明' });
-  await expect(page.getByText('当前没有待处理的绑定冲突。')).toBeVisible();
 });
 
 test('shows the exact late-attempt members before approval', async ({ appUrl, page }) => {
@@ -223,13 +160,12 @@ test('registers a creator from verified identity without editable Bilibili field
   appUrl,
   page,
 }) => {
-  const binding = bilibiliBinding({ biliDisplayName: 'B站主播', biliUid: '90001' });
-  const candidate = userRecord({ bilibiliBinding: binding });
+  const candidate = userRecord({ bilibiliUid: '90001' });
   const creator = {
-    bilibiliUid: binding.biliUid,
+    bilibiliUid: candidate.bilibiliUid!,
     createdAt: testTime(-2),
     displayName: 'B站主播',
-    email: candidate.email,
+    username: candidate.username,
     id: testId(43),
     monthlySyncEnabled: true,
     profileSyncedAt: testTime(),
@@ -292,7 +228,7 @@ test('registers a creator from verified identity without editable Bilibili field
 });
 
 test('shows and recovers from a failed creator candidate search', async ({ appUrl, page }) => {
-  const candidate = userRecord({ bilibiliBinding: bilibiliBinding() });
+  const candidate = userRecord();
   let searchRequests = 0;
   let finishRetry: () => void = () => undefined;
   const retryMayFinish = new Promise<void>((resolve) => {
@@ -329,9 +265,7 @@ test('shows and recovers from a failed creator candidate search', async ({ appUr
     await page.getByRole('button', { name: '重新搜索' }).click();
     await expect(page.getByText('正在搜索已验证用户…')).toBeVisible();
     finishRetry();
-    await expect(page.getByLabel('普通用户账号')).toContainText(
-      `UID ${candidate.bilibiliBinding!.biliUid}`,
-    );
+    await expect(page.getByLabel('普通用户账号')).toContainText(`UID ${candidate.bilibiliUid}`);
     expect(searchRequests).toBe(2);
   } finally {
     finishRetry();

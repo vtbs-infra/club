@@ -27,7 +27,7 @@ import { GiftOrderQueryService } from '../../src/server/modules/gifts/order-quer
 
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
 import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
-import { insertTestBilibiliBinding, insertTestCreator } from '../helpers/creator-fixture.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import { createReleaseDraft } from '../helpers/gift-release.js';
 import {
   createIntegrationDatabase,
@@ -60,8 +60,8 @@ integration('claim windows and capacity', () => {
     const accounts = await fixture.database.orm
       .insert(users)
       .values([
-        { email: 'claim-creator@example.test', name: 'Creator', role: 'CREATOR' },
-        { email: 'claim-recipient@example.test', name: 'Recipient', role: 'USER' },
+        { username: 'claim_creator', bilibiliUid: '910001', name: 'Creator', role: 'CREATOR' },
+        { username: 'claim_recipient', bilibiliUid: '100001', name: 'Recipient', role: 'USER' },
       ])
       .returning();
     actorUserId = accounts[0]!.id;
@@ -74,11 +74,6 @@ integration('claim windows and capacity', () => {
         displayName: 'Creator',
       })
     ).id;
-    await insertTestBilibiliBinding(fixture.database, {
-      userId: recipientId,
-      biliUid: '100001',
-      biliDisplayName: 'Recipient',
-    });
     encryption = new EncryptionKeyRing({
       addressEncryptionActiveKeyVersion: 1,
       addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',

@@ -550,39 +550,6 @@
   overflow-wrap: anywhere;
 }
 
-.binding-conflict-table {
-  min-width: 860px;
-}
-
-.active-binding-table {
-  min-width: 720px;
-}
-
-.binding-search-form {
-  justify-content: flex-end;
-}
-
-.binding-search-form .search-field {
-  min-width: min(320px, 42vw);
-}
-
-.conflict-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  min-width: 190px;
-}
-
-.conflict-actions .button {
-  min-height: 34px;
-  padding: 0.45rem 0.7rem;
-  white-space: nowrap;
-}
-
-.conflict-pagination {
-  margin-top: 1rem;
-}
-
 .order-detail-grid {
   display: grid;
   gap: 1.25rem;

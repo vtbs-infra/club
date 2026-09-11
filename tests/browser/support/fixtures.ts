@@ -1,7 +1,6 @@
 import { APPLICATION_VERSION } from '../../../src/server/application-version.js';
 import type { AddressRecord } from '../../../src/shared/contracts/addresses.js';
 import type { Announcement } from '../../../src/shared/contracts/announcements.js';
-import type { BilibiliBinding, BindingConflict } from '../../../src/shared/contracts/binding.js';
 import type { Identity, UserRecord } from '../../../src/shared/contracts/creators.js';
 import type { GiftOrder, GiftRelease } from '../../../src/shared/contracts/gifts.js';
 import type { PortalHome } from '../../../src/shared/contracts/portal.js';
@@ -23,9 +22,10 @@ export function recipientIdentity(user: Partial<Identity['user']> = {}): Identit
   return {
     creator: null,
     user: {
-      email: 'viewer@example.com',
+      username: 'viewer',
+      bilibiliUid: '10001',
       id: testId(1),
-      image: null,
+
       name: '测试用户',
       role: 'USER',
       ...user,
@@ -51,9 +51,10 @@ export function creatorIdentity(
       ...overrides.creator,
     },
     user: {
-      email: 'creator@example.com',
+      username: 'creator',
+      bilibiliUid: '90001',
       id: testId(33),
-      image: null,
+
       name: '主播账号',
       role: 'CREATOR',
       ...overrides.user,
@@ -65,9 +66,10 @@ export function adminIdentity(user: Partial<Identity['user']> = {}): Identity {
   return {
     creator: null,
     user: {
-      email: 'admin@example.com',
+      username: 'admin',
+      bilibiliUid: null,
       id: testId(40),
-      image: null,
+
       name: '平台管理员',
       role: 'PLATFORM_ADMIN',
       ...user,
@@ -213,48 +215,10 @@ export function announcement(overrides: Partial<Announcement> = {}): Announcemen
   };
 }
 
-export function bilibiliBinding(overrides: Partial<BilibiliBinding> = {}): BilibiliBinding {
-  return {
-    biliDisplayName: '测试舰长',
-    biliUid: '10001',
-    boundAt: testTime(-1),
-    id: testId(7),
-    ...overrides,
-  };
-}
-
-export function bindingConflict(overrides: Partial<BindingConflict> = {}): BindingConflict {
-  return {
-    biliUid: '10001',
-    challengeId: testId(45),
-    createdAt: testTime(-1),
-    id: testId(46),
-    observedBinding: {
-      biliDisplayName: '原绑定账号',
-      biliUid: '10001',
-      boundAt: testTime(-10),
-      id: testId(47),
-      unboundAt: null,
-      user: {
-        email: 'owner@example.com',
-        id: testId(48),
-        name: '原账号用户',
-      },
-    },
-    requestingUser: {
-      email: 'requester@example.com',
-      id: testId(49),
-      name: '申请用户',
-    },
-    status: 'OPEN',
-    ...overrides,
-  };
-}
-
 export function userRecord(overrides: Partial<UserRecord> = {}): UserRecord {
   return {
-    bilibiliBinding: null,
-    email: 'candidate@example.com',
+    bilibiliUid: '10001',
+    username: 'candidate',
     id: testId(41),
     name: '候选主播',
     role: 'USER',
@@ -298,7 +262,7 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
       },
     ],
     runtimes: {
-      binding: runtime,
+      identity: runtime,
       media: runtime,
       roster: runtime,
     },

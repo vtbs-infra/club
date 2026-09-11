@@ -142,3 +142,18 @@
   font-weight: 750;
   margin-left: 0.35rem;
 }
+
+.identity-verification {
+  display: grid;
+  gap: 0.75rem;
+}
+.identity-code {
+  display: block;
+  padding: 0.9rem;
+  font-size: 1.35rem;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+  text-align: center;
+  background: var(--surface-soft);
+  border-radius: 0.7rem;
+}

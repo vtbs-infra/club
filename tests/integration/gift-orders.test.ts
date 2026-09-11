@@ -7,8 +7,6 @@ import type { DatabaseService } from '../../src/server/infrastructure/db/databas
 import { databaseWriteBatches } from '../../src/server/infrastructure/db/write-batches.js';
 import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
 import {
-  bilibiliBindings,
-  bindingChallenges,
   auditLogs,
   giftOrderItems,
   giftOrderStatusHistory,
@@ -17,12 +15,11 @@ import {
   snapshotAttempts,
   snapshotRuns,
   users,
-  verificationRooms,
 } from '../../src/server/infrastructure/db/schema/index.js';
 import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/key-ring.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
-import type { AppAuth } from '../../src/server/modules/auth/auth.js';
+import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { GiftClaimService } from '../../src/server/modules/gifts/claim-service.js';
 import { GiftFulfillmentExportService } from '../../src/server/modules/gifts/fulfillment-export-service.js';
 import { GiftOrderQueryService } from '../../src/server/modules/gifts/order-query-service.js';
@@ -60,7 +57,6 @@ integration('gift order lifecycle', () => {
   let creatorUserId: string;
   let userOneId: string;
   let userTwoId: string;
-  let verificationRoomId: string;
   let releaseService: GiftReleaseService;
   let addressService: AddressService;
   let encryption: EncryptionKeyRing;
@@ -76,20 +72,20 @@ integration('gift order lifecycle', () => {
     const accounts = await database.orm
       .insert(users)
       .values([
-        { email: 'creator-one@example.com', name: 'Creator One', role: 'CREATOR' },
-        { email: 'creator-two@example.com', name: 'Creator Two', role: 'CREATOR' },
-        { email: 'recipient-one@example.com', name: 'Recipient One', role: 'USER' },
-        { email: 'recipient-two@example.com', name: 'Recipient Two', role: 'USER' },
+        { username: 'creator_one', bilibiliUid: '90001', name: 'Creator One', role: 'CREATOR' },
+        { username: 'creator_two', bilibiliUid: '90002', name: 'Creator Two', role: 'CREATOR' },
+        { username: 'recipient_one', bilibiliUid: '11009', name: 'Recipient One', role: 'USER' },
+        { username: 'recipient_two', bilibiliUid: '11001', name: 'Recipient Two', role: 'USER' },
       ])
-      .returning({ email: users.email, id: users.id });
-    const accountId = (email: string) => {
-      const account = accounts.find((candidate) => candidate.email === email);
-      if (!account) throw new Error(`Missing test account ${email}.`);
+      .returning({ username: users.username, id: users.id });
+    const accountId = (username: string) => {
+      const account = accounts.find((candidate) => candidate.username === username);
+      if (!account) throw new Error(`Missing test account ${username}.`);
       return account.id;
     };
-    creatorUserId = accountId('creator-one@example.com');
-    userOneId = accountId('recipient-one@example.com');
-    userTwoId = accountId('recipient-two@example.com');
+    creatorUserId = accountId('creator_one');
+    userOneId = accountId('recipient_one');
+    userTwoId = accountId('recipient_two');
     creatorId = (
       await insertTestCreator(database, {
         bilibiliUid: '90001',
@@ -103,18 +99,9 @@ integration('gift order lifecycle', () => {
         bilibiliUid: '90002',
         displayName: 'Creator Two',
         roomId: '80002',
-        userId: accountId('creator-two@example.com'),
+        userId: accountId('creator_two'),
       })
     ).id;
-    const [room] = await database.orm
-      .insert(verificationRooms)
-      .values({
-        biliRoomId: '60001',
-        displayName: 'Verification Room',
-      })
-      .returning({ id: verificationRooms.id });
-    verificationRoomId = room!.id;
-
     encryption = new EncryptionKeyRing({
       addressEncryptionActiveKeyVersion: 1,
       addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
@@ -197,31 +184,6 @@ integration('gift order lifecycle', () => {
     return run!.id;
   }
 
-  async function bind(userId: string, biliUid: string, suffix: string): Promise<string> {
-    const [challenge] = await database.orm
-      .insert(bindingChallenges)
-      .values({
-        codeDigest: suffix.padEnd(64, 'a').slice(0, 64),
-        consumedAt: new Date(),
-        consumedEventId: `event-${suffix}`,
-        expiresAt: new Date(Date.now() + 60_000),
-        status: 'CONSUMED',
-        userId,
-        verificationRoomId,
-      })
-      .returning({ id: bindingChallenges.id });
-    const [binding] = await database.orm
-      .insert(bilibiliBindings)
-      .values({
-        biliDisplayName: `Bilibili ${biliUid}`,
-        biliUid,
-        challengeId: challenge!.id,
-        userId,
-      })
-      .returning({ id: bilibiliBindings.id });
-    return binding!.id;
-  }
-
   it('reconciles both event orders, keeps UID ownership until claim, and freezes fulfillment', async () => {
     const before = await database.orm.select({ value: count() }).from(giftOrders);
     const noGiftRun = await finalizeSnapshot('2026-05-01', [{ biliUid: '50001', tier: 'CAPTAIN' }]);
@@ -230,7 +192,6 @@ integration('gift order lifecycle', () => {
       before[0]?.value,
     );
 
-    const firstBindingId = await bind(userOneId, '11001', 'one');
     await finalizeSnapshot('2026-06-01', [
       { biliUid: '11001', tier: 'CAPTAIN' },
       { biliUid: '11002', tier: 'GOVERNOR' },
@@ -281,21 +242,15 @@ integration('gift order lifecycle', () => {
       search: captainOrder.orderNumber.slice(0, 6),
     });
     expect(searchedOrders.items.some((order) => order.id === captainOrder.id)).toBe(true);
-    expect((await queries.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
-      1,
-    );
-
-    await database.orm
-      .update(bilibiliBindings)
-      .set({ unboundAt: new Date(), updatedAt: new Date() })
-      .where(eq(bilibiliBindings.id, firstBindingId));
-    expect((await queries.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
-      0,
-    );
-    await bind(userTwoId, '11001', 'two');
     expect((await queries.listForUser(userTwoId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
       1,
     );
+    expect((await queries.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
+      0,
+    );
+    await expect(
+      database.orm.update(users).set({ bilibiliUid: '11001' }).where(eq(users.id, userOneId)),
+    ).rejects.toThrow();
 
     const address = await addressService.create(
       userTwoId,
@@ -429,35 +384,20 @@ integration('gift order lifecycle', () => {
       )[0]?.value,
     ).toBe(1);
     const storage = await createTemporaryStorage();
-    const routeApp = await buildApp({
-      auth: {
-        api: {
-          getSession: () =>
-            Promise.resolve({
-              session: {
-                createdAt: new Date(),
-                expiresAt: new Date(Date.now() + 60_000),
-                id: 'route-session',
-                ipAddress: null,
-                token: 'route-token',
-                updatedAt: new Date(),
-                userAgent: null,
-                userId: creatorUserId,
-              },
-              user: {
-                createdAt: new Date(),
-                email: 'creator-one@example.com',
-                emailVerified: true,
-                id: creatorUserId,
-                image: null,
-                name: 'Creator One',
-                role: 'CREATOR',
-                updatedAt: new Date(),
-              },
-            }),
+    const routeAuth = createAuth({ config: createTestConfig(), database });
+    routeAuth.getSession = () =>
+      Promise.resolve({
+        session: { expiresAt: new Date(Date.now() + 60_000) },
+        user: {
+          id: creatorUserId,
+          username: 'creator_one',
+          name: 'Creator One',
+          bilibiliUid: '90001',
+          role: 'CREATOR',
         },
-        handler: () => Promise.resolve(new Response(null, { status: 404 })),
-      } as unknown as AppAuth,
+      });
+    const routeApp = await buildApp({
+      auth: routeAuth,
       config: createTestConfig(),
       database,
       startBackground: false,

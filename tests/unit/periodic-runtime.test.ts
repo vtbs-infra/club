@@ -57,7 +57,7 @@ describe('periodic runtime', () => {
       entered.resolve();
       await gate.promise;
     });
-    const runtime = createPeriodicRuntime({ clock, name: 'binding', intervalMs: 1000, run });
+    const runtime = createPeriodicRuntime({ clock, name: 'identity', intervalMs: 1000, run });
     const first = runtime.tick();
     await entered.promise;
     expect(runtime.tick()).toBe(first);

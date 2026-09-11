@@ -224,14 +224,15 @@ integration('month-end snapshot capture', () => {
     storage = await createTemporaryStorage();
     const [owner] = await database.orm
       .insert(users)
-      .values({ email: 'snapshot-owner@example.com', name: 'Snapshot Owner' })
+      .values({ username: 'snapshot_owner', bilibiliUid: '700000', name: 'Snapshot Owner' })
       .returning({ id: users.id });
     ownerId = owner!.id;
     for (let index = 1; index <= 20; index += 1) {
       const [account] = await database.orm
         .insert(users)
         .values({
-          email: `creator-${index}@example.com`,
+          username: `creator_${index}`,
+          bilibiliUid: `9000${index}`,
           name: `Creator ${index}`,
           role: 'CREATOR',
         })
@@ -961,7 +962,8 @@ integration('month-end snapshot capture', () => {
     const [account] = await database.orm
       .insert(users)
       .values({
-        email: 'termination-creator@example.com',
+        username: 'termination_creator',
+        bilibiliUid: '99001',
         name: 'Termination Creator',
         role: 'CREATOR',
       })

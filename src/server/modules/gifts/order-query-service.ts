@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, ilike, lt, or, sql, type SQL } from 'drizzle-orm';
 
 import type { GiftOrderListFilter } from '../../../shared/contracts/gifts.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
@@ -138,12 +138,12 @@ export class GiftOrderQueryService {
   }
 
   private async verifiedIdentity(userId: string) {
-    const [binding] = await this.database.orm
+    const [identity] = await this.database.orm
       .select({ biliUid: users.bilibiliUid })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    return binding?.biliUid ? { ...binding, biliUid: binding.biliUid } : null;
+    return identity?.biliUid ? { ...identity, biliUid: identity.biliUid } : null;
   }
 
   private async listSummaries(input: {
@@ -230,9 +230,9 @@ export class GiftOrderQueryService {
       readonly limit: number;
     },
   ) {
-    const binding = await this.verifiedIdentity(userId);
-    const access = binding
-      ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
+    const identity = await this.verifiedIdentity(userId);
+    const access = identity
+      ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, identity.biliUid))
       : eq(giftOrders.userId, userId);
     return this.listSummaries({
       condition: and(access, filterCondition(input.filter, this.clock.now())),
@@ -288,9 +288,9 @@ export class GiftOrderQueryService {
   }
 
   public async overviewForUser(userId: string) {
-    const binding = await this.verifiedIdentity(userId);
-    const access = binding
-      ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))!
+    const identity = await this.verifiedIdentity(userId);
+    const access = identity
+      ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, identity.biliUid))!
       : eq(giftOrders.userId, userId);
     const now = this.clock.now();
     const [[counts], [urgent]] = await Promise.all([
@@ -457,9 +457,9 @@ export class GiftOrderQueryService {
   }
 
   public async getForUser(userId: string, orderId: string) {
-    const binding = await this.verifiedIdentity(userId);
-    const access = binding
-      ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
+    const identity = await this.verifiedIdentity(userId);
+    const access = identity
+      ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, identity.biliUid))
       : eq(giftOrders.userId, userId);
     const [row] = await this.loadDetailRows(and(eq(giftOrders.id, orderId), access)!);
     const order = await this.serializeDetail(row);

@@ -13,7 +13,7 @@ import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-boo
 import type { Appearance, ThemePreset } from '../../src/shared/contracts/appearance.js';
 import {
   promoteTestCreator,
-  registerTestUser,
+  seedTestUser,
   signInTestUser,
   TEST_ORIGIN,
   TEST_PASSWORD,
@@ -42,9 +42,8 @@ integration('platform appearance', () => {
     const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
     auth = createAuth({ config, database });
     const admin = await bootstrapPlatformAdmin({
-      auth,
       database,
-      email: 'admin@example.com',
+      username: 'admin',
       name: 'Platform Admin',
       password: TEST_PASSWORD,
     });
@@ -57,28 +56,24 @@ integration('platform appearance', () => {
       storage: storage.driver,
     });
 
-    await registerTestUser({
-      app,
+    await seedTestUser({
       database,
-      email: 'recipient@example.com',
+      username: 'recipient',
       name: 'Recipient',
     });
-    const creatorUserId = await registerTestUser({
-      app,
+    const creatorUserId = await seedTestUser({
       database,
-      email: 'creator@example.com',
+      username: 'creator',
       name: 'Creator',
     });
-    adminCookie = await signInTestUser({ app, email: 'admin@example.com' });
+    adminCookie = await signInTestUser({ app, username: 'admin' });
     await promoteTestCreator({
       adminCookie,
       app,
-      database,
-      suffix: '003',
       userId: creatorUserId,
     });
-    userCookie = await signInTestUser({ app, email: 'recipient@example.com' });
-    creatorCookie = await signInTestUser({ app, email: 'creator@example.com' });
+    userCookie = await signInTestUser({ app, username: 'recipient' });
+    creatorCookie = await signInTestUser({ app, username: 'creator' });
   });
 
   afterAll(async () => {

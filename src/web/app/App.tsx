@@ -22,9 +22,6 @@ const AccountPage = lazy(() =>
 const AddressesAccountPage = lazy(() =>
   import('../pages/AccountPages').then((module) => ({ default: module.AddressesAccountPage })),
 );
-const BilibiliAccountPage = lazy(() =>
-  import('../pages/AccountPages').then((module) => ({ default: module.BilibiliAccountPage })),
-);
 const AnnouncementsPage = lazy(() =>
   import('../pages/AnnouncementsPage').then((module) => ({
     default: module.AnnouncementsPage,
@@ -141,8 +138,9 @@ const router = createBrowserRouter([
   {
     children: [
       { element: <HomePage />, path: '/' },
-      { element: <AuthPage mode="login" />, path: '/login' },
-      { element: <AuthPage mode="register" />, path: '/register' },
+      { element: <AuthPage key="login" mode="login" />, path: '/login' },
+      { element: <AuthPage key="register" mode="register" />, path: '/register' },
+      { element: <AuthPage key="recover" mode="recover" />, path: '/recover' },
       { element: <RoleLanding />, path: '/app' },
       {
         element: <ProtectedLayout area="user" />,
@@ -152,7 +150,6 @@ const router = createBrowserRouter([
           { element: <GiftDetailPage />, path: '/gifts/:giftOrderId' },
           { element: <AnnouncementsPage />, path: '/announcements' },
           { element: <AccountPage />, path: '/account' },
-          { element: <BilibiliAccountPage />, path: '/account/bilibili' },
           { element: <AddressesAccountPage />, path: '/account/addresses' },
         ],
       },

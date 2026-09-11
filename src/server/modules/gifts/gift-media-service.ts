@@ -294,7 +294,7 @@ export class GiftMediaService {
     let authorized = publiclyAccessible || viewer?.role === 'PLATFORM_ADMIN';
     if (!authorized && viewer && release.creatorUserId === viewer.userId) authorized = true;
     if (!authorized && viewer) {
-      const [binding] = await this.database.orm
+      const [identity] = await this.database.orm
         .select({ biliUid: users.bilibiliUid })
         .from(users)
         .where(eq(users.id, viewer.userId))
@@ -305,8 +305,8 @@ export class GiftMediaService {
         .where(
           and(
             eq(giftOrders.giftReleaseId, releaseId),
-            binding?.biliUid
-              ? or(eq(giftOrders.userId, viewer.userId), eq(giftOrders.biliUid, binding.biliUid))
+            identity?.biliUid
+              ? or(eq(giftOrders.userId, viewer.userId), eq(giftOrders.biliUid, identity.biliUid))
               : eq(giftOrders.userId, viewer.userId),
           ),
         )

@@ -1,6 +1,6 @@
 import type {
   Announcement,
-  BilibiliChallenge,
+  IdentityChallenge,
   GiftOrder,
   GiftRelease,
   SnapshotDetail,
@@ -86,7 +86,7 @@ export const connectionStatePresentation = {
   HEALTHY: { label: '正在监听直播间', tone: 'success' },
   UNHEALTHY: { label: '连接恢复中', tone: 'danger' },
 } as const satisfies Readonly<
-  Record<NonNullable<BilibiliChallenge['connectionState']>, StatusPresentation>
+  Record<NonNullable<IdentityChallenge['connectionState']>, StatusPresentation>
 >;
 
 export const systemStatusPresentation = {
@@ -101,18 +101,13 @@ export const runtimeStatePresentation = {
   STARTING: { label: '启动中', tone: 'warning' },
   STOPPED: { label: '已停止', tone: 'danger' },
 } as const satisfies Readonly<
-  Record<SystemStatus['runtimes']['binding']['state'], StatusPresentation>
+  Record<SystemStatus['runtimes']['identity']['state'], StatusPresentation>
 >;
 
 export const monthlySyncPresentation = {
   disabled: { label: '同步暂停', tone: 'neutral' },
   enabled: { label: '同步开启', tone: 'success' },
 } as const satisfies Readonly<Record<'disabled' | 'enabled', StatusPresentation>>;
-
-export const bindingStatusPresentation = {
-  pending: { label: '尚未绑定', tone: 'warning' },
-  verified: { label: '已绑定', tone: 'success' },
-} as const satisfies Readonly<Record<'pending' | 'verified', StatusPresentation>>;
 
 export function integrityPresentation(ok: boolean): StatusPresentation {
   return ok ? { label: '全部哈希一致', tone: 'success' } : { label: '发现不一致', tone: 'danger' };

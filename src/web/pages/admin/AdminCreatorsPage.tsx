@@ -138,7 +138,7 @@ export function AdminCreatorsPage() {
   if (creators.isError) return <ErrorState error={creators.error} />;
   const creatorItems = creators.data.pages.flatMap((page) => page.items);
   const eligibleUsers =
-    users.data?.filter((user) => user.role === 'USER' && user.bilibiliBinding !== null) ?? [];
+    users.data?.filter((user) => user.role === 'USER' && user.bilibiliUid !== null) ?? [];
   const selectedUser = eligibleUsers.find((user) => user.id === form.userId) ?? null;
   return (
     <div className="stack-lg">
@@ -176,7 +176,7 @@ export function AdminCreatorsPage() {
                   <span className="mini-avatar">{creator.displayName.slice(0, 1)}</span>
                   <span>
                     <strong>{creator.displayName}</strong>
-                    <small>{creator.email}</small>
+                    <small>{creator.username}</small>
                   </span>
                   <StatusBadge
                     {...monthlySyncPresentation[
@@ -226,7 +226,7 @@ export function AdminCreatorsPage() {
                     setSearch(event.target.value);
                     setForm((current) => ({ ...current, userId: '' }));
                   }}
-                  placeholder="输入昵称、邮箱、B站昵称或 UID"
+                  placeholder="输入昵称、用户名、B站昵称或 UID"
                   ref={searchInputRef}
                   value={search}
                 />
@@ -244,7 +244,7 @@ export function AdminCreatorsPage() {
                   <option value="">请选择</option>
                   {eligibleUsers.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.name} · UID {user.bilibiliBinding!.biliUid}
+                      {user.name} · UID {user.bilibiliUid}
                     </option>
                   ))}
                 </select>
@@ -266,19 +266,16 @@ export function AdminCreatorsPage() {
                 </div>
               ) : null}
               {!search.trim() ? (
-                <InlineNotice tone="info">输入昵称、邮箱、B站昵称或 UID 开始搜索。</InlineNotice>
+                <InlineNotice tone="info">输入昵称、用户名、B站昵称或 UID 开始搜索。</InlineNotice>
               ) : users.isSuccess && eligibleUsers.length === 0 ? (
                 <InlineNotice tone="info">没有找到可注册的已验证普通用户。</InlineNotice>
               ) : null}
               {selectedUser ? (
                 <div className="readonly-account">
                   <span>B站身份</span>
-                  <strong>
-                    {selectedUser.bilibiliBinding!.biliDisplayName ??
-                      `UID ${selectedUser.bilibiliBinding!.biliUid}`}
-                  </strong>
+                  <strong>{`UID ${selectedUser.bilibiliUid}`}</strong>
                   <small>
-                    UID {selectedUser.bilibiliBinding!.biliUid} · {selectedUser.email}
+                    UID {selectedUser.bilibiliUid} · {selectedUser.username}
                   </small>
                 </div>
               ) : null}

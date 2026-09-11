@@ -74,7 +74,12 @@ integration('gift cover object lifecycle', () => {
     release = new GiftReleaseService(database, clock);
     const [user] = await database.orm
       .insert(users)
-      .values({ email: 'gift-media@example.com', name: 'Gift Media Creator', role: 'CREATOR' })
+      .values({
+        username: 'gift_media',
+        bilibiliUid: '950001',
+        name: 'Gift Media Creator',
+        role: 'CREATOR',
+      })
       .returning({ id: users.id });
     userId = user!.id;
     const creator = await insertTestCreator(database, {

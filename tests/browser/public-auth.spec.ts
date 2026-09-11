@@ -27,7 +27,7 @@ test('serves the public product shell and liveness API', async ({ appUrl, page, 
           pinned: false,
           publishedAt: testTime(-2),
           severity: 'INFO',
-          summary: '绑定 UID 后即可自动检查礼物资格。',
+          summary: '验证 UID 并注册后即可自动检查礼物资格。',
           title: '领取流程说明',
         },
       ],
@@ -55,9 +55,8 @@ test('serves the public product shell and liveness API', async ({ appUrl, page, 
   await expect(page.getByRole('link', { exact: true, name: '登录' })).toBeVisible();
   await page.getByRole('link', { exact: true, name: '注册' }).click();
   await expect(page.getByRole('heading', { name: '开始使用 Club', level: 1 })).toBeVisible();
-  await expect(page.getByLabel('昵称')).toBeVisible();
-  await expect(page.getByLabel('邮箱')).toBeVisible();
-  await expect(page.getByLabel('密码')).toBeVisible();
+  await expect(page.getByRole('button', { name: '验证 B站身份', exact: true })).toBeVisible();
+  await expect(page.getByLabel('用户名')).toHaveCount(0);
 
   const live = await request.get(`${appUrl}/health/live`);
   expect(live.ok()).toBe(true);
@@ -84,27 +83,95 @@ test('keeps signed-in visitors on the public home until they choose the workspac
   await expect(page.getByRole('link', { exact: true, name: '登录' })).toHaveCount(0);
 });
 
-test('confirms registration before asking the user to sign in', async ({ appUrl, page }) => {
-  await mockJson(page, '**/api/auth/sign-up/email', { user: { id: testId(10) } });
-
+test('verifies UID before completing registration and returns to a clean login form', async ({
+  appUrl,
+  page,
+}) => {
+  const challenge = {
+    id: testId(10),
+    purpose: 'REGISTER',
+    status: 'PENDING',
+    code: 'CLUB-ABCDEFGH23',
+    expiresAt: testTime(1),
+    room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
+    connectionState: 'HEALTHY',
+    biliUid: null,
+    username: null,
+  };
+  let verified = false;
+  await mockJson(page, '**/api/v1/auth/challenges', challenge, 201);
+  await page.route('**/api/v1/auth/challenges/' + challenge.id, (route) =>
+    fulfillJson(
+      route,
+      verified ? { ...challenge, status: 'VERIFIED', biliUid: '10001' } : challenge,
+    ),
+  );
+  await mockJson(page, '**/api/v1/auth/register', { id: testId(11), username: 'new_user' }, 201);
   await page.goto(`${appUrl}/register`);
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  await expect(page.getByText(challenge.code)).toBeVisible();
+  await expect(page.getByLabel('用户名')).toHaveCount(0);
+  verified = true;
+  await expect(page.getByText('已验证 UID 10001')).toBeVisible();
   await page.getByLabel('昵称').fill('新用户');
-  await page.getByLabel('邮箱').fill('new-user@example.com');
-  await page.getByLabel('密码').fill('correct-horse-battery-staple');
-  await page.getByRole('button', { name: '创建账号' }).click();
-
+  await page.getByLabel('用户名', { exact: true }).fill('new_user');
+  await page.getByLabel('新密码', { exact: true }).fill('correct-horse-battery-staple');
+  await page.getByLabel('确认密码', { exact: true }).fill('mismatched-password');
+  await expect(page.getByRole('button', { name: '创建账号', exact: true })).toBeDisabled();
+  await page.getByLabel('确认密码', { exact: true }).fill('correct-horse-battery-staple');
+  await page.getByRole('button', { name: '创建账号', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByText('账号已创建，请使用刚才填写的邮箱和密码登录。')).toBeVisible();
-  await expect(page.getByLabel('密码')).toHaveValue('');
+  await expect(page.getByText('账号已创建，请使用用户名和密码登录。')).toBeVisible();
+  await expect(page.getByLabel('密码', { exact: true })).toHaveValue('');
+});
+
+test('reveals username after recovery verification and resets the password', async ({
+  appUrl,
+  page,
+}) => {
+  const challenge = {
+    id: testId(12),
+    purpose: 'RECOVER',
+    status: 'PENDING',
+    code: 'CLUB-ABCDEFGH24',
+    expiresAt: testTime(1),
+    room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
+    connectionState: 'HEALTHY',
+    biliUid: null,
+    username: null,
+  };
+  let verified = false;
+  await mockJson(page, '**/api/v1/auth/challenges', challenge, 201);
+  await page.route('**/api/v1/auth/challenges/' + challenge.id, (route) =>
+    fulfillJson(
+      route,
+      verified
+        ? { ...challenge, status: 'VERIFIED', biliUid: '10001', username: 'recoverable_user' }
+        : challenge,
+    ),
+  );
+  await mockJson(page, '**/api/v1/auth/recover', null);
+  await page.goto(`${appUrl}/login`);
+  await page.getByRole('link', { name: '忘记用户名或密码？' }).click();
+  await page.getByLabel('B站 UID').fill('10001');
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  await expect(page.getByText(challenge.code)).toBeVisible();
+  await expect(page.getByText('recoverable_user')).toHaveCount(0);
+  verified = true;
+  await expect(page.getByText('recoverable_user')).toBeVisible();
+  await page.getByLabel('新密码', { exact: true }).fill('a-new-password-for-login');
+  await page.getByLabel('确认密码', { exact: true }).fill('a-new-password-for-login');
+  await page.getByRole('button', { name: '设置新密码', exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByText('密码已更新，请重新登录。')).toBeVisible();
 });
 
 test('clears the credential form when the user signs out', async ({ appUrl, page }) => {
-  await page.route('**/api/auth/sign-in/email', (route) => fulfillJson(route, {}));
-  await page.route('**/api/auth/sign-out', (route) => fulfillJson(route, {}));
+  await page.route('**/api/v1/auth/login', (route) => fulfillJson(route, {}));
+  await page.route('**/api/v1/auth/logout', (route) => fulfillJson(route, {}));
   await mockApi(page, (request) => {
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return recipientIdentity({ id: testId(11) });
-    if (pathname === '/api/v1/me/bilibili-binding') return null;
     if (pathname === '/api/v1/me/gifts/overview')
       return {
         counts: { claimable: 0, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
@@ -118,7 +185,7 @@ test('clears the credential form when the user signs out', async ({ appUrl, page
   });
 
   await page.goto(`${appUrl}/login`);
-  await page.getByLabel('邮箱').fill('viewer@example.com');
+  await page.getByLabel('用户名').fill('viewer');
   await page.getByLabel('密码').fill('correct-horse-battery-staple');
   await page.getByRole('button', { name: '登录' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
@@ -127,6 +194,6 @@ test('clears the credential form when the user signs out', async ({ appUrl, page
   await page.getByRole('button', { name: '测试用户的账号菜单' }).click();
   await page.getByRole('menuitem', { name: '退出登录' }).click();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByLabel('邮箱')).toHaveValue('');
+  await expect(page.getByLabel('用户名')).toHaveValue('');
   await expect(page.getByLabel('密码')).toHaveValue('');
 });

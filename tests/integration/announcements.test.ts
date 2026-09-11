@@ -36,12 +36,12 @@ integration('announcement lifecycle', () => {
     const accounts = await database.orm
       .insert(users)
       .values([
-        { email: 'admin@example.com', name: 'Admin', role: 'PLATFORM_ADMIN' },
-        { email: 'recipient@example.com', name: 'Recipient', role: 'USER' },
+        { username: 'admin', name: 'Admin', role: 'PLATFORM_ADMIN' },
+        { username: 'recipient', bilibiliUid: '700001', name: 'Recipient', role: 'USER' },
       ])
-      .returning({ email: users.email, id: users.id });
-    adminUserId = accounts.find((account) => account.email === 'admin@example.com')!.id;
-    recipientUserId = accounts.find((account) => account.email === 'recipient@example.com')!.id;
+      .returning({ username: users.username, id: users.id });
+    adminUserId = accounts.find((account) => account.username === 'admin')!.id;
+    recipientUserId = accounts.find((account) => account.username === 'recipient')!.id;
     clock = new MutableClock(new Date('2026-08-01T00:00:00.000Z'));
     service = new AnnouncementService(database, clock);
   });
