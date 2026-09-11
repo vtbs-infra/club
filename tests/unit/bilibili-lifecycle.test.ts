@@ -9,7 +9,11 @@ import { createIdentityRuntime } from '../../src/server/modules/auth/identity-ru
 import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
 
 const { sockets } = vi.hoisted(() => ({
-  sockets: [] as (EventTarget & { closed: boolean; ws: EventTarget })[],
+  sockets: [] as (EventTarget & {
+    closed: boolean;
+    ws: EventTarget;
+    options: { buvid?: string };
+  })[],
 }));
 vi.mock('bilibili-live-danmaku', async (importOriginal) => {
   const actual = await importOriginal<typeof Bilibili>();
@@ -18,7 +22,10 @@ vi.mock('bilibili-live-danmaku', async (importOriginal) => {
     LiveWS: class extends EventTarget {
       public closed = false;
       public readonly ws = new EventTarget();
-      public constructor() {
+      public constructor(
+        _roomId: number,
+        public readonly options: { buvid?: string },
+      ) {
         super();
         sockets.push(this);
       }
@@ -58,7 +65,10 @@ describe('Bilibili operation lifetime', () => {
 
   it('bounds cookie initialization by the connection deadline', async () => {
     const network = hangingFetch();
-    const source = new PublicWebLiveMessageSource(30, 1000, network.fetch);
+    const source = new PublicWebLiveMessageSource({
+      connectTimeoutMs: 30,
+      fetchImplementation: network.fetch,
+    });
     const connected = source.connectRoom(
       '100',
       { onMessage: () => undefined, onDisconnect: () => undefined },
@@ -74,7 +84,10 @@ describe('Bilibili operation lifetime', () => {
   it('aborts pending initialization before waiting for runtime shutdown', async () => {
     const network = hangingFetch();
     const connections = new RoomConnectionManager({
-      source: new PublicWebLiveMessageSource(60_000, 1000, network.fetch),
+      source: new PublicWebLiveMessageSource({
+        connectTimeoutMs: 60_000,
+        fetchImplementation: network.fetch,
+      }),
       onMessage: () => undefined,
     });
     const runtime = createIdentityRuntime({
@@ -106,7 +119,10 @@ describe('Bilibili operation lifetime', () => {
   it('drains pending connectivity tests when closing the connection manager', async () => {
     const network = hangingFetch();
     const manager = new RoomConnectionManager({
-      source: new PublicWebLiveMessageSource(60_000, 1000, network.fetch),
+      source: new PublicWebLiveMessageSource({
+        connectTimeoutMs: 60_000,
+        fetchImplementation: network.fetch,
+      }),
       onMessage: () => undefined,
     });
     const testing = expect(manager.testRoom('100')).rejects.toMatchObject({ name: 'AbortError' });
@@ -146,6 +162,83 @@ describe('Bilibili operation lifetime', () => {
     }
   });
 
+  it('uses the API session buvid and reports bounded, sanitized receive failures', async () => {
+    vi.spyOn(BilibiliApiClient.prototype, 'initCookie').mockImplementation(function (
+      this: BilibiliApiClient,
+    ) {
+      this.cookies.set('buvid3', 'fixture-buvid');
+      return Promise.resolve();
+    });
+    vi.spyOn(BilibiliApiClient.prototype, 'wbiSign').mockImplementation((url) =>
+      Promise.resolve(url),
+    );
+    const fetch: typeof globalThis.fetch = (input) => {
+      const path = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+      if (path.endsWith('/room_init'))
+        return Promise.resolve(Response.json({ code: 0, data: { room_id: 100 } }));
+      if (path.endsWith('/getDanmuInfo'))
+        return Promise.resolve(
+          Response.json({
+            code: 0,
+            data: { token: 'private-token', host_list: [{ host: 'example.com', wss_port: 443 }] },
+          }),
+        );
+      return Promise.resolve(Response.json({ code: -1, message: 'private-response' }));
+    };
+    const reportDiagnostic = vi.fn();
+    const onMessage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('private-message'))
+      .mockResolvedValue(undefined);
+    const source = new PublicWebLiveMessageSource({ fetchImplementation: fetch, reportDiagnostic });
+    const connecting = source.connectRoom(
+      '100',
+      { onMessage, onDisconnect: () => undefined },
+      new AbortController().signal,
+    );
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    const live = sockets[0]!;
+    expect(live.options.buvid).toBe('fixture-buvid');
+    live.dispatchEvent(new Event('CONNECT_SUCCESS'));
+    const connection = await connecting;
+    try {
+      await vi.waitFor(() =>
+        expect(reportDiagnostic).toHaveBeenCalledWith({
+          roomId: '100',
+          transport: 'history',
+          reason: 'history-failed',
+        }),
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        live.dispatchEvent(
+          new MessageEvent('DANMU_MSG', { data: { info: null, private: 'private-payload' } }),
+        );
+      }
+      live.dispatchEvent(new Event('error:decode'));
+      const raw = { info: { 0: { 4: 1789102871563 }, 1: 'private-content', 2: { 0: 42 } } };
+      live.dispatchEvent(new MessageEvent('DANMU_MSG', { data: raw }));
+      await vi.waitFor(() =>
+        expect(reportDiagnostic).toHaveBeenCalledWith({
+          roomId: '100',
+          transport: 'websocket',
+          reason: 'delivery-failed',
+        }),
+      );
+      live.dispatchEvent(new MessageEvent('DANMU_MSG', { data: raw }));
+      await vi.waitFor(() => expect(onMessage).toHaveBeenCalledTimes(2));
+      expect(reportDiagnostic.mock.calls).toEqual([
+        [{ roomId: '100', transport: 'history', reason: 'history-failed' }],
+        [{ roomId: '100', transport: 'websocket', reason: 'invalid-message' }],
+        [{ roomId: '100', transport: 'websocket', reason: 'decode-failed' }],
+        [{ roomId: '100', transport: 'websocket', reason: 'delivery-failed' }],
+      ]);
+    } finally {
+      await connection.close();
+    }
+    live.dispatchEvent(new Event('error:decode'));
+    expect(reportDiagnostic).toHaveBeenCalledTimes(4);
+  });
+
   it.each([true, false])(
     'drains message delivery on close, authenticated=%s',
     async (authenticated) => {
@@ -169,7 +262,11 @@ describe('Bilibili operation lifetime', () => {
       };
       const delivered = Promise.withResolvers<void>();
       const finishDelivery = Promise.withResolvers<void>();
-      const source = new PublicWebLiveMessageSource(1000, 1000, fetch);
+      const source = new PublicWebLiveMessageSource({
+        connectTimeoutMs: 1000,
+        historyPollIntervalMs: 1000,
+        fetchImplementation: fetch,
+      });
       const controller = new AbortController();
       const connecting = source.connectRoom(
         '100',

@@ -36,9 +36,16 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
     queryKey: ['identity-challenge', issued?.id],
     queryFn: () => getIdentityChallenge(issued!.id),
     enabled: Boolean(issued),
+    initialData: issued ?? undefined,
     retry: 1,
     staleTime: 0,
-    refetchInterval: (query) => (query.state.data?.status === 'PENDING' ? 2000 : false),
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const current = query.state.data;
+      return current?.status === 'PENDING' && new Date(current.expiresAt).getTime() > Date.now()
+        ? 2000
+        : false;
+    },
   });
   const challenge = challengeQuery.data ?? issued;
   const expired = challenge ? new Date(challenge.expiresAt).getTime() <= now : false;
@@ -166,14 +173,18 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                     <InlineNotice tone="warning">本次验证已失效，请重新验证。</InlineNotice>
                   ) : (
                     <>
-                      <p>
-                        用你的 B站账号前往{' '}
-                        <a href={challenge.room.link} target="_blank" rel="noreferrer">
-                          {challenge.room.displayName}
-                        </a>{' '}
-                        发送下方验证码，然后回到本页继续。
-                      </p>
-                      <code className="identity-code">{issued?.code}</code>
+                      {challenge.connectionState === 'HEALTHY' ? (
+                        <>
+                          <p>
+                            用你的 B站账号前往{' '}
+                            <a href={challenge.room.link} target="_blank" rel="noreferrer">
+                              {challenge.room.displayName}
+                            </a>{' '}
+                            发送下方验证码，然后回到本页继续。
+                          </p>
+                          <code className="identity-code">{issued?.code}</code>
+                        </>
+                      ) : null}
                       <p>
                         验证码剩余{' '}
                         {Math.max(
@@ -184,8 +195,10 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                       </p>
                       <p role="status">
                         {challenge.connectionState === 'UNHEALTHY'
-                          ? '验证连接暂时不可用，正在重试…'
-                          : '正在等待 B站消息…'}
+                          ? '验证连接暂时不可用，正在重试。恢复后请重新发送验证码。'
+                          : challenge.connectionState === 'HEALTHY'
+                            ? '连接已就绪，正在等待 B站消息…'
+                            : '正在连接验证直播间，请等连接就绪后再发送验证码…'}
                       </p>
                     </>
                   )}
@@ -206,7 +219,19 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                   验证通过后继续填写{isRegister ? '用户名和密码' : '新密码'}。
                 </p>
               )}
-              {challengeQuery.isError ? <ErrorNotice error={challengeQuery.error} /> : null}
+              {challengeQuery.isError ? (
+                <div className="stack-md">
+                  <ErrorNotice error={challengeQuery.error} />
+                  <button
+                    className="button secondary"
+                    disabled={challengeQuery.isFetching}
+                    onClick={() => void challengeQuery.refetch()}
+                    type="button"
+                  >
+                    重试读取验证结果
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {canComplete ? (

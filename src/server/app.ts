@@ -114,9 +114,23 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
   const creatorProfileSource = options.creatorProfileSource ?? new PublicWebCreatorProfileSource();
   const connections: RoomConnectionManager = new RoomConnectionManager({
-    source: options.liveMessageSource ?? new PublicWebLiveMessageSource(),
+    source:
+      options.liveMessageSource ??
+      new PublicWebLiveMessageSource({
+        reportDiagnostic: (diagnostic) => {
+          logger.warn(diagnostic, 'Bilibili live-message processing failed');
+        },
+      }),
     onMessage: async (event) => {
-      await identities.handleLiveMessage(event);
+      if ((await identities.handleLiveMessage(event)) === 'VERIFIED') {
+        logger.info(
+          {
+            roomId: event.roomId,
+            messageAgeMs: clock.now().getTime() - event.occurredAt.getTime(),
+          },
+          'Bilibili identity challenge verified',
+        );
+      }
     },
     onStateChange: async (biliRoomId, state) => {
       const now = clock.now();

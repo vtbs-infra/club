@@ -32,6 +32,101 @@ describe('live-message adapters', () => {
     });
   });
 
+  it.each(['send_time', 'info'] as const)(
+    'normalizes seconds and milliseconds from %s without changing the event time',
+    (field) => {
+      for (const timestamp of [1_789_102_871, 1_789_102_871_563]) {
+        const raw = {
+          ...sanitizedFixture,
+          ...(field === 'send_time' ? { send_time: timestamp } : {}),
+          info: {
+            ...sanitizedFixture.info,
+            0: { ...sanitizedFixture.info[0], 4: field === 'info' ? timestamp : 1 },
+          },
+        };
+        expect(normalizePublicWebDanmaku('24300932', raw)?.occurredAt).toEqual(
+          new Date(timestamp < 10_000_000_000 ? timestamp * 1000 : timestamp),
+        );
+      }
+    },
+  );
+
+  it.each([0, undefined, 'masked'])(
+    'uses the explicit sender UID when the legacy field is unavailable: %s',
+    (legacyUid) => {
+      const metadata = [];
+      metadata[4] = 1_789_102_871_563;
+      metadata[15] = {
+        user: { uid: 123456789, base: { name: 'Sender' }, medal: { ruid: 99999 } },
+      };
+      expect(
+        normalizePublicWebDanmaku('24300932', {
+          info: [metadata, 'CLUB-ABCDEFGH23', [legacyUid, 'Legacy name']],
+        }),
+      ).toMatchObject({ biliUid: '123456789', biliDisplayName: 'Sender' });
+    },
+  );
+
+  it('accepts matching sender fields but rejects conflicting identities', () => {
+    const raw = (uid: number) => ({
+      info: {
+        0: { 4: 1_789_102_871_563, 15: { user: { uid } } },
+        1: 'CLUB-ABCDEFGH23',
+        2: { 0: 123456789 },
+      },
+    });
+    expect(normalizePublicWebDanmaku('24300932', raw(123456789))?.biliUid).toBe('123456789');
+    expect(normalizePublicWebDanmaku('24300932', raw(99999))).toBeNull();
+  });
+
+  it.each([0, true, -1, 1.2, 9_007_199_254_740_992, '', '0123', '1e3', '123 ', 'masked'])(
+    'never derives sender proof from a name, medal owner or hash when UID is invalid: %s',
+    (uid) => {
+      expect(
+        normalizePublicWebDanmaku('24300932', {
+          info: {
+            0: {
+              4: 1_789_102_871_563,
+              15: {
+                extra: JSON.stringify({ user_hash: 'abc123', uid: 123456789 }),
+                user: { uid, base: { name: '123456789' }, medal: { ruid: 123456789 } },
+              },
+            },
+            1: 'CLUB-ABCDEFGH23',
+            2: { 0: uid, 1: '123456789' },
+          },
+        }),
+      ).toBeNull();
+    },
+  );
+
+  it('preserves a decimal string UID without rounding it through a number', () => {
+    expect(
+      normalizePublicWebDanmaku('24300932', {
+        info: { 0: { 4: 1_789_102_871_563 }, 1: 'message', 2: { 0: '9007199254740993' } },
+      })?.biliUid,
+    ).toBe('9007199254740993');
+  });
+
+  it.each([null, undefined, {}, { info: null }, { info: [] }, { info: [null, 'message'] }])(
+    'contains malformed upstream messages without throwing: %j',
+    (raw) => expect(normalizePublicWebDanmaku('24300932', raw)).toBeNull(),
+  );
+
+  it.each([undefined, null, '', '1789102871563', 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects missing or invalid event time instead of inventing receipt time: %s',
+    (timestamp) => {
+      const raw = {
+        ...sanitizedFixture,
+        info: {
+          ...sanitizedFixture.info,
+          0: { ...sanitizedFixture.info[0], 4: timestamp },
+        },
+      } as unknown as MessageData.DANMU_MSG;
+      expect(normalizePublicWebDanmaku('24300932', raw)).toBeNull();
+    },
+  );
+
   it('normalizes recent room messages with stable IDs and China Standard Time', () => {
     const message = {
       nickname: 'sanitized-history-user',

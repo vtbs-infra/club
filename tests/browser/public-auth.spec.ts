@@ -2,7 +2,7 @@ import { APPLICATION_VERSION } from '../../src/server/application-version.js';
 
 import { fulfillJson, mockApi, mockJson, requestPath } from './support/api.js';
 import { portalHome, recipientIdentity, testId, testTime } from './support/fixtures.js';
-import { expect, freezeBrowserTime, test } from './support/test.js';
+import { expect, freezeBrowserTime, test, TEST_NOW } from './support/test.js';
 
 test.beforeEach(async ({ page }) => {
   await freezeBrowserTime(page);
@@ -164,6 +164,54 @@ test('reveals username after recovery verification and resets the password', asy
   await page.getByRole('button', { name: '设置新密码', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByText('密码已更新，请重新登录。')).toBeVisible();
+});
+
+test('recovers initial polling failures, waits for room readiness and stops polling after proof', async ({
+  appUrl,
+  page,
+}) => {
+  await page.clock.install({ time: TEST_NOW });
+  const challenge = {
+    id: testId(13),
+    purpose: 'REGISTER',
+    status: 'PENDING',
+    code: 'CLUB-ABCDEFGH25',
+    expiresAt: testTime(1),
+    room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
+    connectionState: 'CONNECTING',
+    biliUid: null,
+    username: null,
+  };
+  let queries = 0;
+  let verified = false;
+  await mockJson(page, '**/api/v1/auth/challenges', challenge, 201);
+  await page.route('**/api/v1/auth/challenges/' + challenge.id, async (route) => {
+    queries++;
+    if (queries <= 2) {
+      await fulfillJson(route, { error: { code: 'TEMPORARY', message: 'Temporary failure' } }, 503);
+      return;
+    }
+    await fulfillJson(route, {
+      ...challenge,
+      code: undefined,
+      connectionState: 'HEALTHY',
+      ...(verified ? { status: 'VERIFIED', biliUid: '10001' } : {}),
+    });
+  });
+  await page.goto(`${appUrl}/register`);
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  await expect(page.getByText('正在连接验证直播间，请等连接就绪后再发送验证码…')).toBeVisible();
+  await expect(page.getByText(challenge.code)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '验证房间' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '重试读取验证结果' })).toBeVisible();
+  // Polling must resume without a click or a visibility change, even after retries run out.
+  await expect(page.getByText(challenge.code)).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole('link', { name: '验证房间' })).toBeVisible();
+  verified = true;
+  await expect(page.getByText('已验证 UID 10001')).toBeVisible();
+  const completedQueries = queries;
+  await page.clock.runFor(6000);
+  expect(queries).toBe(completedQueries);
 });
 
 test('clears the credential form when the user signs out', async ({ appUrl, page }) => {
