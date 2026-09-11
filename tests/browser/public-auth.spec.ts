@@ -92,7 +92,7 @@ test('verifies UID before completing registration and returns to a clean login f
     purpose: 'REGISTER',
     status: 'PENDING',
     code: 'CLUB-ABCDEFGH23',
-    expiresAt: testTime(1),
+    expiresAt: new Date(TEST_NOW.getTime() + 10 * 60_000).toISOString(),
     room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
     connectionState: 'HEALTHY',
     biliUid: null,
@@ -109,7 +109,9 @@ test('verifies UID before completing registration and returns to a clean login f
   await mockJson(page, '**/api/v1/auth/register', { id: testId(11), username: 'new_user' }, 201);
   await page.goto(`${appUrl}/register`);
   await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
-  await expect(page.getByText(challenge.code)).toBeVisible();
+  await expect(page.getByRole('textbox', { name: '验证码', exact: true })).toHaveValue(
+    challenge.code,
+  );
   await expect(page.getByLabel('用户名')).toHaveCount(0);
   verified = true;
   await expect(page.getByText('已验证 UID 10001')).toBeVisible();
@@ -134,7 +136,7 @@ test('reveals username after recovery verification and resets the password', asy
     purpose: 'RECOVER',
     status: 'PENDING',
     code: 'CLUB-ABCDEFGH24',
-    expiresAt: testTime(1),
+    expiresAt: new Date(TEST_NOW.getTime() + 10 * 60_000).toISOString(),
     room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
     connectionState: 'HEALTHY',
     biliUid: null,
@@ -155,7 +157,9 @@ test('reveals username after recovery verification and resets the password', asy
   await page.getByRole('link', { name: '忘记用户名或密码？' }).click();
   await page.getByLabel('B站 UID').fill('10001');
   await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
-  await expect(page.getByText(challenge.code)).toBeVisible();
+  await expect(page.getByRole('textbox', { name: '验证码', exact: true })).toHaveValue(
+    challenge.code,
+  );
   await expect(page.getByText('recoverable_user')).toHaveCount(0);
   verified = true;
   await expect(page.getByText('recoverable_user')).toBeVisible();
@@ -176,7 +180,7 @@ test('recovers initial polling failures, waits for room readiness and stops poll
     purpose: 'REGISTER',
     status: 'PENDING',
     code: 'CLUB-ABCDEFGH25',
-    expiresAt: testTime(1),
+    expiresAt: new Date(TEST_NOW.getTime() + 10 * 60_000).toISOString(),
     room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
     connectionState: 'CONNECTING',
     biliUid: null,
@@ -200,18 +204,155 @@ test('recovers initial polling failures, waits for room readiness and stops poll
   });
   await page.goto(`${appUrl}/register`);
   await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
-  await expect(page.getByText('正在连接验证直播间，请等连接就绪后再发送验证码…')).toBeVisible();
-  await expect(page.getByText(challenge.code)).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '验证房间' })).toHaveCount(0);
+  await expect(page.getByText('连接就绪后会显示验证码，请稍候。')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: '验证码', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '打开验证直播间' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '重试读取验证结果' })).toBeVisible();
   // Polling must resume without a click or a visibility change, even after retries run out.
-  await expect(page.getByText(challenge.code)).toBeVisible({ timeout: 8000 });
-  await expect(page.getByRole('link', { name: '验证房间' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: '验证码', exact: true })).toHaveValue(
+    challenge.code,
+    { timeout: 8000 },
+  );
+  await expect(page.getByRole('link', { name: '打开验证直播间' })).toBeVisible();
   verified = true;
   await expect(page.getByText('已验证 UID 10001')).toBeVisible();
   const completedQueries = queries;
   await page.clock.runFor(6000);
   expect(queries).toBe(completedQueries);
+});
+
+test('copies the current code and makes the room action usable on desktop and mobile', async ({
+  appUrl,
+  page,
+  context,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const challenge = {
+    id: testId(30),
+    purpose: 'REGISTER',
+    status: 'PENDING',
+    code: 'CLUB-ABCDEFGH23',
+    expiresAt: new Date(TEST_NOW.getTime() + 10 * 60_000).toISOString(),
+    room: { displayName: '验证1', link: 'https://live.bilibili.com/24300932' },
+    connectionState: 'HEALTHY',
+    biliUid: null,
+    username: null,
+  };
+  let requests = 0;
+  let current = challenge;
+  await page.route('**/api/v1/auth/challenges', async (route) => {
+    requests++;
+    current =
+      requests === 1 ? challenge : { ...challenge, id: testId(31), code: 'CLUB-JKLMNPQR45' };
+    await fulfillJson(route, current, 201);
+  });
+  await page.route('**/api/v1/auth/challenges/*', (route) =>
+    fulfillJson(route, { ...current, code: undefined }),
+  );
+  await context.route(challenge.room.link, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<title>Verification room</title>' }),
+  );
+  await page.goto(`${appUrl}/register`);
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  const code = page.getByRole('textbox', { name: '验证码', exact: true });
+  const copy = page.getByRole('button', { name: '复制验证码' });
+  const room = page.getByRole('link', { name: '打开验证直播间' });
+  await expect(code).toHaveValue(challenge.code);
+  await expect(code).toHaveJSProperty('readOnly', true);
+  await expect(room).toHaveAttribute('href', challenge.room.link);
+  await expect(room).toHaveAttribute('target', '_blank');
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(copy).toBeVisible();
+    await expect(room).toBeVisible();
+    expect(
+      await page.evaluate<boolean>('document.documentElement.scrollWidth <= window.innerWidth'),
+    ).toBe(true);
+    expect(await code.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`register-${width}.png`), fullPage: true });
+  }
+  await copy.click();
+  await expect(copy).toHaveText('已复制');
+  expect(await page.evaluate<string>('navigator.clipboard.readText()')).toBe(challenge.code);
+  await page.getByRole('button', { name: '重新获取验证码' }).click();
+  await expect(code).toHaveValue('CLUB-JKLMNPQR45');
+  await expect(copy).toHaveText('复制');
+  await copy.click();
+  expect(await page.evaluate<string>('navigator.clipboard.readText()')).toBe('CLUB-JKLMNPQR45');
+  await room.focus();
+  const popupPromise = page.waitForEvent('popup');
+  await page.keyboard.press('Enter');
+  const popup = await popupPromise;
+  await expect(popup).toHaveURL(challenge.room.link);
+  expect(await popup.evaluate<boolean>('window.opener === null')).toBe(true);
+  await popup.close();
+  await expect(page).toHaveURL(`${appUrl}/register`);
+  await expect(code).toHaveValue('CLUB-JKLMNPQR45');
+  await page.route('**/api/v1/appearance', (route) => fulfillJson(route, { themePreset: 'neon' }));
+  await page.reload();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-app-theme', 'neon');
+  await expect(room).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('register-neon.png'), fullPage: true });
+});
+
+test('supports manual copying, expires old actions and keeps the recovery target explicit', async ({
+  appUrl,
+  page,
+}, testInfo) => {
+  await page.clock.install({ time: TEST_NOW });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new DOMException('Denied', 'NotAllowedError')) },
+    });
+  });
+  const targets: string[] = [];
+  let current = {
+    id: testId(32),
+    purpose: 'RECOVER',
+    status: 'PENDING',
+    code: 'CLUB-ABCDEFGH23',
+    expiresAt: new Date(TEST_NOW.getTime() + 30_000).toISOString(),
+    room: { displayName: '验证1', link: 'https://live.bilibili.com/24300932' },
+    connectionState: 'HEALTHY',
+    biliUid: null,
+    username: null,
+  };
+  await page.route('**/api/v1/auth/challenges', async (route) => {
+    targets.push((route.request().postDataJSON() as { biliUid: string }).biliUid);
+    current = {
+      ...current,
+      id: testId(32 + targets.length),
+      expiresAt: new Date(TEST_NOW.getTime() + targets.length * 60_000).toISOString(),
+    };
+    await fulfillJson(route, current, 201);
+  });
+  await page.route('**/api/v1/auth/challenges/*', (route) => fulfillJson(route, current));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appUrl}/recover`);
+  await page.getByLabel('B站 UID', { exact: true }).fill('3493095194757549');
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  await expect(page.getByText('请使用 UID 3493095194757549 的 B站账号。')).toBeVisible();
+  await page.getByRole('button', { name: '复制验证码' }).click();
+  await expect(page.getByText('未能自动复制，已选中验证码，请手动复制。')).toBeVisible();
+  const code = page.getByRole('textbox', { name: '验证码', exact: true });
+  await expect(code).toBeFocused();
+  await expect(code).toHaveJSProperty('selectionStart', 0);
+  await expect(code).toHaveJSProperty('selectionEnd', current.code.length);
+  await page.screenshot({ path: testInfo.outputPath('recover-copy-fallback.png'), fullPage: true });
+  await page.clock.fastForward(61_000);
+  await expect(page.getByText('本次验证已失效，请重新验证。')).toBeVisible();
+  await expect(code).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '复制验证码' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '打开验证直播间' })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('recover-expired.png'), fullPage: true });
+  await page.getByRole('button', { name: '更换 B站 UID' }).click();
+  await page.getByLabel('B站 UID', { exact: true }).fill('20002');
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  await expect(page.getByText('请使用 UID 20002 的 B站账号。')).toBeVisible();
+  expect(targets).toEqual(['3493095194757549', '20002']);
 });
 
 test('clears the credential form when the user signs out', async ({ appUrl, page }) => {

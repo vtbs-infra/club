@@ -23,6 +23,8 @@ All notable Club changes are documented here. The format follows
 
 ### Changed
 
+- Guide registration and recovery through a shared identity-verification panel with code copying,
+  an explicit live-room action, expiry feedback and a clear transition to account setup.
 - Require the managed reading account for live verification, creator profiles and guard rosters;
   keep enabled verification rooms authenticated and remove message-history polling.
 - Freeze credentials for each profile lookup and roster attempt; invalidate old contexts when

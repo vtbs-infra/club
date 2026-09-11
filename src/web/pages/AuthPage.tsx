@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, Gift, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Gift, ShieldCheck, Sparkles } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -13,6 +13,7 @@ import {
 } from '../api/auth';
 import { useSession } from '../app/session-context';
 import { ProductBrand } from '../components/ProductBrand';
+import { IdentityVerification } from '../components/IdentityVerification';
 import { ErrorNotice, InlineNotice } from '../components/Ui';
 import { useNow } from '../hooks/useNow';
 
@@ -28,6 +29,7 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
   const [error, setError] = useState<unknown>(null);
   const [pending, setPending] = useState(false);
   const [issued, setIssued] = useState<IdentityChallenge | null>(null);
+  const [challengeUid, setChallengeUid] = useState<string | null>(null);
   const now = useNow(1000);
   const isRegister = mode === 'register';
   const isRecover = mode === 'recover';
@@ -53,8 +55,8 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
   const canComplete = isLogin || (verified && (isRegister || Boolean(challenge?.username)));
   const message = location.state as { registered?: boolean; passwordChanged?: boolean } | null;
 
-  async function startChallenge(event: FormEvent) {
-    event.preventDefault();
+  async function startChallenge() {
+    const requestedUid = uid;
     setPending(true);
     setError(null);
     setPassword('');
@@ -62,14 +64,22 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
     try {
       setIssued(
         await createIdentityChallenge(
-          isRecover ? { purpose: 'RECOVER', biliUid: uid } : { purpose: 'REGISTER' },
+          isRecover ? { purpose: 'RECOVER', biliUid: requestedUid } : { purpose: 'REGISTER' },
         ),
       );
+      setChallengeUid(isRecover ? requestedUid : null);
     } catch (caught) {
       setError(caught);
     } finally {
       setPending(false);
     }
+  }
+  function changeIdentity() {
+    setIssued(null);
+    setChallengeUid(null);
+    setPassword('');
+    setConfirmation('');
+    setError(null);
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -146,78 +156,64 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
           ) : null}
           {!isLogin ? (
             <div className="stack-md">
-              <form className="stack-md" onSubmit={startChallenge}>
-                {isRecover ? (
-                  <label>
-                    B站 UID
-                    <input
-                      autoComplete="off"
-                      inputMode="numeric"
-                      maxLength={20}
-                      pattern="[1-9][0-9]*"
-                      required
-                      value={uid}
-                      onChange={(event) => setUid(event.target.value)}
-                    />
-                  </label>
-                ) : null}
-                <button className="button secondary wide" type="submit" disabled={pending}>
-                  {pending ? '请稍候…' : issued ? '重新验证 B站身份' : '验证 B站身份'}
-                </button>
-              </form>
+              <ol className="auth-progress" aria-label={isRegister ? '注册进度' : '账号找回进度'}>
+                <li
+                  className={canComplete ? 'is-complete' : 'is-current'}
+                  aria-current={!canComplete ? 'step' : undefined}
+                >
+                  <span>{canComplete ? <Check aria-hidden="true" size={14} /> : '1'}</span>
+                  验证 B站身份
+                </li>
+                <li
+                  className={canComplete ? 'is-current' : ''}
+                  aria-current={canComplete ? 'step' : undefined}
+                >
+                  <span>2</span>
+                  {isRegister ? '设置账号' : '设置新密码'}
+                </li>
+              </ol>
               {challenge ? (
-                <div className="identity-verification" aria-live="polite">
-                  {verified ? (
-                    <InlineNotice tone="success">已验证 UID {challenge.biliUid}</InlineNotice>
-                  ) : expired || ['EXPIRED', 'CANCELLED', 'CONSUMED'].includes(challenge.status) ? (
-                    <InlineNotice tone="warning">本次验证已失效，请重新验证。</InlineNotice>
-                  ) : (
-                    <>
-                      {challenge.connectionState === 'HEALTHY' ? (
-                        <>
-                          <p>
-                            用你的 B站账号前往{' '}
-                            <a href={challenge.room.link} target="_blank" rel="noreferrer">
-                              {challenge.room.displayName}
-                            </a>{' '}
-                            发送下方验证码，然后回到本页继续。
-                          </p>
-                          <code className="identity-code">{issued?.code}</code>
-                        </>
-                      ) : null}
-                      <p>
-                        验证码剩余{' '}
-                        {Math.max(
-                          0,
-                          Math.ceil((new Date(challenge.expiresAt).getTime() - now) / 1000),
-                        )}{' '}
-                        秒
-                      </p>
-                      <p role="status">
-                        {challenge.connectionState === 'UNHEALTHY'
-                          ? '验证连接暂时不可用，正在重试。恢复后请重新发送验证码。'
-                          : challenge.connectionState === 'HEALTHY'
-                            ? '连接已就绪，正在等待 B站消息…'
-                            : '正在连接验证直播间，请等连接就绪后再发送验证码…'}
-                      </p>
-                    </>
-                  )}
-                  {verified && isRecover ? (
-                    challenge.username ? (
-                      <p>
-                        你的用户名：<strong>{challenge.username}</strong>
-                      </p>
-                    ) : (
-                      <InlineNotice tone="warning">
-                        没有可找回的账号，或账号信息已变化。请重新验证，或前往注册。
-                      </InlineNotice>
-                    )
-                  ) : null}
-                </div>
+                <IdentityVerification
+                  key={challenge.id}
+                  challenge={challenge}
+                  code={issued?.code}
+                  now={now}
+                  busy={pending}
+                  recoveryUid={challengeUid}
+                  onRestart={() => void startChallenge()}
+                  onChangeIdentity={changeIdentity}
+                />
               ) : (
-                <p className="muted">
-                  验证通过后继续填写{isRegister ? '用户名和密码' : '新密码'}。
-                </p>
+                <form
+                  className="stack-md"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void startChallenge();
+                  }}
+                >
+                  {isRecover ? (
+                    <label>
+                      B站 UID
+                      <input
+                        autoComplete="off"
+                        inputMode="numeric"
+                        maxLength={20}
+                        pattern="[1-9][0-9]*"
+                        required
+                        value={uid}
+                        onChange={(event) => setUid(event.target.value)}
+                      />
+                    </label>
+                  ) : null}
+                  <p className="auth-verification-intro">
+                    在指定直播间发送一条验证码，验证通过后继续填写
+                    {isRegister ? '用户名和密码' : '新密码'}。
+                  </p>
+                  <button className="button primary wide" type="submit" disabled={pending}>
+                    <ShieldCheck aria-hidden="true" size={17} />
+                    {pending ? '请稍候…' : '验证 B站身份'}
+                  </button>
+                </form>
               )}
               {challengeQuery.isError ? (
                 <div className="stack-md">
