@@ -8,6 +8,13 @@
       "when": 1789090393347,
       "tag": "0000_username_uid_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789116432107,
+      "tag": "0001_identity_challenge_capacity",
+      "breakpoints": true
     }
   ]
 }

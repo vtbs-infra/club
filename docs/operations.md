@@ -188,7 +188,9 @@ docker compose up -d app
 旧备份仅供使用其原版本独立恢复，不能导入新基线。不要手工修改
 `drizzle.__drizzle_migrations` 绕过 Readiness。
 
-以下原地升级步骤仅适用于未来 Changelog 明确声明兼容的版本；不用于本次基线切换。
+已采用 `0000_username_uid_baseline` 的数据库可以执行后续追加迁移；迁移器要求现有记录
+按顺序匹配目标应用清单的完整前缀，时间戳和 SQL 哈希都必须一致。以下原地升级步骤适用于
+此基线内、Changelog 声明兼容的版本，不用于旧认证模型的基线切换。
 
 升级前：
 
@@ -201,7 +203,8 @@ docker compose up -d app
 
 ```powershell
 docker compose pull app
-docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
+docker compose stop app
+docker compose run --rm --no-deps app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d --no-build --force-recreate app
 ```
 

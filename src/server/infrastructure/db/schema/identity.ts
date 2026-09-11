@@ -122,6 +122,9 @@ export const identityChallenges = pgTable(
     uniqueIndex('identity_challenges_event_unique').on(table.eventId),
     index('identity_challenges_owner_idx').on(table.ownerDigest),
     index('identity_challenges_expiry_idx').on(table.expiresAt),
+    index('identity_challenges_active_expiry_idx')
+      .on(table.expiresAt)
+      .where(sql`${table.status} in ('PENDING', 'VERIFIED')`),
     check('identity_challenges_purpose_check', sql`${table.purpose} in ('REGISTER', 'RECOVER')`),
     check(
       'identity_challenges_status_check',

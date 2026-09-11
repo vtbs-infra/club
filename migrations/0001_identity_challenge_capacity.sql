@@ -1,0 +1,1 @@
+CREATE INDEX "identity_challenges_active_expiry_idx" ON "identity_challenges" USING btree ("expires_at") WHERE "identity_challenges"."status" in ('PENDING', 'VERIFIED');

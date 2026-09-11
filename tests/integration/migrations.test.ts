@@ -1,6 +1,9 @@
-import { resolve } from 'node:path';
+import { appendFile, cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { sql } from 'drizzle-orm';
+import { migrate as drizzleMigrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
 import { afterAll, beforeAll, expect, it, describe as integration } from 'vitest';
 
@@ -9,11 +12,13 @@ import {
   type DatabaseService,
 } from '../../src/server/infrastructure/db/database.js';
 import { migrateDatabase } from '../../src/server/infrastructure/db/migration-runner.js';
+import { EXPECTED_SCHEMA_MIGRATIONS } from '../../src/server/infrastructure/db/schema-version.js';
 import { integrationDatabaseUrl } from '../helpers/integration-database.js';
 
 integration('database migration baseline', () => {
   let admin: ReturnType<typeof postgres>;
   const databases: string[] = [];
+  const directories: string[] = [];
 
   beforeAll(() => {
     const adminUrl = new URL(integrationDatabaseUrl());
@@ -31,6 +36,7 @@ integration('database migration baseline', () => {
       await admin.unsafe(`drop database if exists "${name}"`);
     }
     await admin.end({ timeout: 5 });
+    for (const directory of directories) await rm(directory, { force: true, recursive: true });
   });
 
   async function temporaryDatabase(): Promise<DatabaseService> {
@@ -40,6 +46,35 @@ integration('database migration baseline', () => {
     const targetUrl = new URL(integrationDatabaseUrl());
     targetUrl.pathname = `/${name}`;
     return createDatabase(targetUrl.toString());
+  }
+
+  async function migrationFolder() {
+    const folder = await mkdtemp(join(tmpdir(), 'club-migration-upgrade-'));
+    directories.push(folder);
+    await cp(resolve('migrations'), folder, { recursive: true });
+    return folder;
+  }
+
+  async function installPreviousBaseline(database: DatabaseService) {
+    const folder = await migrationFolder();
+    const journal = JSON.parse(await readFile(join(folder, 'meta/_journal.json'), 'utf8')) as {
+      entries: unknown[];
+    };
+    journal.entries = journal.entries.slice(0, 1);
+    await writeFile(join(folder, 'meta/_journal.json'), JSON.stringify(journal));
+    // Reproduce the already-deployed baseline with its original Drizzle migration identity.
+    await drizzleMigrate(database.orm, { migrationsFolder: folder });
+    await database.orm.execute(
+      sql`insert into users (username, name, bilibili_uid) values ('retained', 'Retained account', '12345')`,
+    );
+  }
+
+  async function history(database: DatabaseService) {
+    return [
+      ...(await database.orm.execute<{ createdAt: string; hash: string }>(sql`
+      select created_at::text as "createdAt", hash from drizzle.__drizzle_migrations order by id
+    `)),
+    ];
   }
 
   async function tableExists(database: DatabaseService, tableName: string): Promise<boolean> {
@@ -153,14 +188,14 @@ integration('database migration baseline', () => {
       const migrations = await database.orm.execute<{ value: number }>(
         sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
       );
-      expect(migrations[0]?.value).toBe(1);
+      expect(migrations[0]?.value).toBe(EXPECTED_SCHEMA_MIGRATIONS.length);
       await expect(database.checkSchema()).resolves.toBeUndefined();
       await expect(migrateDatabase(database, resolve('migrations'))).resolves.toBeUndefined();
       expect(
         await database.orm.execute(
           sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
         ),
-      ).toEqual([{ value: 1 }]);
+      ).toEqual([{ value: EXPECTED_SCHEMA_MIGRATIONS.length }]);
 
       const [appliedMigration] = await database.orm.execute<{
         createdAt: string;
@@ -219,7 +254,7 @@ integration('database migration baseline', () => {
       await database.orm.execute(sql`create table legacy_accounts (id text primary key)`);
       await database.orm.execute(sql`insert into legacy_accounts values ('preserve-me')`);
       await expect(migrateDatabase(database, resolve('migrations'))).rejects.toThrow(
-        'Existing databases are not migrated or erased',
+        'Unrecognized existing databases are not migrated or erased',
       );
       expect(await database.orm.execute(sql`select * from legacy_accounts`)).toEqual([
         { id: 'preserve-me' },
@@ -230,4 +265,156 @@ integration('database migration baseline', () => {
       await database.close();
     }
   });
+
+  it('upgrades a recognized baseline in place and remains idempotent', async () => {
+    const database = await temporaryDatabase();
+    try {
+      await installPreviousBaseline(database);
+      const before = await database.orm.execute(sql`select * from users`);
+      await expect(database.checkSchema()).rejects.toThrow('migration identity');
+      expect(await tableExists(database, 'identity_challenges_active_expiry_idx')).toBe(false);
+      await migrateDatabase(database);
+      await expect(database.checkSchema()).resolves.toBeUndefined();
+      expect(await tableExists(database, 'identity_challenges_active_expiry_idx')).toBe(true);
+      expect(await database.orm.execute(sql`select * from users`)).toEqual(before);
+      const applied = await history(database);
+      expect(applied).toEqual(
+        EXPECTED_SCHEMA_MIGRATIONS.map(({ createdAt, hash }) => ({ createdAt, hash })),
+      );
+      await migrateDatabase(database);
+      expect(await history(database)).toEqual(applied);
+    } finally {
+      await database.close();
+    }
+  });
+
+  it.each(['hash', 'timestamp', 'gap', 'reordered', 'duplicate', 'future'] as const)(
+    'refuses a %s mismatch before applying pending SQL or changing data',
+    async (mismatch) => {
+      const database = await temporaryDatabase();
+      try {
+        await installPreviousBaseline(database);
+        if (mismatch === 'hash')
+          await database.orm.execute(
+            sql`update drizzle.__drizzle_migrations set hash = 'legacy-or-modified-baseline'`,
+          );
+        if (mismatch === 'timestamp')
+          await database.orm.execute(
+            sql`update drizzle.__drizzle_migrations set created_at = created_at + 1`,
+          );
+        if (mismatch === 'gap' || mismatch === 'reordered') {
+          await database.orm.execute(sql`delete from drizzle.__drizzle_migrations`);
+          const second = EXPECTED_SCHEMA_MIGRATIONS[1];
+          await database.orm.execute(
+            sql`insert into drizzle.__drizzle_migrations (hash, created_at) values (${second.hash}, ${second.createdAt})`,
+          );
+        }
+        if (mismatch === 'duplicate' || mismatch === 'reordered') {
+          const first = EXPECTED_SCHEMA_MIGRATIONS[0];
+          await database.orm.execute(
+            sql`insert into drizzle.__drizzle_migrations (hash, created_at) values (${first.hash}, ${first.createdAt})`,
+          );
+        }
+        if (mismatch === 'future')
+          await database.orm.execute(
+            sql`insert into drizzle.__drizzle_migrations (hash, created_at) values ('newer-application', 9999999999999)`,
+          );
+        const before = await history(database);
+        const usersBefore = await database.orm.execute(sql`select * from users`);
+        await expect(migrateDatabase(database)).rejects.toThrow('migration identity');
+        expect(await history(database)).toEqual(before);
+        expect(await database.orm.execute(sql`select * from users`)).toEqual(usersBefore);
+        expect(await tableExists(database, 'identity_challenges_active_expiry_idx')).toBe(false);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  it('refuses modified pending SQL before executing it', async () => {
+    const database = await temporaryDatabase();
+    try {
+      await installPreviousBaseline(database);
+      const folder = await migrationFolder();
+      await appendFile(
+        join(folder, '0001_identity_challenge_capacity.sql'),
+        '\nDROP TABLE users CASCADE;\n',
+      );
+      const before = await history(database);
+      await expect(migrateDatabase(database, folder)).rejects.toThrow('migration identity');
+      expect(await history(database)).toEqual(before);
+      expect(await database.orm.execute(sql`select username from users`)).toEqual([
+        { username: 'retained' },
+      ]);
+      expect(await tableExists(database, 'identity_challenges_active_expiry_idx')).toBe(false);
+    } finally {
+      await database.close();
+    }
+  });
+
+  it('rolls back a failed upgrade without advancing the journal and permits a clean retry', async () => {
+    const database = await temporaryDatabase();
+    try {
+      await installPreviousBaseline(database);
+      await database.orm.execute(
+        sql`create table identity_challenges_active_expiry_idx (marker text)`,
+      );
+      const before = await history(database);
+      await expect(migrateDatabase(database)).rejects.toThrow();
+      expect(await history(database)).toEqual(before);
+      expect(await database.orm.execute(sql`select username from users`)).toEqual([
+        { username: 'retained' },
+      ]);
+      await database.orm.execute(sql`drop table identity_challenges_active_expiry_idx`);
+      await migrateDatabase(database);
+      await expect(database.checkSchema()).resolves.toBeUndefined();
+    } finally {
+      await database.close();
+    }
+  });
+
+  it.each([false, true])(
+    'serializes concurrent migration processes, existing baseline=%s',
+    async (existing) => {
+      const database = await temporaryDatabase();
+      try {
+        if (existing) await installPreviousBaseline(database);
+        await Promise.all([migrateDatabase(database), migrateDatabase(database)]);
+        await expect(database.checkSchema()).resolves.toBeUndefined();
+        expect(await history(database)).toHaveLength(EXPECTED_SCHEMA_MIGRATIONS.length);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'only retries an empty journal when no application data exists, existing data=%s',
+    async (existing) => {
+      const database = await temporaryDatabase();
+      try {
+        await database.orm.execute(sql`create schema drizzle`);
+        await database.orm.execute(
+          sql`create table drizzle.__drizzle_migrations (id serial primary key, hash text not null, created_at bigint)`,
+        );
+        if (existing) {
+          await database.orm.execute(sql`create table legacy_accounts (id text primary key)`);
+          await database.orm.execute(sql`insert into legacy_accounts values ('preserve-me')`);
+          await expect(migrateDatabase(database)).rejects.toThrow(
+            'Unrecognized existing databases',
+          );
+          expect(await history(database)).toEqual([]);
+          expect(await tableExists(database, 'users')).toBe(false);
+          expect(await database.orm.execute(sql`select * from legacy_accounts`)).toEqual([
+            { id: 'preserve-me' },
+          ]);
+        } else {
+          await migrateDatabase(database);
+          await expect(database.checkSchema()).resolves.toBeUndefined();
+        }
+      } finally {
+        await database.close();
+      }
+    },
+  );
 });

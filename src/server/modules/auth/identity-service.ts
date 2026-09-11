@@ -19,6 +19,7 @@ import { hashPassword, normalizeName, normalizeUsername } from './password.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const LIFETIME = 10 * 60_000;
+const MAX_ACTIVE_CHALLENGES = 5000;
 export const CHALLENGE_COOKIE = 'club_identity';
 type Challenge = typeof identityChallenges.$inferSelect;
 
@@ -116,17 +117,33 @@ export class IdentityService {
     await this.connections.reconcile(rooms.map((room) => room.biliRoomId));
   }
   public async createChallenge(owner: string, input: CreateChallengeBody) {
-    const now = this.clock.now();
     const code = generateIdentityCode();
     const created = await this.database.orm.transaction(async (transaction) => {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtext('club:identity-challenges'))`,
       );
+      const now = this.clock.now();
+      // Replacing this browser's proof must work at capacity. Any later failure rolls this back.
       await transaction
-        .delete(identityChallenges)
-        .where(lte(identityChallenges.expiresAt, new Date(now.getTime() - 24 * 60 * 60_000)));
-      const [total] = await transaction.select({ value: count() }).from(identityChallenges);
-      if ((total?.value ?? 0) >= 5000) throw new AppError('IDENTITY_BUSY', 'Try again later.', 429);
+        .update(identityChallenges)
+        .set({ status: 'CANCELLED', updatedAt: now })
+        .where(
+          and(
+            eq(identityChallenges.ownerDigest, this.ownerDigest(owner)),
+            inArray(identityChallenges.status, ['PENDING', 'VERIFIED']),
+          ),
+        );
+      const [active] = await transaction
+        .select({ value: count() })
+        .from(identityChallenges)
+        .where(
+          and(
+            sql`${identityChallenges.status} in ('PENDING', 'VERIFIED')`,
+            gt(identityChallenges.expiresAt, now),
+          ),
+        );
+      if ((active?.value ?? 0) >= MAX_ACTIVE_CHALLENGES)
+        throw new AppError('IDENTITY_BUSY', 'Try again later.', 429);
       const [room] = await transaction
         .select()
         .from(verificationRooms)
@@ -150,15 +167,6 @@ export class IdentityService {
               .where(eq(users.bilibiliUid, input.biliUid))
               .limit(1)
           : [];
-      await transaction
-        .update(identityChallenges)
-        .set({ status: 'CANCELLED', updatedAt: now })
-        .where(
-          and(
-            eq(identityChallenges.ownerDigest, this.ownerDigest(owner)),
-            inArray(identityChallenges.status, ['PENDING', 'VERIFIED']),
-          ),
-        );
       const [challenge] = await transaction
         .insert(identityChallenges)
         .values({
