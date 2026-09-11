@@ -15,7 +15,11 @@ All notable Club changes are documented here. The format follows
 - Rename the authentication secret to `AUTH_SECRET`; administrator CLI uses `--username` and provides `admin:reset-password`.
 - Build the unreleased source with `CLUB_IMAGE=club-app`; existing v0.2.0 images remain on the previous baseline.
 
-## [Unreleased]
+### Fixed
+
+- Fetch creator profiles through public room and anchor endpoints, validating both owner UIDs;
+  avoid registration failures when the full room-page endpoint returns Bilibili error `-352`.
+- Preserve upstream creator-profile failures in server logs for diagnosis.
 
 ## [0.2.0] - 2026-09-09
 

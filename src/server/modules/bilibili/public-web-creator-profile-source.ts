@@ -18,7 +18,7 @@ function positiveIdentifier(value: unknown, label: string): string {
   return String(value);
 }
 
-export function parseCreatorRoomLookup(value: unknown): string {
+function parseCreatorRoomLookup(value: unknown): string {
   const root = object(value);
   if (root?.code !== 0) {
     throw new CreatorProfileSourceError(
@@ -27,30 +27,27 @@ export function parseCreatorRoomLookup(value: unknown): string {
     );
   }
   const data = object(root.data);
-  if (data?.roomStatus !== 1) {
+  if (data?.roomStatus === 0) {
     throw new CreatorProfileSourceError(
       'LIVE_ROOM_REQUIRED',
       'This Bilibili account does not have a live room.',
     );
   }
+  if (data?.roomStatus !== 1) {
+    throw new CreatorProfileSourceError('INVALID_RESPONSE', 'Invalid Bilibili room status.');
+  }
   return positiveIdentifier(data.roomid, 'Bilibili live room ID');
 }
 
-export function parseCreatorRoomProfile(
-  value: unknown,
-  expectedBiliUid: string,
-): BilibiliCreatorProfile {
+function parseCreatorRoomInfo(value: unknown, expectedBiliUid: string): string {
   const root = object(value);
   if (root?.code !== 0) {
     throw new CreatorProfileSourceError(
       'INVALID_RESPONSE',
-      `Bilibili room profile request failed with code ${String(root?.code)}.`,
+      `Bilibili room info request failed with code ${String(root?.code)}.`,
     );
   }
-  const data = object(root.data);
-  const room = object(data?.room_info);
-  const anchor = object(data?.anchor_info);
-  const base = object(anchor?.base_info);
+  const room = object(root.data);
   const biliUid = positiveIdentifier(room?.uid, 'Bilibili creator UID');
   const roomId = positiveIdentifier(room?.room_id, 'canonical Bilibili live room ID');
   if (biliUid !== expectedBiliUid) {
@@ -59,18 +56,42 @@ export function parseCreatorRoomProfile(
       'The Bilibili live room belongs to another UID.',
     );
   }
-  if (typeof base?.uname !== 'string' || !base.uname.trim() || base.uname.length > 120) {
+  return roomId;
+}
+
+function parseCreatorAnchorProfile(
+  value: unknown,
+  expectedBiliUid: string,
+  roomId: string,
+): BilibiliCreatorProfile {
+  const root = object(value);
+  if (root?.code !== 0) {
+    throw new CreatorProfileSourceError(
+      'INVALID_RESPONSE',
+      `Bilibili anchor info request failed with code ${String(root?.code)}.`,
+    );
+  }
+  const data = object(root.data);
+  const info = object(data?.info);
+  const biliUid = positiveIdentifier(info?.uid, 'Bilibili anchor UID');
+  if (biliUid !== expectedBiliUid) {
+    throw new CreatorProfileSourceError(
+      'INVALID_RESPONSE',
+      'The Bilibili anchor profile belongs to another UID.',
+    );
+  }
+  if (typeof info?.uname !== 'string' || !info.uname.trim() || info.uname.length > 120) {
     throw new CreatorProfileSourceError(
       'INVALID_RESPONSE',
       'Invalid Bilibili creator display name.',
     );
   }
-  return { biliUid, displayName: base.uname.trim(), roomId };
+  return { biliUid, displayName: info.uname.trim(), roomId };
 }
 
 export class PublicWebCreatorProfileSource implements CreatorProfileSource {
   public readonly name = 'bilibili-public-web';
-  public readonly version = 'room-profile-v1';
+  public readonly version = 'room-profile-v2';
   private readonly client: PublicWebClient;
 
   public constructor(fetchImplementation: typeof fetch = globalThis.fetch) {
@@ -94,10 +115,14 @@ export class PublicWebCreatorProfileSource implements CreatorProfileSource {
     lookupUrl.searchParams.set('mid', biliUid);
     const roomAlias = parseCreatorRoomLookup(await this.request(client, lookupUrl));
 
-    const profileUrl = new URL(
-      'https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom',
+    const roomUrl = new URL('https://api.live.bilibili.com/room/v1/Room/get_info');
+    roomUrl.searchParams.set('room_id', roomAlias);
+    const roomId = parseCreatorRoomInfo(await this.request(client, roomUrl), biliUid);
+
+    const anchorUrl = new URL(
+      'https://api.live.bilibili.com/live_user/v1/UserInfo/get_anchor_in_room',
     );
-    profileUrl.searchParams.set('room_id', roomAlias);
-    return parseCreatorRoomProfile(await this.request(client, profileUrl), biliUid);
+    anchorUrl.searchParams.set('roomid', roomId);
+    return parseCreatorAnchorProfile(await this.request(client, anchorUrl), biliUid, roomId);
   }
 }

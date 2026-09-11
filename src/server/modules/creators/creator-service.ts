@@ -121,6 +121,7 @@ export class CreatorService {
         'CREATOR_BILIBILI_PROFILE_UNAVAILABLE',
         'The Bilibili creator profile could not be refreshed. Try again later.',
         502,
+        { cause: error },
       );
     }
   }

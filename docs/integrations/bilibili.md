@@ -105,8 +105,13 @@ B站连接故障不会阻止 Fastify 提供 Liveness 接口。
 ## 主播资料
 
 注册主播前，普通用户必须在注册时通过直播间验证码验证 UID。平台把这个已验证 UID 交给
-`CreatorProfileSource`，依次查询账号的直播间别名和直播间资料，并验证返回房间确实属于同一
-UID。规范化结果只有三个字段：
+`CreatorProfileSource`，依次调用三个公开接口：
+
+- `room/v1/Room/getRoomInfoOld?mid=<UID>` 查询账号的直播间别名；
+- `room/v1/Room/get_info?room_id=<别名>` 查询规范房间号，并校验房间所属 UID；
+- `live_user/v1/UserInfo/get_anchor_in_room?roomid=<规范房间号>` 查询昵称，再次校验主播 UID。
+
+资料读取只依赖这些基础接口。规范化结果只有三个字段：
 
 ```json
 {
