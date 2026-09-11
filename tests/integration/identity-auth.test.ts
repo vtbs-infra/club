@@ -12,6 +12,7 @@ import {
 } from '../../src/server/modules/users/admin-bootstrap.js';
 import {
   identityChallenges,
+  auditLogs,
   passwordCredentials,
   sessions,
   users,
@@ -358,13 +359,70 @@ describe('username and verified UID authentication', () => {
     await login('alice', NEXT_PASSWORD);
   });
 
+  it('keeps challenge purposes separate and does not recover an unregistered UID', async () => {
+    const registration = await start();
+    await verify(registration.challenge, '10001');
+    expect(
+      (
+        await post(
+          '/api/v1/auth/recover',
+          {
+            challengeId: registration.challenge.id,
+            password: NEXT_PASSWORD,
+          },
+          registration.browser,
+        )
+      ).json(),
+    ).toMatchObject({ error: { code: 'IDENTITY_PROOF_INVALID' } });
+    const recovery = await start('RECOVER', '99910001');
+    expect(recovery.challenge).toMatchObject({ username: null, biliUid: null, status: 'PENDING' });
+    await verify(recovery.challenge, '99910001');
+    expect(
+      (await get('/api/v1/auth/challenges/' + recovery.challenge.id, recovery.browser)).json(),
+    ).toMatchObject({
+      status: 'VERIFIED',
+      username: null,
+      biliUid: '99910001',
+    });
+    expect(
+      (
+        await post(
+          '/api/v1/auth/recover',
+          {
+            challengeId: recovery.challenge.id,
+            password: PASSWORD,
+          },
+          recovery.browser,
+        )
+      ).json(),
+    ).toMatchObject({ error: { code: 'RECOVERY_PROOF_STALE' } });
+    expect(
+      (
+        await post(
+          '/api/v1/auth/register',
+          {
+            challengeId: recovery.challenge.id,
+            username: 'wrong_purpose',
+            name: 'Wrong',
+            password: PASSWORD,
+          },
+          recovery.browser,
+        )
+      ).json(),
+    ).toMatchObject({ error: { code: 'IDENTITY_PROOF_INVALID' } });
+  });
+
   it('prevents late session saves from resurrecting sessions revoked by change-password', async () => {
     const browser = await login('bob');
     const raw = decodeURIComponent(browser.split('=', 2)[1]!);
     const id = new Signer(createTestConfig().authSecret).unsign(raw).value!;
     const previous = await new Promise<Session>((resolve, reject) =>
       auth.store.get(id, (error, data) =>
-        error ? reject(error instanceof Error ? error : new Error(String(error))) : resolve(data!),
+        error
+          ? reject(
+              error instanceof Error ? error : new Error('Session store failed', { cause: error }),
+            )
+          : resolve(data!),
       ),
     );
     expect(
@@ -387,7 +445,11 @@ describe('username and verified UID authentication', () => {
     ).toBe(204);
     await new Promise<void>((resolve, reject) =>
       auth.store.set(id, previous, (error: unknown) =>
-        error ? reject(error instanceof Error ? error : new Error(String(error))) : resolve(),
+        error
+          ? reject(
+              error instanceof Error ? error : new Error('Session store failed', { cause: error }),
+            )
+          : resolve(),
       ),
     );
     expect((await get('/api/v1/me', browser)).statusCode).toBe(401);
@@ -485,5 +547,41 @@ describe('username and verified UID authentication', () => {
           ),
         ),
     ).toEqual([{ value: 3 }]);
+  });
+
+  it('expires sessions after fourteen days without extending their lifetime on access', async () => {
+    const originalNow = now;
+    const browser = await login('alice', NEXT_PASSWORD);
+    const first = (await get('/api/v1/auth/session', browser)).json<SessionState>();
+    try {
+      now = new Date(originalNow.getTime() + 13 * 86400_000);
+      const later = await get('/api/v1/auth/session', browser);
+      expect(later.json<SessionState>().session.expiresAt).toBe(first.session.expiresAt);
+      expect(later.headers['set-cookie']).toBeUndefined();
+      now = new Date(originalNow.getTime() + 14 * 86400_000);
+      expect((await get('/api/v1/auth/session', browser)).json()).toBeNull();
+      expect((await get('/api/v1/me', browser)).statusCode).toBe(401);
+    } finally {
+      now = originalNow;
+    }
+  });
+
+  it('audits completed credential changes without storing credentials or identity proofs', async () => {
+    const rows = await fixture.database.orm.select().from(auditLogs);
+    expect(rows.map((row) => row.action)).toEqual(
+      expect.arrayContaining([
+        'auth.registered',
+        'auth.password-changed',
+        'auth.password-recovered',
+        'platform-admin.bootstrapped',
+        'platform-admin.password-reset',
+      ]),
+    );
+    const encoded = JSON.stringify(rows);
+    expect(encoded).not.toContain(PASSWORD);
+    expect(encoded).not.toContain(NEXT_PASSWORD);
+    expect(encoded).not.toContain('scrypt$');
+    expect(encoded).not.toContain('CLUB-');
+    expect(encoded).not.toContain('club_session');
   });
 });

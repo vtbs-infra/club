@@ -13,11 +13,15 @@ export const ChallengePurposeSchema = Type.Union([
   Type.Literal('REGISTER'),
   Type.Literal('RECOVER'),
 ]);
-export const ChallengeStatusSchema = Type.Union(
-  ['PENDING', 'VERIFIED', 'CONSUMED', 'EXPIRED', 'CANCELLED'].map((value) => Type.Literal(value)),
-);
+export const ChallengeStatusSchema = Type.Union([
+  Type.Literal('PENDING'),
+  Type.Literal('VERIFIED'),
+  Type.Literal('CONSUMED'),
+  Type.Literal('EXPIRED'),
+  Type.Literal('CANCELLED'),
+]);
 export type ChallengePurpose = Static<typeof ChallengePurposeSchema>;
-export type ChallengeStatus = 'PENDING' | 'VERIFIED' | 'CONSUMED' | 'EXPIRED' | 'CANCELLED';
+export type ChallengeStatus = Static<typeof ChallengeStatusSchema>;
 
 export const AuthUserSchema = Type.Object(
   {

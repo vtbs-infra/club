@@ -1,10 +1,12 @@
 import { parseArgs } from 'node:util';
 import readline from 'node:readline';
+import { DrizzleQueryError } from 'drizzle-orm';
 
 import './config/load-local-env.js';
 
 import { loadConfig } from './config/env.js';
 import { createDatabase } from './infrastructure/db/database.js';
+import { validatePassword } from './modules/auth/password.js';
 import {
   bootstrapPlatformAdmin,
   resetPlatformAdminPassword,
@@ -32,7 +34,7 @@ async function promptHidden(prompt: string): Promise<string> {
     };
     const onKeypress = (character: string, key: readline.Key) => {
       if (key.ctrl && key.name === 'c') {
-        finish(new Error('Administrator creation cancelled.'));
+        finish(new Error('Administrator command cancelled.'));
       } else if (key.name === 'return' || key.name === 'enter') {
         finish();
       } else if (key.name === 'backspace') {
@@ -64,7 +66,13 @@ async function main(): Promise<void> {
     throw new Error('--username is required, and admin:create also requires --name.');
   }
   const password = process.env.CLUB_ADMIN_PASSWORD ?? (await promptHidden('Password: '));
-  if (password.length < 12) throw new Error('Password must be at least 12 characters.');
+  validatePassword(password);
+  if (
+    process.env.CLUB_ADMIN_PASSWORD === undefined &&
+    password !== (await promptHidden('Confirm password: '))
+  ) {
+    throw new Error('Passwords do not match.');
+  }
 
   const config = loadConfig();
   const database = createDatabase(config.databaseUrl);
@@ -90,7 +98,12 @@ async function main(): Promise<void> {
 try {
   await main();
 } catch (error) {
-  const message = error instanceof Error ? error.message : 'Unknown administrator creation error.';
+  const message =
+    error instanceof DrizzleQueryError
+      ? 'Administrator command failed while accessing the database; credential parameters omitted.'
+      : error instanceof Error
+        ? error.message
+        : 'Unknown administrator command error.';
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 }

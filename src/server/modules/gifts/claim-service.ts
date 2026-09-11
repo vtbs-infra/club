@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';

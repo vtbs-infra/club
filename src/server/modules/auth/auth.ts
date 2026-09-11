@@ -16,6 +16,7 @@ import type { AppDatabase, DatabaseService } from '../../infrastructure/db/datab
 import { passwordCredentials, sessions, users } from '../../infrastructure/db/schema/index.js';
 import type { AuthUser } from '../../../shared/contracts/auth.js';
 import { AppError } from '../../../shared/errors/app-error.js';
+import { AuditService } from '../audit/audit-service.js';
 import { hashPassword, normalizeName, normalizeUsername, verifyPassword } from './password.js';
 import {
   PostgresSessionStore,
@@ -177,6 +178,15 @@ export class AuthService {
       if (!user || user.authVersion !== current.user.authVersion)
         throw new AppError('CREDENTIALS_CHANGED', 'Credentials changed. Sign in again.', 409);
       await replacePassword(transaction, user, hash, this.clock.now());
+      await new AuditService(this.database).record(
+        {
+          action: 'auth.password-changed',
+          actorUserId: user.id,
+          targetId: user.id,
+          targetType: 'user',
+        },
+        transaction,
+      );
     });
   }
   public async updateProfile(userId: string, name: string): Promise<AuthUser> {

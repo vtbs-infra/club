@@ -13,6 +13,47 @@ test.beforeEach(async ({ page }) => {
   await freezeBrowserTime(page);
 });
 
+test('edits a display name and changes password while keeping account identity immutable', async ({
+  appUrl,
+  page,
+}) => {
+  let identity = recipientIdentity();
+  let submittedPassword: Record<string, unknown> | null = null;
+  await mockApi(page, (request) => {
+    const path = requestPath(request);
+    if (path === '/api/v1/me') return identity;
+    if (path === '/api/v1/me/profile') {
+      const input = requestJsonObject(request);
+      identity = recipientIdentity({ name: String(input.name) });
+      return identity.user;
+    }
+    if (path === '/api/v1/auth/password') {
+      submittedPassword = requestJsonObject(request);
+      return null;
+    }
+    return undefined;
+  });
+  await page.goto(`${appUrl}/account`);
+  await expect(page.getByLabel('用户名', { exact: true })).toHaveAttribute('readonly', '');
+  await expect(page.getByText('已验证 B站 UID：' + identity.user.bilibiliUid)).toBeVisible();
+  await page.getByLabel('昵称', { exact: true }).fill('新的昵称');
+  await page.getByRole('button', { name: '保存昵称' }).click();
+  await expect(page.getByRole('button', { name: '新的昵称的账号菜单' })).toBeVisible();
+  await page.getByLabel('当前密码', { exact: true }).fill('old-password-for-test');
+  await page.getByLabel('新密码', { exact: true }).fill('new-password-for-test');
+  await page.getByLabel('确认密码', { exact: true }).fill('different-password');
+  await expect(page.getByRole('button', { name: '更新密码' })).toBeDisabled();
+  await page.getByLabel('确认密码', { exact: true }).fill('new-password-for-test');
+  await page.getByRole('button', { name: '更新密码' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(submittedPassword).toEqual({
+    currentPassword: 'old-password-for-test',
+    password: 'new-password-for-test',
+  });
+  await expect(page.getByText('密码已更新，请重新登录。')).toBeVisible();
+  await expect(page.getByLabel('密码', { exact: true })).toHaveValue('');
+});
+
 test('lands a recipient on the mobile dashboard', async ({ appUrl, page }) => {
   await page.setViewportSize({ height: 844, width: 390 });
   await mockApi(page, (request) => {

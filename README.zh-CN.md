@@ -12,7 +12,7 @@ Club 是一个面向 B站 Vtuber、主播及其观众的自托管礼物领取与
 
 ## 主要能力
 
-- 在平台固定 B站直播间发送一次性验证码完成 UID 绑定
+- 在平台固定 B站直播间发送一次性验证码完成注册前 UID 验证及账号找回
 - 从已验证 B站账号读取主播身份和规范直播间
 - 保存不可变的月度舰长、提督和总督名单快照
 - 按月发布礼物并根据大航海等级配置礼包
@@ -28,7 +28,7 @@ Club 是一个面向 B站 Vtuber、主播及其观众的自托管礼物领取与
 
 ```text
 B站直播间消息
-  -> UID 绑定
+  -> 验证 UID 后注册用户名账号
   -> 月度大航海名单
   -> 主播发布礼物
   -> 用户礼物单
@@ -45,26 +45,28 @@ B站直播间消息
 
 ```powershell
 Copy-Item .env.example .env
-docker compose pull app
+docker compose build app
 docker compose up -d postgres
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d --no-build app
 ```
 
-启动前需要替换 `.env` 中的数据库密码和全部密钥。模板通过 `CLUB_IMAGE` 固定当前发布
-镜像；如需构建当前检出的源码，删除 `CLUB_IMAGE`，并在迁移前运行
-`docker compose build app`。
+启动前需要替换 `.env` 中的数据库密码和全部密钥。当前源码尚未发布，模板使用
+`CLUB_IMAGE=club-app` 在本地构建。已发布的 v0.2.0 镜像使用旧认证模型，不能用于此基线。
 
-Club v0.2 使用 fresh-install 数据库基线，必须在空 PostgreSQL 数据库上初始化。
+这是一次不兼容的全新数据库基线，必须使用空 PostgreSQL 数据库并重新创建账号，不提供
+旧版本升级或账号迁移。普通用户先验证 B站 UID，再设置用户名和密码；账号找回复用
+UID 验证，不需要邮件服务。
 
 创建首个平台管理员：
 
 ```powershell
-docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
-  node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
+docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password app `
+  node dist/server/server/cli.js admin:create --username admin --name Admin
 ```
 
-打开 <http://localhost:3000>，在平台管理界面中完成主播和验证直播间配置。
+配置 HTTPS 反向代理，将 `APP_URL` 改为公开 HTTPS 地址并设置 `TRUST_PROXY=true`，
+再通过该地址登录并配置验证直播间和主播。本地 HTTP 端口用于健康检查，生产认证要求 HTTPS。
 
 完整步骤见[开始使用](docs/getting-started.md)。
 
@@ -75,6 +77,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 - [开始使用](docs/getting-started.md)
 - [产品使用指南](docs/product-guide.md)
 - [运维手册](docs/operations.md)
+- [账号认证](docs/authentication.md)
 - [技术架构](docs/architecture.md)
 - [参与开发](CONTRIBUTING.md)
 - [更新记录](CHANGELOG.md)
@@ -85,7 +88,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
 
 - TypeScript 6 与 Node.js 24
 - React 19、React Router、TanStack Query、Vite
-- Fastify、TypeBox、Better Auth、Drizzle ORM、Pino
+- Fastify Session、TypeBox、Drizzle ORM、Pino
 - PostgreSQL 17
 - Vitest、Playwright
 - Docker Compose

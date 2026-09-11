@@ -213,8 +213,10 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
             <form className="stack-md" onSubmit={submit}>
               {!isRecover ? (
                 <label>
-                  用户名
+                  <span id="auth-username-label">用户名</span>
                   <input
+                    aria-labelledby="auth-username-label"
+                    aria-describedby={isRegister ? 'auth-username-help' : undefined}
                     autoCapitalize="none"
                     autoComplete="username"
                     minLength={3}
@@ -225,7 +227,9 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                     onChange={(event) => setUsername(event.target.value)}
                   />
                   {isRegister ? (
-                    <small>3–30 位字母、数字或下划线，不区分大小写，注册后不可修改。</small>
+                    <small id="auth-username-help">
+                      3–30 位字母、数字或下划线，不区分大小写，注册后不可修改。
+                    </small>
                   ) : null}
                 </label>
               ) : null}
@@ -242,8 +246,10 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                 </label>
               ) : null}
               <label>
-                {isLogin ? '密码' : '新密码'}
+                <span id="auth-password-label">{isLogin ? '密码' : '新密码'}</span>
                 <input
+                  aria-labelledby="auth-password-label"
+                  aria-describedby={isLogin ? undefined : 'auth-password-help'}
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
                   minLength={isLogin ? 1 : 12}
                   maxLength={128}
@@ -252,7 +258,9 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-                {!isLogin ? <small>至少 12 个字符，可使用密码管理器生成。</small> : null}
+                {!isLogin ? (
+                  <small id="auth-password-help">至少 12 个字符，可使用密码管理器生成。</small>
+                ) : null}
               </label>
               {!isLogin ? (
                 <label>

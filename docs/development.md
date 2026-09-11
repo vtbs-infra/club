@@ -195,7 +195,7 @@ pnpm test:integration
 Remove-Item Env:TEST_DATABASE_URL
 ```
 
-集成测试从该连接创建临时数据库，执行迁移后验证认证、UID 绑定、名单、礼物单、状态
+集成测试从该连接创建临时数据库，执行迁移后验证认证、UID 验证、名单、礼物单、状态
 机、数据库触发器和就绪检查。测试完成后会删除自己的临时数据库。
 
 `TEST_DATABASE_URL` 是强制门禁；缺少时命令会失败，不会跳过整个集成测试项目。
@@ -239,8 +239,8 @@ $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:e2e
 ```
 
-该命令构建生产 Web，使用真实 Fastify、Better Auth、独立 PostgreSQL 新库及本地私有存储，
-从浏览器注册和登录开始验证 UID 绑定、主播注册、自动名单定稿、礼物发布、手机端领取、
+该命令构建生产 Web，使用真实 Fastify Cookie/Session、独立 PostgreSQL 新库及本地私有存储，
+从浏览器 UID 验证与注册、用户名登录开始验证主播注册、自动名单定稿、礼物发布、手机端领取、
 XLSX 下载、确认发货、更正与复制单号。测试只替换 B站的三个外部来源；后台使用实际调度循环。
 缺少测试数据库连接时必须失败。CI 同时执行界面测试和完整业务闭环。
 
@@ -276,3 +276,18 @@ docker compose build app
 - 日志、Fixture 和截图不包含真实用户数据或密钥。
 
 完整版本、Release Candidate、Tag、镜像和发布后检查见[发布手册](releasing.md)。
+
+认证变更的集成验收在 `tests/integration/identity-auth.test.ts`，覆盖证明归属、重复 UID、
+并发消费、找回、会话撤销和后台重启。业务 Fixture 可直接创建已验证账号，不能用它代替
+真实注册入口的验收。当前基线不提供旧账号或旧数据库兼容层。
+
+在 `/tmp` 为 tmpfs 的开发机上，将 `TMPDIR`、包管理器缓存与 `PLAYWRIGHT_BROWSERS_PATH`
+指向磁盘上的项目忽略目录，例如 `data/development/`，避免将下载、构建和数据库测试
+临时文件留在内存文件系统。浏览器测试可以通过 `--workers=1` 串行执行。
+
+如果宿主机没有 Chromium 动态库，可以用与项目依赖版本一致的
+[Playwright 官方容器](https://playwright.dev/docs/docker)执行浏览器测试。当前版本为
+`mcr.microsoft.com/playwright:v1.61.1-noble`；先在源码目录安装依赖并构建，容器读取源码、
+`node_modules` 和 `dist`，直接运行 `node node_modules/@playwright/test/cli.js test`。
+将临时目录和测试结果目录挂载到磁盘；完整 E2E 还须提供独立测试库的 `TEST_DATABASE_URL`。
+更新 Playwright 依赖后，也应同步测试容器版本。

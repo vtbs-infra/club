@@ -206,7 +206,7 @@ test('registers a creator from verified identity without editable Bilibili field
   await page.getByRole('button', { name: '注册主播' }).click();
   await page.getByLabel('搜索已验证用户').fill(candidate.name);
   await page.getByLabel('普通用户账号').selectOption(candidate.id);
-  await expect(page.getByText('B站主播', { exact: true })).toBeVisible();
+  await expect(page.getByText('UID 90001', { exact: true })).toBeVisible();
   await expect(page.locator('form').getByLabel('显示名称')).toHaveCount(0);
   await expect(page.locator('form').getByLabel('B站 UID')).toHaveCount(0);
   await expect(page.locator('form').getByLabel('直播间 ID')).toHaveCount(0);

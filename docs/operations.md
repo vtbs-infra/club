@@ -62,7 +62,7 @@ docker compose logs --tail 100 postgres
 
 - PostgreSQL 查询和与当前应用精确匹配的迁移集合；
 - 对象存储的隔离写入、读取和删除；
-- B站绑定、名单调度和礼物封面回收 Runtime 已完成初始化且未长期停止 Tick。
+- B站身份验证、名单调度和礼物封面回收 Runtime 已完成初始化且未长期停止 Tick。
 
 任一技术检查失败时返回非 2xx。没有启用验证直播间属于业务 `NEEDS_SETUP`，管理员仍
 可登录并完成首次配置。
@@ -73,7 +73,7 @@ docker compose logs --tail 100 postgres
 
 - 应用版本；
 - 数据库与存储状态；
-- B站绑定、名单和封面回收运行时状态、最近成功、最近错误与下次重试时间；
+- B站身份验证、名单和封面回收运行时状态、最近成功、最近错误与下次重试时间；
 - 名单任务与运单状态计数；
 - 验证直播间状态；
 - 近期名单失败；
@@ -100,7 +100,7 @@ Club 使用 Pino 输出结构化日志。每个 HTTP 请求都有 `x-request-id`
 
 1. PostgreSQL 自定义格式 Dump；
 2. 完整的 `club-storage` 数据；
-3. `BETTER_AUTH_SECRET`；
+3. `AUTH_SECRET`；
 4. 完整的 `ADDRESS_ENCRYPTION_KEY_RING`；
 5. 部署使用的 Git Revision 或镜像 Digest；
 6. 数据库和存储归档的校验和。
@@ -183,9 +183,12 @@ docker compose up -d app
 
 ## 升级
 
-只有目标版本 Changelog 明确列出的来源版本才支持原地升级。v0.2 使用新的单一数据库基线，
-不提供从 v0.1 数据库原地升级的路径；部署 v0.2 时应创建空数据库和空存储卷，再按首次安装
-流程初始化。不要通过手工修改 `drizzle.__drizzle_migrations` 绕过 Readiness。
+当前用户名与 UID 认证基线不提供从旧版本（包括 v0.2.0）原地升级的路径，也不迁移旧
+账号或密码摘要。先停止并归档旧部署，再创建空数据库和空存储卷，按首次安装流程初始化。
+旧备份仅供使用其原版本独立恢复，不能导入新基线。不要手工修改
+`drizzle.__drizzle_migrations` 绕过 Readiness。
+
+以下原地升级步骤仅适用于未来 Changelog 明确声明兼容的版本；不用于本次基线切换。
 
 升级前：
 
@@ -225,7 +228,7 @@ Invoke-RestMethod http://localhost:3000/health/ready
 - `/admin/verification` 中的最后连接时间；
 - 应用日志中的请求与连接错误。
 
-可以先停用异常房间，再启用另一个已配置房间。绑定运行时会重新计算未过期挑战需要
+可以先停用异常房间，再启用另一个已配置房间。身份验证运行时会重新计算未过期挑战需要
 监听的房间。
 
 ## 名单抓取故障
@@ -278,3 +281,11 @@ Invoke-RestMethod http://localhost:3000/health/ready
 
 监控 PostgreSQL 数据卷和对象存储数据卷的剩余空间。清理策略只能处理明确可删除的
 业务数据；名单证据、冻结领取信息和审计记录需要保持引用完整。
+
+## 忘记密码
+
+普通用户与主播通过 `/recover` 输入注册 UID，并在平台验证直播间发送一次性验证码，
+验证后设置新密码；全部旧会话失效。先检查验证房间与 B站连接健康状态。
+
+无 UID 的平台管理员由服务器操作者使用 `admin:reset-password --username admin` 重置，
+CLI 隐藏输入密码。具体命令见[配置参考](configuration.md#管理员引导)。

@@ -32,7 +32,7 @@ APP_URL=http://localhost:3000
 POSTGRES_PASSWORD=<随机数据库密码>
 DATABASE_URL=postgres://club:<URL 编码后的密码>@localhost:55432/club
 COMPOSE_DATABASE_URL=postgres://club:<URL 编码后的密码>@postgres:5432/club
-BETTER_AUTH_SECRET=<不少于 32 个字符的随机密钥>
+AUTH_SECRET=<不少于 32 个字符的随机密钥>
 ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION=1
 ADDRESS_ENCRYPTION_KEY_RING=1:<32 字节 base64 密钥>
 ```
@@ -45,29 +45,24 @@ ADDRESS_ENCRYPTION_KEY_RING=1:<32 字节 base64 密钥>
 )
 ```
 
-分别为 `BETTER_AUTH_SECRET` 和 `ADDRESS_ENCRYPTION_KEY_RING` 生成值。`.env`
+分别为 `AUTH_SECRET` 和 `ADDRESS_ENCRYPTION_KEY_RING` 生成值。`.env`
 包含数据库、认证和加密密钥，不应进入版本控制。
 
 完整变量说明见[配置参考](configuration.md)。
 
-`.env.example` 中的 `CLUB_IMAGE` 固定到当前发布版本。不要使用浮动 Tag 替代生产部署记录
-中的精确版本或镜像 Digest。
+当前源码尚未发布，`.env.example` 使用 `CLUB_IMAGE=club-app` 构建本地镜像。旧 v0.2.0
+镜像和数据库不能用于新认证基线。部署正式版本时，应记录与源码对应的精确 Tag 或 Digest。
 
-## 2. 获取应用镜像并启动数据库
+## 2. 构建应用镜像并启动数据库
 
 ```powershell
-docker compose pull app
+docker compose build app
 docker compose up -d postgres
 docker compose ps
 ```
 
-等待 `postgres` 显示为 `healthy`。
-
-从源码构建时，删除 `.env` 中的 `CLUB_IMAGE`，并用以下命令替代 `pull`：
-
-```powershell
-docker compose build app
-```
+等待 `postgres` 显示为 `healthy`。本基线要求新数据库和私有存储；旧部署应先独立归档，
+不能把新代码接到旧库或复用旧账号。
 
 ## 3. 创建数据库结构
 
@@ -83,11 +78,12 @@ docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 ## 4. 创建平台管理员
 
 ```powershell
-docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
-  node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
+docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password app `
+  node dist/server/server/cli.js admin:create --username admin --name Admin
 ```
 
-密码至少 8 个字符。该命令只创建新管理员；邮箱已存在时明确拒绝，不修改已有账号。
+密码为 12–128 个字符。该命令只创建新管理员；用户名已存在时明确拒绝，不修改已有账号。
+不传密码环境变量时，CLI 会在终端隐藏输入密码。管理员无需 B站 UID。
 成功后移除临时管理员密码环境变量。
 
 ## 5. 启动 Club
@@ -107,6 +103,11 @@ Invoke-RestMethod http://localhost:3000/health/ready
 两个接口都应返回 `status: ok`。Readiness 还会列出数据库、迁移、私有存储和 Runtime
 检查结果。
 
+Compose 固定使用生产模式，认证 Cookie 要求 HTTPS。使用浏览器登录前，配置 HTTPS
+反向代理，将 `APP_URL` 改为浏览器访问的 HTTPS 地址，并设置 `TRUST_PROXY=true`；
+应用端口应只允许可信代理访问。重新创建 app 容器后，通过该 HTTPS 地址登录。
+上述本地 HTTP 地址可以继续用于健康检查。
+
 ## 6. 配置验证直播间
 
 使用平台控制的直播间完成普通用户 UID 验证：
@@ -124,13 +125,12 @@ Invoke-RestMethod http://localhost:3000/health/ready
 
 Club 从已经完成 B站验证的普通用户账号创建主播档案：
 
-1. 退出管理员账号，打开 `/register`，注册用于主播工作台的普通用户账号。
-2. 使用该账号登录，从账号菜单打开“B站绑定”。
-3. 在平台指定的验证直播间发送一次性验证码，确认账号已绑定主播自己的 B站 UID。
+1. 退出管理员账号，打开 `/register`，点击“验证 B站身份”。
+2. 使用主播自己的 B站账号，在页面指定直播间发送一次性验证码。
+3. 验证成功后设置用户名、显示名称和密码，完成普通用户注册。
 4. 重新登录平台管理员账号，打开 `/admin/creators`。
-5. 搜索并选择刚完成验证的普通用户。
-6. 设置 IANA 结算时区，并决定是否开启未来的月末名单同步。
-7. 提交后，Club 从 B站读取显示名称和规范直播间，并把该账号注册为主播。
+5. 搜索并选择该普通用户，设置 IANA 结算时区和月末名单同步开关。
+6. 提交后，Club 从 B站读取显示名称和规范直播间，并把该账号注册为主播。
 
 主播 B站账号必须拥有可用直播间。B站 UID、显示名称和直播间不是平台自定义资料；注册
 后可以从主播设置或管理后台显式刷新。
@@ -147,14 +147,14 @@ America/Los_Angeles
 
 ## 8. 验证完整流程
 
-用一个新的普通用户账号执行：
+用一个新的 B站账号执行：
 
-1. 登录后打开“B站绑定”。
-2. 创建验证挑战。
-3. 通过页面链接进入验证直播间。
-4. 使用需要绑定的 B站账号发送页面显示的一次性验证码。
-5. 返回 Club，确认 UID 已绑定。
-6. 新建一个收货地址。
+1. 打开 `/register` 并创建身份验证挑战。
+2. 通过页面链接进入验证直播间，发送一次性验证码。
+3. 返回原浏览器，确认验证的 UID 正确，再填写用户名、显示名称和密码完成注册。
+4. 使用用户名和密码登录，新增收货地址。
+5. 退出后打开 `/recover`，输入该 UID，再次通过直播间验证。
+6. 页面显示用户名后设置新密码，确认旧密码失效、旧会话退出且新密码可登录。
 
 主播可以在 `/creator/releases` 创建一个测试礼物。礼物单需要同月已定稿名单才能
 生成；名单任务与状态可在 `/admin/rosters` 查看。

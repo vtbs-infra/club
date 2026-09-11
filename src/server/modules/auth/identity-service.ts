@@ -13,6 +13,7 @@ import {
 } from '../../infrastructure/db/schema/index.js';
 import type { LiveMessageEvent } from '../bilibili/live-message-source.js';
 import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
+import { AuditService } from '../audit/audit-service.js';
 import { publicUser, replacePassword, type AuthTransaction } from './auth.js';
 import { hashPassword, normalizeName, normalizeUsername } from './password.js';
 
@@ -310,6 +311,15 @@ export class IdentityService {
           .returning();
         if (!user) throw new Error('Account insert returned no row.');
         await transaction.insert(passwordCredentials).values({ userId: user.id, passwordHash });
+        await new AuditService(this.database).record(
+          {
+            action: 'auth.registered',
+            actorUserId: user.id,
+            targetId: user.id,
+            targetType: 'user',
+          },
+          transaction,
+        );
         await transaction
           .update(identityChallenges)
           .set({ status: 'CONSUMED', updatedAt: this.clock.now() })
@@ -356,6 +366,15 @@ export class IdentityService {
         );
       }
       await replacePassword(transaction, user, passwordHash, this.clock.now());
+      await new AuditService(this.database).record(
+        {
+          action: 'auth.password-recovered',
+          actorUserId: user.id,
+          targetId: user.id,
+          targetType: 'user',
+        },
+        transaction,
+      );
       await transaction
         .update(identityChallenges)
         .set({ status: 'CONSUMED', updatedAt: this.clock.now() })

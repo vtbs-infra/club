@@ -33,7 +33,8 @@ if (requestedTag && requestedTag !== expectedTag) {
 
 const envExample = readFileSync(resolve('.env.example'), 'utf8');
 const expectedImage = `CLUB_IMAGE=ghcr.io/vtbs-infra/club:${version}`;
-if (!envExample.split(/\r?\n/).includes(expectedImage)) {
+const sourceBuild = envExample.split(/\r?\n/).includes('CLUB_IMAGE=club-app');
+if (!envExample.split(/\r?\n/).includes(expectedImage) && (requestedTag || !sourceBuild)) {
   throw new Error(`.env.example must pin the release image as ${expectedImage}.`);
 }
 
@@ -55,4 +56,8 @@ if (!notes) throw new Error(`CHANGELOG.md release section [${version}] is empty.
 const notesFile = optionValue('--notes-file');
 if (notesFile) writeFileSync(resolve(notesFile), `${notes}\n`);
 
-process.stdout.write(`Release metadata is ready for ${expectedTag}.\n`);
+process.stdout.write(
+  sourceBuild
+    ? 'Unreleased source baseline checked; pin a matching release image before tagging.\n'
+    : `Release metadata is ready for ${expectedTag}.\n`,
+);

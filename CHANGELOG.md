@@ -6,6 +6,17 @@ All notable Club changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Breaking changes
+
+- Replace email/Better Auth with username credentials and PostgreSQL-backed Fastify sessions.
+- Require Bilibili UID verification before creating ordinary accounts; recover usernames and reset passwords through the same UID proof.
+- Make username and UID immutable and unique. Remove separate binding, unbinding and conflict-management flows.
+- Replace the database baseline. Fresh deployment and account registration are required; previous databases and password hashes are not migrated.
+- Rename the authentication secret to `AUTH_SECRET`; administrator CLI uses `--username` and provides `admin:reset-password`.
+- Build the unreleased source with `CLUB_IMAGE=club-app`; existing v0.2.0 images remain on the previous baseline.
+
+## [Unreleased]
+
 ## [0.2.0] - 2026-09-09
 
 ### Changed

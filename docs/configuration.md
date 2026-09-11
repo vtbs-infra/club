@@ -24,7 +24,7 @@ Copy-Item .env.example .env
 | `TRUST_PROXY` | `false`                | 位于可信反向代理后时设为 `true`         |
 
 `APP_URL` 必须与浏览器实际 Origin 完全一致，包括协议、主机和非默认端口。配置不一致时
-Better Auth 会拒绝请求并返回 `Invalid origin`。
+应用会拒绝写请求并返回 `CSRF_VALIDATION_FAILED`。
 
 启用 `TRUST_PROXY` 前应确认应用只通过受控代理访问，否则客户端可伪造转发头。
 
@@ -51,9 +51,9 @@ docker compose run --rm app `
 
 ## 会话认证
 
-| 变量                 | 要求                   |
-| -------------------- | ---------------------- |
-| `BETTER_AUTH_SECRET` | 至少 32 个字符的随机值 |
+| 变量          | 要求                   |
+| ------------- | ---------------------- |
+| `AUTH_SECRET` | 至少 32 个字符的随机值 |
 
 生成示例：
 
@@ -64,7 +64,12 @@ process.stdout.write(randomBytes(48).toString('base64url'));
 '@ | node
 ```
 
-当前账号流程使用邮箱与密码完成注册和登录。
+普通用户先完成 B站 UID 验证，再创建用户名和密码。用户名登录，会话固定有效 14 天。
+改密、找回密码和管理员 CLI 重置会撤销该账号全部会话。认证不依赖邮箱或邮件服务，
+详见[账号认证](authentication.md)。
+
+生产模式的认证 Cookie 要求 HTTPS；通过代理终止 TLS 时需正确设置 `TRUST_PROXY`。
+更换 `AUTH_SECRET` 会使现有 Cookie 和未完成的验证失效。
 
 ## 地址加密
 
@@ -128,8 +133,8 @@ POSTGRES_PASSWORD=...
 COMPOSE_DATABASE_URL=postgres://club:...@postgres:5432/club
 ```
 
-`CLUB_IMAGE` 应使用精确版本 Tag 或 Digest。删除该变量后，开发者可以通过
-`docker compose build app` 构建当前检出的源码。
+正式镜像的 `CLUB_IMAGE` 应使用精确版本 Tag 或 Digest。当前未发布源码的模板使用
+`CLUB_IMAGE=club-app`，通过 `docker compose build app` 构建，不使用旧 v0.2.0 镜像。
 
 应用容器固定使用 `NODE_ENV=production`、`HOST=0.0.0.0`、
 私有本地存储路径 `/data/club`。
@@ -143,13 +148,22 @@ COMPOSE_DATABASE_URL=postgres://club:...@postgres:5432/club
 | `CLUB_ADMIN_PASSWORD` | 管理员初始密码 |
 
 ```powershell
-docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
+docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password app `
   node dist/server/server/cli.js admin:create `
-  --email admin@example.com `
+  --username admin `
   --name Admin
 ```
 
-该命令只创建新管理员。邮箱已存在时返回 `ADMIN_ACCOUNT_ALREADY_EXISTS`，不修改已有账号、身份或密码。创建成功后移除临时密码变量。
+该命令只创建新管理员。用户名已存在时返回 `ADMIN_ACCOUNT_ALREADY_EXISTS`，不修改已有账号、身份或密码。创建成功后移除临时密码变量。
+
+不传 `CLUB_ADMIN_PASSWORD` 时会在交互终端隐藏输入并确认密码；密码必须为 12–128 个字符。
+管理员忘记密码时，在服务器执行：
+
+```powershell
+docker compose run --rm app node dist/server/server/cli.js admin:reset-password --username admin
+```
+
+该命令只处理管理员账号，并撤销全部旧会话；普通用户通过 B站 UID 找回。
 
 ## 测试连接
 

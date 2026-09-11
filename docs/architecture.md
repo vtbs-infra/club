@@ -7,7 +7,7 @@ Club 是一个 TypeScript 模块化单体：
 ```text
 Browser
   -> Fastify HTTP
-     -> Better Auth
+     -> Fastify cookie/session + PostgreSQL session store
      -> TypeBox routes
      -> domain workflow services
      -> Drizzle ORM -> PostgreSQL 17
@@ -15,7 +15,7 @@ Browser
      -> Bilibili adapters
 
 Application process
-  -> binding runtime
+  -> identity runtime
   -> monthly snapshot runtime
   -> gift cover cleanup runtime
 ```
@@ -38,8 +38,7 @@ src/server/
     security/                   HTTP 防护、限流和日志脱敏
     storage/                    私有对象存储接口
   modules/
-    auth/                       会话与身份守卫
-    binding/                    验证码和 B站 UID 绑定
+    auth/                       用户名凭据、会话、UID 验证和身份守卫
     snapshots/                  月末名单任务、证据、定稿和查询
     gifts/                      发布、资格、领取、查询、履约和封面生命周期
     announcements/              平台和主播公告
@@ -74,11 +73,12 @@ HTTP 路由只负责会话守卫、Schema、参数转换和状态码。跨表写
 
 | 身份             | 入口         | 主要能力                               |
 | ---------------- | ------------ | -------------------------------------- |
-| `USER`           | `/dashboard` | 绑定 UID、查看公告、领取礼物、管理地址 |
+| `USER`           | `/dashboard` | 查看公告、领取礼物、管理地址           |
 | `CREATOR`        | `/creator`   | 发布礼物、查看名单、导出履约信息和发货 |
 | `PLATFORM_ADMIN` | `/admin`     | 注册主播、配置验证房间、审查名单和系统 |
 
-Better Auth 管理邮箱密码凭据和会话。`createRequireSession`、
+Fastify Cookie/Session 管理浏览器会话，PostgreSQL 保存凭据与会话摘要。账号使用用户名
+和密码登录，Node.js 异步 scrypt 保存密码摘要。`createRequireSession`、
 `createRequireCreator` 与 `createRequirePlatformAdmin` 在路由边界执行角色检查；主播守卫
 还会加载唯一主播档案。
 
@@ -86,35 +86,34 @@ Better Auth 管理邮箱密码凭据和会话。`createRequireSession`、
 受保护请求返回 401 时，替换 QueryClient 并重建页面；旧请求与回调只能访问已退役的缓存。
 只有部署级外观配置可以保留到下一份会话缓存中。
 
-## B站 UID 绑定
+## 注册与账号找回
 
-1. 用户请求验证码；
-2. 服务选择优先级最高的已启用验证直播间；
-3. 数据库只保留验证码摘要、有效期和挑战状态；
-4. 响应提交后向 Binding Runtime 发出连接需求变化信号；
-5. Runtime 合并并串行处理信号，监听仍有有效挑战的验证直播间；
-6. 收到消息后按房间、摘要和有效期匹配挑战；
-7. 在一个事务中消费挑战并创建 UID 绑定；
-8. 事务成功后才确认该直播事件已消费。
+匿名浏览器创建用途为 `REGISTER` 或 `RECOVER` 的挑战，服务分配平台验证直播间，
+只保存验证码和浏览器凭据的 HMAC 摘要。Identity Runtime 根据未完成挑战维持直播连接。
+消息必须匹配房间、验证码、事件时间和实际发送 UID；恢复账号还必须匹配事先指定的 UID。
 
-一个用户和一个 B站 UID 同时只能有一个有效绑定。数据库瞬时错误不会消费消息，Runtime
-可重新处理同一事件。查询挑战状态是纯读取：接口可以把已经越过有效期的 `ACTIVE`
-挑战投影为 `EXPIRED`，持久状态由 Runtime 的维护周期统一收口。请求验证码和配置直播间
-不会同步等待外部直播连接；周期协调也不会反复延长已经进入空闲宽限期的房间连接。
+挑战遵循 `PENDING → VERIFIED → CONSUMED`，也可过期或被同一浏览器的新挑战取消。
+等待验证和验证后提交分别有效 10 分钟。消息事件去重，数据库错误不会提前消费事件。
+只有发起挑战的浏览器才能查看和使用证明；状态查询不会返回原始验证码。
 
-如果消息证明的 UID 已有有效绑定，服务会在消费挑战的同一事务中创建独立的
-`binding_conflicts` 记录。记录冻结冲突发生时的挑战、UID 和原 Binding ID，并遵循
-`OPEN → RESOLVED | DISMISSED`。管理员解决冲突时按顺序锁定冲突、记录中的原绑定和挑战；
-只允许解除该原绑定，绝不按 UID 重新查找并操作后来的绑定。原绑定已经独立解除时，可以
-安全地把冲突标记为已解决；驳回只关闭请求，不修改绑定。关闭后的冲突事实不可再次变更。
+验证成功后，注册事务锁定并消费证明，同时创建用户与密码凭据。用户名或 UID 唯一性冲突
+会回滚整个事务，不留下半成品账号。一个 UID 对应一个账号，用户名和 UID 均不可修改。
+
+找回流程在验证后才显示账号用户名。设置新密码的事务锁定账号，校验发起挑战时冻结的
+账号 ID、UID 和凭据版本，更新密码、递增版本并删除全部会话。其他旧找回证明随之失效。
+用户知道原密码时也可在账号页修改，结果同样撤销全部会话。
+
+会话有效期固定为 14 天，登录重新生成会话 ID。数据库只存 ID 摘要，普通会话保存只能
+更新已有记录；密码重置与登录按账号行串行化，延迟保存不能重建已撤销的会话。
+完整约束和运维边界见[账号认证](authentication.md)。
 
 ## 主播身份
 
-主播不是一组手填的 B站字段。平台管理员只能从拥有有效 B站绑定的普通用户中注册主播；
+主播不是一组手填的 B站字段。平台管理员只能从注册时已验证 B站 UID 的普通用户中注册主播；
 注册流程通过 `CreatorProfileSource` 以已验证 UID 读取 B站显示名称和规范直播间，再在同一
-事务中创建主播档案、关联该绑定并切换账号身份。
+事务中创建主播档案并切换账号身份。主播档案以账号 ID 与 UID 的复合外键关联用户。
 
-成为主播后，UID 绑定不能解除或替换。UID、显示名称和直播间属于 B站身份事实，只有显式
+所有账号的 UID 注册后均不能解除或替换。B站显示名称和直播间只有显式
 刷新资料时才从 Provider 更新；平台只维护名单结算时区和月度同步开关。关闭同步只取消或
 阻止未来名单任务，不禁用主播账号，也不影响历史名单、礼物或该账号的普通用户功能。
 
@@ -243,7 +242,7 @@ STAGED -> ACTIVE -> DELETE_PENDING -> 删除
 领取事务：
 
 1. 锁定礼物单，再对关联发布加共享锁，取得当前时间并检查版本、状态和领取窗口；
-2. 验证当前有效 UID 绑定与礼物单 UID 一致；
+2. 验证当前账号的不可变 UID 与礼物单 UID 一致；
 3. 校验所有自定义领取字段；
 4. 解密用户选择的地址；
 5. 创建独立加密的 `gift_order_addresses` 快照；
@@ -301,7 +300,7 @@ DRAFT -> PUBLISHED -> WITHDRAWN
 
 ## Runtime 与健康状态
 
-绑定、名单和封面回收三个后台 Runtime 统一报告：
+身份验证、名单和封面回收三个后台 Runtime 统一报告：
 
 ```text
 state: STARTING | RUNNING | DEGRADED | STOPPED
@@ -313,7 +312,7 @@ lastErrorCode
 nextRetryAt
 ```
 
-三个 Runtime 使用小型共同循环：任务不重叠，成功初始化只执行一次，每次完成后安排下一轮，失败按重试间隔再执行。绑定需求变化在运行中合并为后续一轮。每个 Runtime 独立启动和重试。初始化失败不会阻止其他 Runtime，Tick 错误进入结构化
+三个 Runtime 使用小型共同循环：任务不重叠，成功初始化只执行一次，每次完成后安排下一轮，失败按重试间隔再执行。身份验证需求变化在运行中合并为后续一轮。每个 Runtime 独立启动和重试。初始化失败不会阻止其他 Runtime，Tick 错误进入结构化
 日志与状态。关闭时先停止创建新 Tick，再取消可取消的外部请求并等待所有已登记任务真正
 结束，最后才释放数据库和存储；进程级 watchdog 只负责处理违反取消约定的异常情况。
 
@@ -350,7 +349,7 @@ nextRetryAt
 Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请求 ID。
 
 持续增长的操作集合按领域使用稳定游标和摘要响应，包括礼物单、礼物发布、公告、名单任务、
-名单成员、分页证据、主播、活动绑定、绑定冲突和审计日志。名单 Attempt 最多三条，作为详情
+名单成员、分页证据、主播和审计日志。名单 Attempt 最多三条，作为详情
 中的硬上限子集合直接返回；地址和验证直播间分别限制为最多 20 条，作为配置集合直接返回。
 用户候选搜索固定最多返回 20 条。不同领域使用自己的不可变排序键，不共享通用分页框架。
 
@@ -359,23 +358,24 @@ Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请�
 
 ## 数据域
 
-| 领域       | 主要表                                                                                                         |
-| ---------- | -------------------------------------------------------------------------------------------------------------- |
-| 认证       | `users`, `sessions`, `accounts`, `verifications`                                                               |
-| 主播与绑定 | `creators`, `verification_rooms`, `binding_challenges`, `bilibili_bindings`, `binding_conflicts`               |
-| 名单       | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`                             |
-| 礼物       | `gift_releases`, `gift_cover_objects`, `gift_packages`, `gift_package_items`, `gift_tier_rules`, `gift_orders` |
-| 领取       | `gift_order_items`, `addresses`, `gift_order_addresses`, `gift_order_option_values`                            |
-| 状态历史   | `gift_order_status_history`                                                                                    |
-| 公告与审计 | `announcements`, `announcement_reads`, `audit_logs`                                                            |
-| 平台外观   | `platform_appearance`                                                                                          |
+| 领域           | 主要表                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------- |
+| 认证           | `users`, `password_credentials`, `sessions`, `identity_challenges`                                             |
+| 主播与验证房间 | `creators`, `verification_rooms`                                                                               |
+| 名单           | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`                             |
+| 礼物           | `gift_releases`, `gift_cover_objects`, `gift_packages`, `gift_package_items`, `gift_tier_rules`, `gift_orders` |
+| 领取           | `gift_order_items`, `addresses`, `gift_order_addresses`, `gift_order_option_values`                            |
+| 状态历史       | `gift_order_status_history`                                                                                    |
+| 公告与审计     | `announcements`, `announcement_reads`, `audit_logs`                                                            |
+| 平台外观       | `platform_appearance`                                                                                          |
 
 礼物发布和平台公告分别保存显式的 `public_visible` 标记。匿名门户只查询已发布、明确公开且
 仍在有效期内的内容；发布操作本身不会隐式改变门户可见性。
 
 Drizzle 定义位于 `src/server/infrastructure/db/schema/`，统一从 `index.ts` 导出。SQL
 迁移位于 `migrations/`。当前版本以单一 fresh-install 迁移建立完整 Schema、单例数据和
-数据库触发器；应用启动前必须完成迁移，Readiness 要求迁移集合与应用版本精确匹配。
+数据库触发器；拒绝旧版本或其他非空数据库，不自动清库或迁移账号。应用启动前必须完成
+初始化，Readiness 要求迁移集合与应用版本精确匹配。
 
 ## Web 架构
 

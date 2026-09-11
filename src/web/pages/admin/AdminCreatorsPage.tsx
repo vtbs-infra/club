@@ -226,7 +226,7 @@ export function AdminCreatorsPage() {
                     setSearch(event.target.value);
                     setForm((current) => ({ ...current, userId: '' }));
                   }}
-                  placeholder="输入昵称、用户名、B站昵称或 UID"
+                  placeholder="输入昵称、用户名或 UID"
                   ref={searchInputRef}
                   value={search}
                 />
@@ -266,7 +266,7 @@ export function AdminCreatorsPage() {
                 </div>
               ) : null}
               {!search.trim() ? (
-                <InlineNotice tone="info">输入昵称、用户名、B站昵称或 UID 开始搜索。</InlineNotice>
+                <InlineNotice tone="info">输入昵称、用户名或 UID 开始搜索。</InlineNotice>
               ) : users.isSuccess && eligibleUsers.length === 0 ? (
                 <InlineNotice tone="info">没有找到可注册的已验证普通用户。</InlineNotice>
               ) : null}
@@ -274,9 +274,7 @@ export function AdminCreatorsPage() {
                 <div className="readonly-account">
                   <span>B站身份</span>
                   <strong>{`UID ${selectedUser.bilibiliUid}`}</strong>
-                  <small>
-                    UID {selectedUser.bilibiliUid} · {selectedUser.username}
-                  </small>
+                  <small>{selectedUser.username}</small>
                 </div>
               ) : null}
             </>

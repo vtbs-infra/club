@@ -30,7 +30,7 @@ The platform workflow ends at shipped; recipients can view and copy the tracking
 
 ```text
 Bilibili message
-  -> UID binding
+  -> verified UID and username registration
   -> monthly guard roster
   -> creator gift release
   -> recipient gift order
@@ -48,30 +48,32 @@ Requirements: Docker Engine and Docker Compose v2.
 
 ```powershell
 Copy-Item .env.example .env
-docker compose pull app
+docker compose build app
 docker compose up -d postgres
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d --no-build app
 ```
 
-Before starting, replace the secrets and database passwords in `.env`. The template pins the current
-published image through `CLUB_IMAGE`. To build the checked-out source instead, remove `CLUB_IMAGE` and
-run `docker compose build app` before the migration.
+Before starting, replace the secrets and database passwords in `.env`. The current unreleased source
+uses `CLUB_IMAGE=club-app` and must be built locally. Published v0.2.0 images use a different auth model.
 
-Club v0.2 uses a fresh-install database baseline and must be initialized against an empty PostgreSQL
-database.
+This is a breaking, fresh-install baseline requiring an empty PostgreSQL database and new accounts.
+There is no upgrade or account migration from previous releases. Registration requires Bilibili UID
+verification before creating a username and password; account recovery uses the same proof of UID
+ownership. No email service is required.
 
 Create the first platform administrator with:
 
 ```powershell
-docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-me app `
-  node dist/server/server/cli.js admin:create --email admin@example.com --name Admin
+docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password app `
+  node dist/server/server/cli.js admin:create --username admin --name Admin
 ```
 
-The administrator command creates a new account and rejects an existing email without changing it.
+The administrator command creates a new account and rejects an existing username without changing it.
 
-Open <http://localhost:3000> and complete creator and verification-room setup
-from the administrator interface.
+For browser login, configure an HTTPS reverse proxy, set `APP_URL` to its public URL and
+`TRUST_PROXY=true`, then open that URL to configure verification rooms and creators.
+The local HTTP port can be used for health checks; production authentication requires HTTPS.
 
 The complete setup procedure is in [Getting started](docs/getting-started.md).
 
@@ -83,6 +85,7 @@ The detailed guides are maintained in Simplified Chinese. Start from the
 - [Getting started](docs/getting-started.md)
 - [Product guide](docs/product-guide.md)
 - [Operations](docs/operations.md)
+- [Authentication](docs/authentication.md)
 - [Architecture](docs/architecture.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
@@ -93,7 +96,7 @@ A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.
 
 - TypeScript 6 and Node.js 24
 - React 19, React Router, TanStack Query, and Vite
-- Fastify, TypeBox, Better Auth, Drizzle ORM, and Pino
+- Fastify sessions, TypeBox, Drizzle ORM, and Pino
 - PostgreSQL 17
 - Vitest and Playwright
 - Docker Compose

@@ -155,6 +155,12 @@ integration('database migration baseline', () => {
       );
       expect(migrations[0]?.value).toBe(1);
       await expect(database.checkSchema()).resolves.toBeUndefined();
+      await expect(migrateDatabase(database, resolve('migrations'))).resolves.toBeUndefined();
+      expect(
+        await database.orm.execute(
+          sql`select count(*)::int as value from drizzle.__drizzle_migrations`,
+        ),
+      ).toEqual([{ value: 1 }]);
 
       const [appliedMigration] = await database.orm.execute<{
         createdAt: string;
@@ -202,6 +208,24 @@ integration('database migration baseline', () => {
       await expect(database.checkSchema()).rejects.toThrow(
         'Database schema migration identity does not match this application.',
       );
+    } finally {
+      await database.close();
+    }
+  });
+
+  it('refuses nonempty databases without changing existing data or creating auth tables', async () => {
+    const database = await temporaryDatabase();
+    try {
+      await database.orm.execute(sql`create table legacy_accounts (id text primary key)`);
+      await database.orm.execute(sql`insert into legacy_accounts values ('preserve-me')`);
+      await expect(migrateDatabase(database, resolve('migrations'))).rejects.toThrow(
+        'Existing databases are not migrated or erased',
+      );
+      expect(await database.orm.execute(sql`select * from legacy_accounts`)).toEqual([
+        { id: 'preserve-me' },
+      ]);
+      expect(await tableExists(database, 'users')).toBe(false);
+      expect(await tableExists(database, 'password_credentials')).toBe(false);
     } finally {
       await database.close();
     }
