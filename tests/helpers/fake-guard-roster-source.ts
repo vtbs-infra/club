@@ -34,6 +34,10 @@ export function buildFakeRosterScenario(
 }
 
 export class FakeGuardRosterSource implements GuardRosterSource {
+  public openCapture(signal: AbortSignal) {
+    signal.throwIfAborted();
+    return Promise.resolve(this);
+  }
   public readonly name = 'fake';
   public readonly version = '1';
   private scenario: FakeRosterScenario = buildFakeRosterScenario([]);

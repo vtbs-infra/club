@@ -3,6 +3,7 @@ import { Type, type Static } from '@sinclair/typebox';
 
 import { DateTimeSchema, IdSchema, Nullable } from './common.js';
 import { VerificationRoomHealthSchema } from './verification-rooms.js';
+import { BilibiliSessionStatusSchema } from './bilibili.js';
 
 export const RuntimeStateSchema = Type.Union([
   Type.Literal('STARTING'),
@@ -24,6 +25,17 @@ export const RuntimeStatusSchema = Type.Object({
 });
 
 export const SystemStatusSchema = Type.Object({
+  bilibili: Nullable(
+    Type.Pick(BilibiliSessionStatusSchema, [
+      'validity',
+      'reachability',
+      'account',
+      'errorCode',
+      'checkedAt',
+      'refreshedAt',
+      'nextCheckAt',
+    ]),
+  ),
   checks: Type.Object({
     database: Type.Union([Type.Literal('ok'), Type.Literal('down')]),
     schema: Type.Union([Type.Literal('ok'), Type.Literal('down')]),
@@ -53,6 +65,7 @@ export const SystemStatusSchema = Type.Object({
     }),
   ),
   runtimes: Type.Object({
+    bilibili: RuntimeStatusSchema,
     identity: RuntimeStatusSchema,
     media: RuntimeStatusSchema,
     roster: RuntimeStatusSchema,

@@ -21,6 +21,8 @@ const ConfigSchema = Type.Object(
     authSecret: Type.String({ minLength: 32 }),
     addressEncryptionActiveKeyVersion: Type.Integer({ minimum: 1 }),
     addressEncryptionKeyRing: Type.String({ minLength: 1 }),
+    bilibiliCredentialActiveKeyVersion: Type.Integer({ minimum: 1 }),
+    bilibiliCredentialKeyRing: Type.String({ minLength: 1 }),
     host: Type.String({ minLength: 1 }),
     port: Type.Integer({ minimum: 1, maximum: 65_535 }),
     storageLocalPath: Type.String({ minLength: 1 }),
@@ -82,6 +84,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     addressEncryptionActiveKeyVersion: Number(env.ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION ?? '1'),
     addressEncryptionKeyRing:
       env.ADDRESS_ENCRYPTION_KEY_RING ?? (nodeEnv === 'production' ? undefined : developmentKey),
+    bilibiliCredentialActiveKeyVersion: Number(env.BILIBILI_CREDENTIAL_ACTIVE_KEY_VERSION ?? '1'),
+    bilibiliCredentialKeyRing:
+      env.BILIBILI_CREDENTIAL_KEY_RING ?? (nodeEnv === 'production' ? undefined : developmentKey),
     host: env.HOST ?? '0.0.0.0',
     port: parsePort(env.PORT),
     storageLocalPath: env.STORAGE_LOCAL_PATH ?? './data/club',
@@ -89,19 +94,28 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxy: parseBoolean(env.TRUST_PROXY),
   };
 
-  const encryptionKeysValid = validEncryptionKeyRing(
-    candidate.addressEncryptionKeyRing,
-    candidate.addressEncryptionActiveKeyVersion,
-  );
-  if (!Value.Check(ConfigSchema, candidate) || !encryptionKeysValid) {
+  const encryptionErrors = [
+    [
+      'addressEncryptionKeyRing',
+      candidate.addressEncryptionKeyRing,
+      candidate.addressEncryptionActiveKeyVersion,
+    ],
+    [
+      'bilibiliCredentialKeyRing',
+      candidate.bilibiliCredentialKeyRing,
+      candidate.bilibiliCredentialActiveKeyVersion,
+    ],
+  ]
+    .filter(([, ring, version]) => !validEncryptionKeyRing(ring, version))
+    .map(
+      ([field]) => `/${field} requires unique versioned 32-byte base64 keys and an active version`,
+    );
+  if (!Value.Check(ConfigSchema, candidate) || encryptionErrors.length > 0) {
     const details = [...Value.Errors(ConfigSchema, candidate)]
       .map((error) => `${error.path || '/'} ${error.message}`)
       .join('; ');
-    const encryptionDetails = encryptionKeysValid
-      ? ''
-      : `${details ? '; ' : ''}/addressEncryptionKeyRing requires unique versioned 32-byte base64 keys and an active version`;
     throw new ConfigurationError(
-      `Invalid application configuration: ${details}${encryptionDetails}`,
+      `Invalid application configuration: ${[details, ...encryptionErrors].filter(Boolean).join('; ')}`,
     );
   }
 

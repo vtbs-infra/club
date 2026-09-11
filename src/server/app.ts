@@ -41,6 +41,12 @@ import type { LiveMessageSource } from './modules/bilibili/live-message-source.j
 import { PublicWebGuardRosterSource } from './modules/bilibili/public-web-guard-roster-source.js';
 import { PublicWebLiveMessageSource } from './modules/bilibili/public-web-live-message-source.js';
 import { RoomConnectionManager } from './modules/bilibili/room-connection-manager.js';
+import { BiliTvPassportClient, type BilibiliPassport } from './modules/bilibili/passport-client.js';
+import type { BilibiliReadingSession } from './modules/bilibili/reading-session.js';
+import { BilibiliSessionService } from './modules/bilibili/session-service.js';
+import { createBilibiliSessionRuntime } from './modules/bilibili/session-runtime.js';
+import type { PeriodicRuntime } from './infrastructure/runtime/periodic-runtime.js';
+import bilibiliRoutes from './modules/bilibili/routes.js';
 import { CreatorService } from './modules/creators/creator-service.js';
 import creatorRoutes from './modules/creators/routes.js';
 import { GiftClaimService } from './modules/gifts/claim-service.js';
@@ -69,6 +75,9 @@ import { VerificationRoomService } from './modules/verification-rooms/verificati
 import { SnapshotService } from './modules/snapshots/snapshot-service.js';
 
 export interface BuildAppOptions {
+  readonly bilibiliPassport?: BilibiliPassport;
+  readonly bilibiliReadingSession?: BilibiliReadingSession;
+  readonly bilibiliRuntime?: PeriodicRuntime;
   readonly auth?: AppAuth;
   readonly identityRuntime?: IdentityRuntime;
   readonly challengeLimiter?: InMemoryRateLimiter;
@@ -109,14 +118,34 @@ export async function buildApp(options: BuildAppOptions = {}) {
     logger.error({ err: error, operation }, 'background runtime operation failed');
   };
   const auth = options.auth ?? createAuth({ config, database, clock });
-  const encryption = new EncryptionKeyRing(config);
+  const encryption = new EncryptionKeyRing({
+    activeVersion: config.addressEncryptionActiveKeyVersion,
+    keyRing: config.addressEncryptionKeyRing,
+  });
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
-  const creatorProfileSource = options.creatorProfileSource ?? new PublicWebCreatorProfileSource();
+  const bilibili = new BilibiliSessionService(
+    database,
+    clock,
+    new EncryptionKeyRing({
+      activeVersion: config.bilibiliCredentialActiveKeyVersion,
+      keyRing: config.bilibiliCredentialKeyRing,
+    }),
+    options.bilibiliPassport ?? new BiliTvPassportClient(globalThis.fetch, () => clock.now()),
+    () => {
+      connections.invalidate();
+      identityRuntime.requestTick();
+    },
+    () => bilibiliRuntime.requestTick(),
+  );
+  const readingSession = options.bilibiliReadingSession ?? bilibili;
+  const creatorProfileSource =
+    options.creatorProfileSource ?? new PublicWebCreatorProfileSource(readingSession);
   const connections: RoomConnectionManager = new RoomConnectionManager({
     source:
       options.liveMessageSource ??
       new PublicWebLiveMessageSource({
+        session: readingSession,
         reportDiagnostic: (diagnostic) => {
           logger.warn(diagnostic, 'Bilibili live-message processing failed');
         },
@@ -150,6 +179,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     config.authSecret,
     connections,
     () => identityRuntime.requestTick(),
+    () => readingSession.isAvailable(),
   );
   const rooms = new VerificationRoomService(
     database,
@@ -166,6 +196,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
       reportError: reportRuntimeError,
     });
   const addressService = new AddressService(database, encryption);
+  const bilibiliRuntime =
+    options.bilibiliRuntime ??
+    createBilibiliSessionRuntime({ clock, service: bilibili, reportError: reportRuntimeError });
   const creatorService = new CreatorService(database, creatorProfileSource, clock);
   const releaseService = new GiftReleaseService(database, clock);
   const announcementService = new AnnouncementService(database, clock);
@@ -187,7 +220,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const snapshotService = new SnapshotService(
     database,
     storage,
-    options.guardRosterSource ?? new PublicWebGuardRosterSource(),
+    options.guardRosterSource ?? new PublicWebGuardRosterSource(readingSession),
     clock,
     releaseService.eligibility,
     undefined,
@@ -237,6 +270,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   app.addHook('onClose', async () => {
     const closeRuntimes = [
+      () => bilibiliRuntime.close(),
       () => identityRuntime.close(),
       () => snapshotRuntime.close(),
       () => giftMediaRuntime.close(),
@@ -257,6 +291,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   if (backgroundRequired) {
     app.addHook('onReady', async () => {
       const runtimes = [
+        ['bilibili', bilibiliRuntime.start()],
         ['identity', identityRuntime.start()],
         ['snapshot', snapshotRuntime.start()],
         ['gift-media', giftMediaRuntime.start()],
@@ -311,6 +346,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
   await app.register(giftMediaRoutes, { auth, database, service: giftMediaService });
   await app.register(verificationRoomRoutes, { auth, service: rooms });
+  await app.register(bilibiliRoutes, { auth, service: bilibili });
   await app.register(snapshotRoutes, { auth, database, service: snapshotService });
   await app.register(announcementRoutes, {
     auth,
@@ -325,6 +361,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
 
   await app.register(systemStatusRoutes, {
+    bilibiliRuntime,
+    roomConnections: connections,
     auth,
     backgroundRequired,
     identityRuntime,

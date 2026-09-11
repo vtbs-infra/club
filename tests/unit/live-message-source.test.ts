@@ -2,10 +2,7 @@ import type { MessageData } from 'bilibili-live-danmaku';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
-import {
-  normalizePublicWebDanmaku,
-  normalizePublicWebHistoryMessage,
-} from '../../src/server/modules/bilibili/public-web-live-message-source.js';
+import { normalizePublicWebDanmaku } from '../../src/server/modules/bilibili/public-web-live-message-source.js';
 import { RoomConnectionManager } from '../../src/server/modules/bilibili/room-connection-manager.js';
 
 const sanitizedFixture = {
@@ -127,50 +124,11 @@ describe('live-message adapters', () => {
     },
   );
 
-  it('normalizes recent room messages with stable IDs and China Standard Time', () => {
-    const message = {
-      nickname: 'sanitized-history-user',
-      text: 'CLUB-7K4M2P',
-      timeline: '2026-07-26 13:28:14',
-      uid: 496_150_373,
-    };
-    const first = normalizePublicWebHistoryMessage('7734200', message);
-    const second = normalizePublicWebHistoryMessage('7734200', message);
-
-    expect(first).toMatchObject({
-      biliDisplayName: 'sanitized-history-user',
-      biliUid: '496150373',
-      message: 'CLUB-7K4M2P',
-      occurredAt: new Date('2026-07-26T05:28:14.000Z'),
-      roomId: '7734200',
-    });
-    expect(first?.eventId).toMatch(/^[a-f0-9]{64}$/);
-    expect(second?.eventId).toBe(first?.eventId);
-  });
-
-  it('rejects malformed recent room messages', () => {
-    expect(
-      normalizePublicWebHistoryMessage('7734200', {
-        text: 'CLUB-7K4M2P',
-        timeline: 'not-a-date',
-        uid: 496_150_373,
-      }),
-    ).toBeNull();
-    expect(
-      normalizePublicWebHistoryMessage('7734200', {
-        text: 'CLUB-7K4M2P',
-        timeline: '2026-07-26 13:28:14',
-        uid: 0,
-      }),
-    ).toBeNull();
-  });
-
   it('keeps one connection per needed room and reconnects after a failure', async () => {
     const source = new FakeLiveMessageSource();
     const received: string[] = [];
     const states: string[] = [];
     const manager = new RoomConnectionManager({
-      idleGraceMs: 0,
       onMessage: (event) => {
         received.push(event.eventId);
       },
@@ -194,6 +152,7 @@ describe('live-message adapters', () => {
     expect(received).toEqual(['event-1']);
 
     await source.disconnect('100', new Error('simulated disconnect'));
+    expect(manager.getState('100')).toBe('UNHEALTHY');
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(source.activeConnectionCount('100')).toBe(1);
     expect(states).toContain('UNHEALTHY');
@@ -221,24 +180,26 @@ describe('live-message adapters', () => {
     await manager.close();
   });
 
-  it('does not extend an idle room grace period during repeated reconciliation', async () => {
-    vi.useFakeTimers();
+  it('stops disabled rooms immediately and ignores their queued messages', async () => {
     const source = new FakeLiveMessageSource();
-    const manager = new RoomConnectionManager({
-      idleGraceMs: 100,
-      onMessage: () => undefined,
-      source,
-    });
+    const received = vi.fn();
+    const manager = new RoomConnectionManager({ onMessage: received, source });
     try {
       await manager.reconcile(['300']);
+      manager.releaseRoom('300');
+      expect(manager.getState('300')).toBeNull();
+      await source.emitMessage({
+        biliUid: '42',
+        biliDisplayName: null,
+        eventId: 'stale',
+        message: 'test',
+        roomId: '300',
+      });
+      expect(received).not.toHaveBeenCalled();
       await manager.reconcile([]);
-      await vi.advanceTimersByTimeAsync(60);
-      await manager.reconcile([]);
-      await vi.advanceTimersByTimeAsync(41);
       expect(source.activeConnectionCount('300')).toBe(0);
     } finally {
       await manager.close();
-      vi.useRealTimers();
     }
   });
 });

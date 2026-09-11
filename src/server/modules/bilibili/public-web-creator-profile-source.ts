@@ -1,5 +1,6 @@
 import type { BilibiliApiClient } from 'bilibili-live-danmaku';
 import { PublicWebClient } from './public-web-client.js';
+import type { BilibiliReadingSession } from './reading-session.js';
 
 import {
   CreatorProfileSourceError,
@@ -94,8 +95,11 @@ export class PublicWebCreatorProfileSource implements CreatorProfileSource {
   public readonly version = 'room-profile-v2';
   private readonly client: PublicWebClient;
 
-  public constructor(fetchImplementation: typeof fetch = globalThis.fetch) {
-    this.client = new PublicWebClient(fetchImplementation);
+  public constructor(
+    session: BilibiliReadingSession,
+    fetchImplementation: typeof fetch = globalThis.fetch,
+  ) {
+    this.client = new PublicWebClient(session, fetchImplementation);
   }
 
   private async request(client: BilibiliApiClient, url: URL): Promise<unknown> {

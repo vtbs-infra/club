@@ -16,8 +16,12 @@ import type { IdentityRuntime } from '../auth/identity-runtime.js';
 import type { GiftMediaRuntime } from '../gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 import { SystemStatusService } from './system-status-service.js';
+import type { PeriodicRuntime } from '../../infrastructure/runtime/periodic-runtime.js';
+import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
 
 interface SystemStatusOptions {
+  readonly bilibiliRuntime: PeriodicRuntime;
+  readonly roomConnections: RoomConnectionManager;
   readonly auth: AppAuth;
   readonly backgroundRequired: boolean;
   readonly identityRuntime: IdentityRuntime;
@@ -63,6 +67,7 @@ const systemStatusRoutes: FastifyPluginCallback<SystemStatusOptions> = (app, opt
         options.storage.checkHealth(),
       ]);
       const runtimeStatuses = [
+        options.bilibiliRuntime.getStatus(),
         options.identityRuntime.getStatus(),
         options.snapshotRuntime.getStatus(),
         options.giftMediaRuntime.getStatus(),

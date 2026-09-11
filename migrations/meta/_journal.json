@@ -15,6 +15,13 @@
       "when": 1789116432107,
       "tag": "0001_identity_challenge_capacity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789155974775,
+      "tag": "0002_bilibili_managed_session",
+      "breakpoints": true
     }
   ]
 }

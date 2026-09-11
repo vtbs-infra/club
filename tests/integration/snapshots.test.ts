@@ -28,6 +28,7 @@ import type {
   GuardRosterMember,
   GuardRosterPage,
   GuardRosterSource,
+  GuardRosterCapture,
 } from '../../src/server/modules/bilibili/guard-roster-source.js';
 import { CreatorService } from '../../src/server/modules/creators/creator-service.js';
 import { GiftEligibilityService } from '../../src/server/modules/gifts/eligibility-service.js';
@@ -76,6 +77,10 @@ function member(uid: string, position: number, rawTier = '3'): GuardRosterMember
 }
 
 class AdvancingSource implements GuardRosterSource {
+  public openCapture(signal: AbortSignal) {
+    signal.throwIfAborted();
+    return Promise.resolve(this);
+  }
   public readonly name = 'advancing-fake';
   public readonly version = '1';
   private calls = 0;
@@ -93,6 +98,10 @@ class AdvancingSource implements GuardRosterSource {
 }
 
 class ConcurrentEmptySource implements GuardRosterSource {
+  public openCapture(signal: AbortSignal) {
+    signal.throwIfAborted();
+    return Promise.resolve(this);
+  }
   public readonly name = 'concurrent-fake';
   public readonly version = '1';
   public maximumConcurrentRequests = 0;
@@ -120,6 +129,10 @@ class ConcurrentEmptySource implements GuardRosterSource {
 }
 
 class FixedResponseSizeSource implements GuardRosterSource {
+  public openCapture(signal: AbortSignal) {
+    signal.throwIfAborted();
+    return Promise.resolve(this);
+  }
   public readonly name = 'fixed-response-size-fake';
   public readonly version = '1';
   public requests = 0;
@@ -146,6 +159,10 @@ class FixedResponseSizeSource implements GuardRosterSource {
 }
 
 class BlockingEmptySource implements GuardRosterSource {
+  public openCapture(signal: AbortSignal) {
+    signal.throwIfAborted();
+    return Promise.resolve(this);
+  }
   public readonly name = 'blocking-fake';
   public readonly version = '1';
   public readonly entered: Promise<void>;
@@ -185,6 +202,10 @@ class BlockingEmptySource implements GuardRosterSource {
 }
 
 class AbortableBlockingSource implements GuardRosterSource {
+  public openCapture(signal: AbortSignal) {
+    signal.throwIfAborted();
+    return Promise.resolve(this);
+  }
   public readonly name = 'abortable-blocking-fake';
   public readonly version = '1';
   public readonly entered: Promise<void>;
@@ -820,7 +841,11 @@ integration('month-end snapshot capture', () => {
   it('rejects oversized pagination before requesting or storing later pages', async () => {
     const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
     let requests = 0;
-    const source: GuardRosterSource = {
+    const source: GuardRosterSource & GuardRosterCapture = {
+      openCapture(signal) {
+        signal.throwIfAborted();
+        return Promise.resolve(this);
+      },
       name: 'oversized-pagination-fake',
       version: '1',
       fetchPage: (input) => {
@@ -920,7 +945,11 @@ integration('month-end snapshot capture', () => {
 
   it('fails the whole attempt when the provider exceeds its timeout', async () => {
     const clock = new MutableClock(new Date('2026-08-31T15:59:30.000Z'));
-    const source: GuardRosterSource = {
+    const source: GuardRosterSource & GuardRosterCapture = {
+      openCapture(signal) {
+        signal.throwIfAborted();
+        return Promise.resolve(this);
+      },
       name: 'timeout-fake',
       version: '1',
       fetchPage: async (input) =>

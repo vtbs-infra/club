@@ -58,7 +58,13 @@ describe('serialized settings changes', () => {
   }
 
   it('serializes changes to different default addresses without a deadlock', async () => {
-    const service = new AddressService(fixture.database, new EncryptionKeyRing(createTestConfig()));
+    const service = new AddressService(
+      fixture.database,
+      new EncryptionKeyRing({
+        activeVersion: createTestConfig().addressEncryptionActiveKeyVersion,
+        keyRing: createTestConfig().addressEncryptionKeyRing,
+      }),
+    );
     const payload = {
       countryRegion: '中国大陆',
       province: '上海市',

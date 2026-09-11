@@ -6,6 +6,8 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
     authSecret: 'test-secret-that-is-at-least-32-characters-long',
     addressEncryptionActiveKeyVersion: 1,
     addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    bilibiliCredentialActiveKeyVersion: 1,
+    bilibiliCredentialKeyRing: '1:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
     databaseUrl: 'postgres://club:club@localhost:5432/club_test',
     host: '127.0.0.1',
     logLevel: 'silent',

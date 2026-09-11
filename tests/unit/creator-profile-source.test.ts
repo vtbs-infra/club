@@ -1,3 +1,4 @@
+import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
 import { BilibiliApiClient } from 'bilibili-live-danmaku';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,7 +15,10 @@ function responses() {
 function fixture(payloads: unknown[] = responses()) {
   const network = vi.fn<typeof fetch>();
   for (const payload of payloads) network.mockResolvedValueOnce(Response.json(payload));
-  return { network, source: new PublicWebCreatorProfileSource(network) };
+  return {
+    network,
+    source: new PublicWebCreatorProfileSource(new FakeBilibiliReadingSession(), network),
+  };
 }
 
 describe('public-web creator profile adapter', () => {
@@ -41,7 +45,7 @@ describe('public-web creator profile adapter', () => {
       'https://api.live.bilibili.com/room/v1/Room/get_info?room_id=123456',
       'https://api.live.bilibili.com/live_user/v1/UserInfo/get_anchor_in_room?roomid=654321',
     ]);
-    for (const [, init] of network.mock.calls) expect(init?.signal).toBe(signal);
+    for (const [, init] of network.mock.calls) expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('distinguishes an account without a live room from a failed lookup', async () => {

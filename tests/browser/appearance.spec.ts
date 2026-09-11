@@ -1,3 +1,4 @@
+import { bilibiliSession } from './support/fixtures.js';
 import { fulfillJson, mockApi, requestJsonObject, requestPath } from './support/api.js';
 import { adminIdentity, portalHome, systemStatus, verificationRoom } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test } from './support/test.js';
@@ -15,6 +16,7 @@ test('loads a server-selected theme across public, shell, dropdown, and dialog s
     const pathname = requestPath(request);
     if (pathname === '/api/v1/me') return adminIdentity();
     if (pathname === '/api/v1/portal/home') return portalHome();
+    if (pathname === '/api/v1/admin/bilibili') return bilibiliSession();
     if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
     if (pathname === '/api/v1/admin/system') return systemStatus();
     if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };

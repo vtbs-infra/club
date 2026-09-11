@@ -1,3 +1,4 @@
+import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
 import { randomUUID } from 'node:crypto';
 import { Signer } from '@fastify/cookie';
 import { and, count, eq } from 'drizzle-orm';
@@ -94,6 +95,7 @@ describe('username and verified UID authentication', () => {
   async function makeApp() {
     source = new FakeLiveMessageSource();
     app = await buildApp({
+      bilibiliReadingSession: new FakeBilibiliReadingSession(),
       auth,
       config: createTestConfig({ databaseUrl: fixture.databaseUrl }),
       database: fixture.database,

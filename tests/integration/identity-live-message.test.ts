@@ -29,10 +29,12 @@ describe('Bilibili wire messages as identity proof', () => {
       'test-secret',
       connections,
       () => undefined,
+      () => true,
     );
     await fixture.database.orm
       .insert(verificationRooms)
       .values({ biliRoomId: roomId, displayName: 'Test room' });
+    await identities.reconcileConnections();
   });
   afterEach(async () => {
     if (connections) await connections.close();

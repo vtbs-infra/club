@@ -33,6 +33,12 @@ function runtimeMetricTone(tone: StatusTone): 'amber' | 'green' | 'red' {
 }
 
 const auditActionLabel: Readonly<Record<string, string>> = {
+  'bilibili.login.created': '发起 B站扫码登录',
+  'bilibili.session.activated': '启用 B站读取账号',
+  'bilibili.session.disconnected': '断开 B站读取账号',
+  'bilibili.session.refreshed': 'B站读取账号续期成功',
+  'bilibili.refresh.uncertain': 'B站续期结果不明',
+  'bilibili.session.reauthentication_required': 'B站读取账号需要重新扫码',
   'address.created': '新增收货地址',
   'address.deleted': '删除收货地址',
   'address.updated': '修改收货地址',
@@ -70,6 +76,19 @@ function SystemStatusContent({ data }: { readonly data: SystemStatus }) {
   return (
     <>
       <section className="metric-grid system-metrics">
+        <MetricCard
+          icon={RadioTower}
+          label="B站读取账号"
+          description={data.bilibili?.account?.name ?? '在 B站集成页面扫码配置'}
+          tone={data.bilibili?.validity === 'VALID' ? 'green' : 'amber'}
+          value={
+            data.bilibili?.validity === 'VALID'
+              ? '登录有效'
+              : data.bilibili?.validity === 'REAUTH_REQUIRED'
+                ? '需要重新扫码'
+                : '待配置或检查'
+          }
+        />
         <MetricCard
           description="业务数据与审计记录"
           icon={Database}

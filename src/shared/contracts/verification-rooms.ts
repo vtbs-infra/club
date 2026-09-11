@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 
 import { DateTimeSchema, IdSchema, Nullable } from './common.js';
+import { RoomConnectionStateSchema } from './auth.js';
 
 export const VerificationRoomHealthSchema = Type.Union([
   Type.Literal('UNKNOWN'),
@@ -16,6 +17,9 @@ export const VerificationRoomSchema = Type.Object({
   healthStatus: VerificationRoomHealthSchema,
   id: IdSchema,
   lastConnectedAt: Nullable(DateTimeSchema),
+  connectionState: Nullable(RoomConnectionStateSchema),
+  lastUidReceivedAt: Nullable(DateTimeSchema),
+  lastUidMessageAt: Nullable(DateTimeSchema),
   priority: Type.Integer(),
 });
 export type VerificationRoom = Static<typeof VerificationRoomSchema>;

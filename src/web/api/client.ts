@@ -2,6 +2,7 @@ export * from './addresses';
 export * from './announcements';
 export * from './appearance';
 export * from './auth';
+export * from './bilibili';
 export * from './creators';
 export * from './gifts';
 export * from './portal';

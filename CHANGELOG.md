@@ -15,6 +15,21 @@ All notable Club changes are documented here. The format follows
 - Rename the authentication secret to `AUTH_SECRET`; administrator CLI uses `--username` and provides `admin:reset-password`.
 - Build the unreleased source with `CLUB_IMAGE=club-app`; existing v0.2.0 images remain on the previous baseline.
 
+### Added
+
+- Manage one Bilibili reading account through administrator QR login and explicit activation,
+  with separately encrypted credentials, periodic checks, automatic renewal and crash recovery.
+- Show independent account, upstream and room states, including recent valid sender-UID samples.
+
+### Changed
+
+- Require the managed reading account for live verification, creator profiles and guard rosters;
+  keep enabled verification rooms authenticated and remove message-history polling.
+- Freeze credentials for each profile lookup and roster attempt; invalidate old contexts when
+  credentials change. Unavailable channels reject new challenges before issuing a code.
+- Add migration 0002 within the username/UID baseline and require a separate Bilibili credential
+  key ring. Existing accounts on that baseline are preserved; administrator QR setup is required.
+
 ### Fixed
 
 - Fetch creator profiles through public room and anchor endpoints, validating both owner UIDs;

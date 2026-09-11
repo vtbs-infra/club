@@ -28,10 +28,14 @@ export interface FetchGuardRosterPageInput {
   readonly signal: AbortSignal;
 }
 
+export interface GuardRosterCapture {
+  fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage>;
+}
+
 export interface GuardRosterSource {
   readonly name: string;
   readonly version: string;
-  fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage>;
+  openCapture(signal: AbortSignal): Promise<GuardRosterCapture>;
 }
 
 export function normalizeGuardTier(rawTier: unknown): GuardTier | null {

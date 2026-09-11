@@ -7,14 +7,14 @@ interface ManagedRoom {
   connection: RoomConnection | null;
   controller: AbortController | null;
   desired: boolean;
-  idleTimer: ReturnType<typeof setTimeout> | null;
   reconnectAttempt: number;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   state: RoomConnectionState;
+  lastUidReceivedAt: Date | null;
+  lastUidMessageAt: Date | null;
 }
 
 export interface RoomConnectionManagerOptions {
-  readonly idleGraceMs?: number;
   readonly onMessage: (event: LiveMessageEvent) => void | Promise<void>;
   readonly onStateChange?: (
     roomId: string,
@@ -26,7 +26,6 @@ export interface RoomConnectionManagerOptions {
 }
 
 export class RoomConnectionManager {
-  private readonly idleGraceMs: number;
   private readonly reconnectDelaysMs: readonly number[];
   private readonly rooms = new Map<string, ManagedRoom>();
   private readonly operations = new Set<Promise<void>>();
@@ -34,7 +33,6 @@ export class RoomConnectionManager {
   private closed = false;
 
   public constructor(private readonly options: RoomConnectionManagerOptions) {
-    this.idleGraceMs = options.idleGraceMs ?? 30_000;
     this.reconnectDelaysMs = options.reconnectDelaysMs ?? [1_000, 5_000, 15_000, 30_000];
   }
 
@@ -95,6 +93,7 @@ export class RoomConnectionManager {
                     if (signal.aborted || room.controller !== controller) return;
                     const previous = room.connection;
                     room.connection = null;
+                    room.state = 'UNHEALTHY';
                     controller.abort();
                     await previous?.close();
                     if (this.closed || this.rooms.get(roomId) !== room) return;
@@ -102,7 +101,12 @@ export class RoomConnectionManager {
                     this.scheduleReconnect(roomId, room);
                   }),
                 ),
-              onMessage: this.options.onMessage,
+              onMessage: (event) => {
+                if (signal.aborted || room.controller !== controller || !room.desired) return;
+                room.lastUidReceivedAt = new Date();
+                room.lastUidMessageAt = event.occurredAt;
+                return this.options.onMessage(event);
+              },
             },
             signal,
           );
@@ -129,32 +133,25 @@ export class RoomConnectionManager {
       connection: null,
       controller: null,
       desired: true,
-      idleTimer: null,
       reconnectAttempt: 0,
       reconnectTimer: null,
       state: 'UNHEALTHY' as const,
+      lastUidReceivedAt: null,
+      lastUidMessageAt: null,
     };
     room.desired = true;
-    if (room.idleTimer) clearTimeout(room.idleTimer);
-    room.idleTimer = null;
     this.rooms.set(roomId, room);
     await this.connect(roomId, room);
   }
 
   public releaseRoom(roomId: string): void {
     const room = this.rooms.get(roomId);
-    if (!room || !room.desired) return;
+    if (!room) return;
     room.desired = false;
     if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
-    room.reconnectTimer = null;
-    if (room.idleTimer) clearTimeout(room.idleTimer);
-    room.idleTimer = setTimeout(() => {
-      if (room.desired) return;
-      room.controller?.abort();
-      void this.track(Promise.resolve().then(() => room.connection?.close()));
-      this.rooms.delete(roomId);
-    }, this.idleGraceMs);
-    room.idleTimer.unref();
+    room.controller?.abort();
+    this.rooms.delete(roomId);
+    if (room.connection) void this.track(Promise.resolve().then(() => room.connection!.close()));
   }
 
   public async reconcile(requiredRoomIds: readonly string[]): Promise<void> {
@@ -166,7 +163,27 @@ export class RoomConnectionManager {
   }
 
   public getState(roomId: string): RoomConnectionState | null {
-    return this.rooms.get(roomId)?.state ?? null;
+    const room = this.rooms.get(roomId);
+    return room?.desired ? room.state : null;
+  }
+
+  public getUidSample(roomId: string) {
+    const room = this.rooms.get(roomId);
+    return {
+      lastUidReceivedAt: room?.lastUidReceivedAt?.toISOString() ?? null,
+      lastUidMessageAt: room?.lastUidMessageAt?.toISOString() ?? null,
+    };
+  }
+
+  /** Invalidate synchronously so no new challenge can select an old account's connection. */
+  public invalidate(): void {
+    for (const room of this.rooms.values()) {
+      room.desired = false;
+      if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
+      room.controller?.abort();
+      if (room.connection) void this.track(Promise.resolve().then(() => room.connection!.close()));
+    }
+    this.rooms.clear();
   }
 
   public testRoom(roomId: string): Promise<void> {
@@ -191,7 +208,6 @@ export class RoomConnectionManager {
     this.shutdown.abort();
     const closures: Promise<void>[] = [];
     for (const room of this.rooms.values()) {
-      if (room.idleTimer) clearTimeout(room.idleTimer);
       if (room.reconnectTimer) clearTimeout(room.reconnectTimer);
       if (room.connection) closures.push(Promise.resolve().then(() => room.connection!.close()));
     }

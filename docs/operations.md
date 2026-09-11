@@ -12,7 +12,7 @@
 - 一个持久化对象存储目录；
 - 面向公网时使用的 HTTPS 反向代理。
 
-应用进程同时运行 B站房间连接、名单调度和礼物封面回收。保持一个活动应用实例。
+应用进程同时运行 B站读取会话续期、房间连接、名单调度和礼物封面回收。保持一个活动应用实例。
 
 Compose 数据卷：
 
@@ -62,9 +62,9 @@ docker compose logs --tail 100 postgres
 
 - PostgreSQL 查询和与当前应用精确匹配的迁移集合；
 - 对象存储的隔离写入、读取和删除；
-- B站身份验证、名单调度和礼物封面回收 Runtime 已完成初始化且未长期停止 Tick。
+- B站读取会话、身份验证、名单调度和礼物封面回收 Runtime 已完成初始化且未长期停止 Tick。
 
-任一技术检查失败时返回非 2xx。没有启用验证直播间属于业务 `NEEDS_SETUP`，管理员仍
+任一技术检查失败时返回非 2xx。未配置读取账号或没有启用验证直播间属于业务 `NEEDS_SETUP`，管理员仍
 可登录并完成首次配置。
 
 ### `/api/v1/admin/system`
@@ -90,7 +90,7 @@ Club 使用 Pino 输出结构化日志。每个 HTTP 请求都有 `x-request-id`
 
 - 密码与认证密钥；
 - Session Cookie 和认证 Token；
-- B站验证码；
+- B站验证码、扫码上下文、Cookie、access token 和 refresh token；
 - 收件人姓名、电话和详细地址；
 - 地址加密密钥。
 
@@ -103,7 +103,8 @@ Club 使用 Pino 输出结构化日志。每个 HTTP 请求都有 `x-request-id`
 3. `AUTH_SECRET`；
 4. 完整的 `ADDRESS_ENCRYPTION_KEY_RING`；
 5. 部署使用的 Git Revision 或镜像 Digest；
-6. 数据库和存储归档的校验和。
+6. 数据库和存储归档的校验和；
+7. 完整的 `BILIBILI_CREDENTIAL_KEY_RING` 及活动版本（单独保管密钥备份）。
 
 数据库保存业务状态和对象引用，对象存储保存名单证据与图片，二者必须属于同一备份
 时间点。
@@ -221,11 +222,28 @@ Invoke-RestMethod http://localhost:3000/health/ready
 
 回滚需要恢复与目标镜像 Schema 相匹配的 PostgreSQL 和对象存储备份。
 
+## B站读取账号升级与恢复
+
+已经运行 `0000_username_uid_baseline` 的部署，需要应用 `0001_identity_challenge_capacity` 和
+`0002_bilibili_managed_session` 中所有尚未执行的迁移，保留用户及业务数据。
+升级前配置独立的 `BILIBILI_CREDENTIAL_KEY_RING` 与活动版本；先停止旧应用，再用目标镜像
+迁移并启动。没有读取账号时基础 Readiness 应通过，管理员随后到“B站集成”扫码启用。
+
+B站凭据密钥轮换遵循地址密钥相同的版本规则：先加入新版本、切换活动版本，保留仍被引用
+的旧版本。登录、刷新写入新密文时使用活动版本；不会批量重写旧密文。
+缺失旧密钥时后台会提示重新扫码，正常管理员登录仍可用。
+
+启动后核验持久化凭据，再恢复常驻连接。若刷新结果已保存，恢复核验；若只留下结果不明的
+刷新意图，租约到期后要求重新扫码，不重复使用旧 refresh token。
+恢复数据库备份不能撤销 B站已经完成的 token 轮换；回滚到旧代码还必须恢复匹配的迁移历史，
+并准备重新扫码。不要只替换镜像或手工修改迁移表。
+
 ## B站连接故障
 
 检查：
 
 - 宿主机到 B站 HTTPS 与 WebSocket 的连接；
+- “B站集成”中的读取账号是否需要重新扫码、是否暂时不可达；
 - 直播间 ID 是否正确；
 - 验证直播间是否启用；
 - `/admin/verification` 中的最后连接时间；

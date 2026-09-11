@@ -8,6 +8,7 @@
 - Docker Engine
 - Docker Compose v2
 - 可访问 B站 HTTPS 与 WebSocket 服务的网络
+- 一个供 Club 扫码登录的 B站读取账号
 - 一个用于 UID 验证的 B站直播间
 
 默认端口：
@@ -35,6 +36,8 @@ COMPOSE_DATABASE_URL=postgres://club:<URL 编码后的密码>@postgres:5432/club
 AUTH_SECRET=<不少于 32 个字符的随机密钥>
 ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION=1
 ADDRESS_ENCRYPTION_KEY_RING=1:<32 字节 base64 密钥>
+BILIBILI_CREDENTIAL_ACTIVE_KEY_VERSION=1
+BILIBILI_CREDENTIAL_KEY_RING=1:<独立的 32 字节 base64 密钥>
 ```
 
 可以在 PowerShell 7 中生成随机 base64 值：
@@ -45,7 +48,8 @@ ADDRESS_ENCRYPTION_KEY_RING=1:<32 字节 base64 密钥>
 )
 ```
 
-分别为 `AUTH_SECRET` 和 `ADDRESS_ENCRYPTION_KEY_RING` 生成值。`.env`
+分别为 `AUTH_SECRET`、`ADDRESS_ENCRYPTION_KEY_RING` 和 `BILIBILI_CREDENTIAL_KEY_RING`
+生成独立随机值。`.env`
 包含数据库、认证和加密密钥，不应进入版本控制。
 
 完整变量说明见[配置参考](configuration.md)。
@@ -72,8 +76,8 @@ docker compose ps
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 ```
 
-同一批迁移可以重复调用；已经记录的迁移不会再次执行。当前版本使用单一 fresh-install
-基线，只能应用到空数据库；应用 Readiness 要求数据库迁移集合与运行版本精确一致。
+同一批迁移可以重复调用；已经记录的迁移不会再次执行。首次安装从空数据库应用用户名/UID 基线及全部追加迁移；已有同一认证基线的部署可按
+[运维手册](operations.md)升级。应用 Readiness 要求迁移集合与运行版本精确一致。
 
 ## 4. 创建平台管理员
 
@@ -108,18 +112,18 @@ Compose 固定使用生产模式，认证 Cookie 要求 HTTPS。使用浏览器�
 应用端口应只允许可信代理访问。重新创建 app 容器后，通过该 HTTPS 地址登录。
 上述本地 HTTP 地址可以继续用于健康检查。
 
-## 6. 配置验证直播间
+## 6. 配置 B站读取账号与验证直播间
 
-使用平台控制的直播间完成普通用户 UID 验证：
+1. 打开 `/admin/verification` 的“B站集成”页面。
+2. 点击“扫码登录 B站”，用准备作为读取账号的账号扫码，并在手机确认。
+3. 核对候选账号的昵称与 UID，点击“启用此账号”。
+4. 新建并启用验证直播间，填写名称、直播间 ID 和优先级。
+5. 等待实际连接显示健康；连接测试只能证明鉴权连通。
+6. 用不同于读取账号的 B站账号发一条普通消息，确认后台出现真实 UID 样本时间。
+7. 再执行下面的注册和找回流程，核对实际发送账号的 UID。
 
-1. 打开 `/admin/verification`。
-2. 新建验证直播间。
-3. 填写显示名称、直播间 ID 和优先级。
-4. 启用直播间。
-5. 点击连接测试并确认状态为健康。
-
-多个直播间按优先级参与挑战分配。普通用户只会看到平台返回的直播间链接，不能自行
-指定房间。
+没有读取账号时，管理员仍可登录并完成设置。多个已就绪房间按优先级参与分配；普通用户
+只能使用平台返回的房间。更换读取账号不改变用户已经绑定的 UID。
 
 ## 7. 配置主播
 

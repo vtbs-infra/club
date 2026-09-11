@@ -45,11 +45,20 @@ export class VerificationRoomService {
     }
   }
 
-  public list() {
-    return this.database.orm
+  private connectionInfo<T extends { biliRoomId: string }>(room: T) {
+    return {
+      ...room,
+      connectionState: this.connections.getState(room.biliRoomId),
+      ...this.connections.getUidSample(room.biliRoomId),
+    };
+  }
+
+  public async list() {
+    const rooms = await this.database.orm
       .select()
       .from(verificationRooms)
       .orderBy(asc(verificationRooms.priority), asc(verificationRooms.displayName));
+    return rooms.map((room) => this.connectionInfo(room));
   }
 
   public async create(input: CreateVerificationRoomInput) {
@@ -96,7 +105,7 @@ export class VerificationRoomService {
         return room;
       });
       this.notifyConfigurationChange();
-      return created;
+      return this.connectionInfo(created);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new AppError(
@@ -155,7 +164,7 @@ export class VerificationRoomService {
       return room;
     });
     this.notifyConfigurationChange();
-    return updated;
+    return this.connectionInfo(updated);
   }
 
   public async test(input: RequestAuditContext & { readonly roomId: string }) {
@@ -215,7 +224,7 @@ export class VerificationRoomService {
         },
         transaction,
       );
-      return updated;
+      return this.connectionInfo(updated);
     });
   }
 }

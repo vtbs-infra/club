@@ -1310,3 +1310,40 @@
 .appearance-actions {
   justify-content: flex-end;
 }
+
+.bilibili-account {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.bilibili-account img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+}
+.bilibili-account p {
+  margin: 0.25rem 0 0;
+}
+.bilibili-session-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+.bilibili-session-details dd {
+  margin: 0.25rem 0 0;
+}
+.bilibili-qr {
+  display: flex;
+  justify-content: center;
+}
+.bilibili-qr svg {
+  background: white;
+  border-radius: 8px;
+  max-width: 100%;
+  height: auto;
+}
+.bilibili-login-dialog {
+  display: grid;
+  gap: 1rem;
+}

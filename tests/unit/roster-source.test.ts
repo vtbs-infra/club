@@ -1,3 +1,4 @@
+import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
 import { readFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
@@ -51,20 +52,17 @@ describe('public-web guard roster adapter', () => {
         else observedSignal?.addEventListener('abort', rejectAborted, { once: true });
       });
     };
-    const source = new PublicWebGuardRosterSource(fetchImplementation);
+    const source = new PublicWebGuardRosterSource(
+      new FakeBilibiliReadingSession(),
+      fetchImplementation,
+    );
     const controller = new AbortController();
-    const request = source.fetchPage({
-      creatorUid: '900001',
-      pageNumber: 1,
-      pageSize: 30,
-      roomId: '800001',
-      signal: controller.signal,
-    });
+    const request = source.openCapture(controller.signal);
     const shutdown = new Error('test shutdown');
 
     controller.abort(shutdown);
 
     await expect(request).rejects.toBe(shutdown);
-    expect(observedSignal).toBe(controller.signal);
+    expect(observedSignal).toMatchObject({ aborted: true });
   });
 });

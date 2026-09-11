@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 
 import { LiveWS, parseLiveConfig, type DataXliveGetDanmuInfo } from 'bilibili-live-danmaku';
 import { PublicWebClient } from './public-web-client.js';
+import { BilibiliProviderError } from './passport-client.js';
+import type { BilibiliReadingSession } from './reading-session.js';
+import { readBilibiliWebSocketAuth } from './websocket-auth.js';
 
 import type {
   LiveMessageEvent,
@@ -10,29 +13,20 @@ import type {
   RoomConnection,
 } from './live-message-source.js';
 
-const HISTORY_EVENT_LIMIT = 1_000;
-
 type DanmakuRejection =
   'invalid-message' | 'missing-sender-uid' | 'conflicting-sender-uid' | 'invalid-timestamp';
 
 export interface LiveMessageDiagnostic {
   readonly roomId: string;
-  readonly transport: 'websocket' | 'history';
-  readonly reason: DanmakuRejection | 'decode-failed' | 'history-failed' | 'delivery-failed';
+  readonly transport: 'websocket';
+  readonly reason: DanmakuRejection | 'decode-failed' | 'delivery-failed';
 }
 
 interface PublicWebLiveMessageSourceOptions {
   readonly connectTimeoutMs?: number;
-  readonly historyPollIntervalMs?: number;
+  readonly session: BilibiliReadingSession;
   readonly fetchImplementation?: typeof fetch;
   readonly reportDiagnostic?: (diagnostic: LiveMessageDiagnostic) => void;
-}
-
-interface PublicWebHistoryMessage {
-  readonly nickname?: unknown;
-  readonly text?: unknown;
-  readonly timeline?: unknown;
-  readonly uid?: unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -60,20 +54,6 @@ function messageTimestamp(value: unknown): Date | null {
   // event time with receipt time: identity verification must still reject old messages.
   const date = new Date(value > 10_000_000_000 ? value : value * 1000);
   return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function historyTimestamp(value: unknown): Date | null {
-  if (typeof value !== 'string') return null;
-  const chinaTime = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/.exec(value);
-  const date = new Date(chinaTime ? `${chinaTime[1]}T${chinaTime[2]}+08:00` : value);
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function historyMessages(value: unknown): PublicWebHistoryMessage[] {
-  if (!isRecord(value) || !isRecord(value.data)) return [];
-  const admin: unknown[] = Array.isArray(value.data.admin) ? (value.data.admin as unknown[]) : [];
-  const room: unknown[] = Array.isArray(value.data.room) ? (value.data.room as unknown[]) : [];
-  return admin.concat(room).filter(isRecord);
 }
 
 function senderUid(value: unknown): string | null {
@@ -131,71 +111,22 @@ export function normalizePublicWebDanmaku(
   return typeof parsed === 'string' ? null : parsed;
 }
 
-export function normalizePublicWebHistoryMessage(
-  roomId: string,
-  message: PublicWebHistoryMessage,
-): LiveMessageEvent | null {
-  const uid = senderUid(message.uid);
-  const occurredAt = historyTimestamp(message.timeline);
-  if (!uid || typeof message.text !== 'string' || !occurredAt) {
-    return null;
-  }
-  return {
-    biliDisplayName: typeof message.nickname === 'string' ? message.nickname : null,
-    biliUid: uid,
-    eventId: createHash('sha256')
-      .update(JSON.stringify(['bilibili-history', roomId, uid, occurredAt.getTime(), message.text]))
-      .digest('hex'),
-    message: message.text,
-    occurredAt,
-    roomId,
-  };
-}
-
 export class PublicWebLiveMessageSource implements LiveMessageSource {
   private readonly client: PublicWebClient;
   private readonly connectTimeoutMs: number;
-  private readonly historyPollIntervalMs: number;
   private readonly reportDiagnostic: (diagnostic: LiveMessageDiagnostic) => void;
+  private readonly session: BilibiliReadingSession;
 
   public constructor({
+    session,
     connectTimeoutMs = 15_000,
-    historyPollIntervalMs = 2_000,
     fetchImplementation = globalThis.fetch,
     reportDiagnostic = () => undefined,
-  }: PublicWebLiveMessageSourceOptions = {}) {
+  }: PublicWebLiveMessageSourceOptions) {
+    this.session = session;
     this.connectTimeoutMs = connectTimeoutMs;
-    this.historyPollIntervalMs = historyPollIntervalMs;
     this.reportDiagnostic = reportDiagnostic;
-    this.client = new PublicWebClient(fetchImplementation);
-  }
-
-  private async getRecentMessages(
-    canonicalRoomId: number,
-    signal: AbortSignal,
-  ): Promise<PublicWebHistoryMessage[]> {
-    const client = await this.client.forOperation(
-      AbortSignal.any([signal, AbortSignal.timeout(this.connectTimeoutMs)]),
-    );
-    const url = new URL('https://api.live.bilibili.com/xlive/web-room/v1/dM/gethistory');
-    url.searchParams.set('roomid', String(canonicalRoomId));
-    url.searchParams.set('room_type', '0');
-    const response = await client.request(url, {
-      headers: {
-        Accept: 'application/json',
-        Origin: 'https://live.bilibili.com',
-        Referer: `https://live.bilibili.com/${canonicalRoomId}`,
-      },
-      method: 'GET',
-    });
-    if (!response.ok)
-      throw new Error(`Bilibili message history failed with HTTP ${response.status}.`);
-    const payload: unknown = await response.json();
-    if (!isRecord(payload) || payload.code !== 0) {
-      const code = isRecord(payload) ? String(payload.code) : 'invalid-response';
-      throw new Error(`Bilibili message history failed with code ${code}.`);
-    }
-    return historyMessages(payload);
+    this.client = new PublicWebClient(session, fetchImplementation);
   }
 
   public async connectRoom(
@@ -204,25 +135,41 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
     signal: AbortSignal,
   ): Promise<RoomConnection> {
     const requestedRoomId = Number(roomId);
-    if (!Number.isSafeInteger(requestedRoomId) || requestedRoomId <= 0) {
-      throw new Error('Bilibili room IDs must be positive integers.');
-    }
+    if (!Number.isSafeInteger(requestedRoomId) || requestedRoomId <= 0)
+      throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
+    const snapshot = this.session.snapshot();
+    const uid = Number(snapshot.uid);
+    if (!Number.isSafeInteger(uid) || uid <= 0)
+      throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
     const controller = new AbortController();
-    const lifetime = AbortSignal.any([signal, controller.signal]);
+    const lifetime = AbortSignal.any([signal, controller.signal, snapshot.signal]);
     const setup = AbortSignal.any([lifetime, AbortSignal.timeout(this.connectTimeoutMs)]);
-    const client = await this.client.forOperation(setup);
-    const room = await client.liveRoomInit({ id: requestedRoomId });
-    const roomData: unknown = room.data;
-    const canonicalRoomId = Number(isRecord(roomData) ? roomData.room_id : Number.NaN);
-    if (room.code !== 0 || !Number.isSafeInteger(canonicalRoomId) || canonicalRoomId <= 0) {
-      throw new Error(`Bilibili room lookup failed with code ${room.code}.`);
+    const client = await this.client.forOperation(setup, snapshot);
+    let canonicalRoomId: number;
+    let liveConfig: ReturnType<typeof parseLiveConfig>;
+    try {
+      const room = await client.liveRoomInit({ id: requestedRoomId });
+      const roomData: unknown = room.data;
+      canonicalRoomId = Number(isRecord(roomData) ? roomData.room_id : Number.NaN);
+      if (room.code !== 0 || !Number.isSafeInteger(canonicalRoomId) || canonicalRoomId <= 0)
+        throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
+      const danmaku = await client.xliveGetDanmuInfo({ id: canonicalRoomId });
+      if (danmaku.code !== 0 || !isDanmakuConfiguration(danmaku.data))
+        throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
+      liveConfig = parseLiveConfig(danmaku.data);
+      const address = new URL(liveConfig.address);
+      if (
+        address.protocol !== 'wss:' ||
+        !address.hostname.endsWith('.chat.bilibili.com') ||
+        address.username ||
+        address.password
+      )
+        throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
+    } catch (error) {
+      setup.throwIfAborted();
+      if (error instanceof BilibiliProviderError) throw error;
+      throw new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE');
     }
-    const danmaku = await client.xliveGetDanmuInfo({ id: canonicalRoomId });
-    const danmakuData: unknown = danmaku.data;
-    if (danmaku.code !== 0 || !isDanmakuConfiguration(danmakuData)) {
-      throw new Error(`Bilibili danmaku configuration failed with code ${danmaku.code}.`);
-    }
-    const liveConfig = parseLiveConfig(danmakuData);
     setup.throwIfAborted();
 
     return new Promise<RoomConnection>((resolve, reject) => {
@@ -230,137 +177,118 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
       let closed = false;
       let settled = false;
       let closing: Promise<void> | null = null;
-      let historyTimer: ReturnType<typeof setInterval> | null = null;
-      let historyRequest: Promise<void> | null = null;
       const deliveries = new Set<Promise<void>>();
-      const seenHistoryEvents = new Set<string>();
       const lastReported = new Map<string, number>();
-      const report = (
-        transport: LiveMessageDiagnostic['transport'],
-        reason: LiveMessageDiagnostic['reason'],
-      ) => {
+      const report = (reason: LiveMessageDiagnostic['reason']) => {
         if (closed) return;
-        const key = `${transport}:${reason}`;
         const now = Date.now();
-        const previous = lastReported.get(key);
+        const previous = lastReported.get(reason);
         if (previous !== undefined && now - previous < 60_000) return;
-        lastReported.set(key, now);
-        this.reportDiagnostic({ roomId, transport, reason });
+        lastReported.set(reason, now);
+        this.reportDiagnostic({ roomId, transport: 'websocket', reason });
       };
       const live = new LiveWS(canonicalRoomId, {
         address: liveConfig.address,
         buvid: client.cookies.get('buvid3'),
         key: liveConfig.key,
+        uid,
         protover: 3,
       });
       const close = (): Promise<void> => {
         if (closing) return closing;
         closed = true;
-        if (historyTimer) clearInterval(historyTimer);
-        historyTimer = null;
         setup.removeEventListener('abort', onAbort);
         lifetime.removeEventListener('abort', onAbort);
+        live.ws.removeEventListener('message', onAuth);
         closing = Promise.resolve().then(async () => {
-          await Promise.allSettled([...deliveries, ...(historyRequest ? [historyRequest] : [])]);
+          await Promise.allSettled([...deliveries]);
         });
         controller.abort();
         live.close();
         return closing;
       };
-      const onAbort = () => {
-        if (!settled) {
-          settled = true;
-          const reason: unknown = setup.reason ?? lifetime.reason;
-          const error =
-            reason instanceof Error
-              ? reason
-              : new Error('Bilibili connection cancelled.', { cause: reason });
-          void close().then(() => reject(error), reject);
-        } else {
-          void close();
-        }
-      };
       const disconnect = (error: Error | null) => {
         if (closed) return;
         if (!settled) {
           settled = true;
-          const failure =
-            error ?? new Error('Bilibili closed the connection before authentication completed.');
-          void close().then(() => reject(failure), reject);
+          void close().then(
+            () => reject(error ?? new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE')),
+            reject,
+          );
           return;
         }
         void close();
-        if (connected) void Promise.resolve(listener.onDisconnect(error)).catch(() => undefined);
+        if (connected)
+          void Promise.resolve()
+            .then(() => listener.onDisconnect(error))
+            .catch(() => undefined);
       };
-      const pollHistory = async () => {
-        try {
-          const messages = await this.getRecentMessages(canonicalRoomId, lifetime);
-          const events = messages
-            .map((message) => {
-              const event = normalizePublicWebHistoryMessage(roomId, message);
-              if (!event) report('history', 'invalid-message');
-              return event;
-            })
-            .filter((event): event is LiveMessageEvent => event !== null)
-            .sort((left, right) => left.occurredAt.getTime() - right.occurredAt.getTime());
-          for (const event of events) {
-            if (closed || seenHistoryEvents.has(event.eventId)) continue;
-            try {
-              await listener.onMessage(event);
-            } catch {
-              report('history', 'delivery-failed');
-              continue;
-            }
-            seenHistoryEvents.add(event.eventId);
-            if (seenHistoryEvents.size > HISTORY_EVENT_LIMIT) {
-              const oldest = seenHistoryEvents.values().next().value;
-              if (oldest !== undefined) seenHistoryEvents.delete(oldest);
-            }
-          }
-        } catch {
-          // WebSocket delivery remains primary; the next bounded history poll retries.
-          report('history', 'history-failed');
-        }
+      const onAbort = () => {
+        const reason: unknown = setup.reason ?? lifetime.reason;
+        disconnect(
+          reason instanceof Error
+            ? reason
+            : new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE'),
+        );
       };
-      const requestHistory = () => {
-        if (closed || historyRequest) return;
-        historyRequest = pollHistory().finally(() => {
-          historyRequest = null;
-        });
-      };
-      setup.addEventListener('abort', onAbort, { once: true });
-      lifetime.addEventListener('abort', onAbort, { once: true });
-      live.addEventListener('CONNECT_SUCCESS', () => {
+      const authenticate = async (event: MessageEvent) => {
         if (settled || closed) return;
+        let bytes: Uint8Array;
+        const data: unknown = event.data;
+        if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
+        else if (ArrayBuffer.isView(data))
+          bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        else if (data instanceof Blob && data.size <= 8 * 1024 * 1024)
+          bytes = new Uint8Array(await data.arrayBuffer());
+        else throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
+        const code = readBilibiliWebSocketAuth(bytes);
+        if (settled || closed || code === null) return;
+        if (code !== 0) throw new BilibiliProviderError('BILIBILI_UPSTREAM_REJECTED');
         settled = true;
         connected = true;
         setup.removeEventListener('abort', onAbort);
-        requestHistory();
-        historyTimer = setInterval(requestHistory, this.historyPollIntervalMs);
-        historyTimer.unref();
+        live.ws.removeEventListener('message', onAuth);
         resolve({ close });
-      });
-      live.addEventListener('DANMU_MSG', (event) => {
-        if (closed) return;
-        const normalized = parsePublicWebDanmaku(roomId, event.data);
+      };
+      const onAuth = (event: MessageEvent) => {
+        void authenticate(event).catch(() =>
+          disconnect(new BilibiliProviderError('BILIBILI_UPSTREAM_REJECTED')),
+        );
+      };
+      setup.addEventListener('abort', onAbort, { once: true });
+      lifetime.addEventListener('abort', onAbort, { once: true });
+      live.ws.addEventListener('message', onAuth);
+      // CONNECT_SUCCESS alone is not authentication evidence in this dependency version.
+      live.addEventListener('MESSAGE', (event) => {
+        if (closed || !connected) return;
+        const message: unknown = event.data;
+        if (
+          !isRecord(message) ||
+          typeof message.cmd !== 'string' ||
+          !/^DANMU_MSG(?::|$)/.test(message.cmd)
+        )
+          return;
+        const normalized = parsePublicWebDanmaku(roomId, message);
         if (typeof normalized === 'string') {
-          report('websocket', normalized);
+          report(normalized);
           return;
         }
-        const delivery = Promise.resolve().then(() => listener.onMessage(normalized));
-        deliveries.add(delivery);
-        const finished = () => {
-          deliveries.delete(delivery);
-        };
-        void delivery.then(finished, () => {
-          finished();
-          report('websocket', 'delivery-failed');
+        const delivery = Promise.resolve().then(() => {
+          if (!closed && !lifetime.aborted) return listener.onMessage(normalized);
         });
+        deliveries.add(delivery);
+        void delivery.then(
+          () => deliveries.delete(delivery),
+          () => {
+            deliveries.delete(delivery);
+            report('delivery-failed');
+          },
+        );
       });
-      live.addEventListener('error:decode', () => report('websocket', 'decode-failed'));
+      live.addEventListener('error:decode', () => report('decode-failed'));
       live.ws.addEventListener('close', () => disconnect(null));
       live.ws.addEventListener('error', () =>
-        disconnect(new Error('Bilibili live-message connection failed.')),
+        disconnect(new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE')),
       );
       if (setup.aborted) onAbort();
     });

@@ -15,6 +15,7 @@ Browser
      -> Bilibili adapters
 
 Application process
+  -> Bilibili session runtime
   -> identity runtime
   -> monthly snapshot runtime
   -> gift cover cleanup runtime
@@ -39,6 +40,7 @@ src/server/
     storage/                    私有对象存储接口
   modules/
     auth/                       用户名凭据、会话、UID 验证和身份守卫
+    bilibili/                   平台读取会话、扫码续期、协议适配与房间连接
     snapshots/                  月末名单任务、证据、定稿和查询
     gifts/                      发布、资格、领取、查询、履约和封面生命周期
     announcements/              平台和主播公告
@@ -89,14 +91,15 @@ Fastify Cookie/Session 管理浏览器会话，PostgreSQL 保存凭据与会话�
 ## 注册与账号找回
 
 匿名浏览器创建用途为 `REGISTER` 或 `RECOVER` 的挑战，服务分配平台验证直播间，
-只保存验证码和浏览器凭据的 HMAC 摘要。Identity Runtime 根据未完成挑战维持直播连接。
+只保存验证码和浏览器凭据的 HMAC 摘要。Identity Runtime 在读取账号有效期间为启用房间维持鉴权连接。
 消息必须匹配房间、验证码、事件时间和实际发送 UID；恢复账号还必须匹配事先指定的 UID。
 
-Public Web 适配器使用同一匿名会话的 buvid 建立 WebSocket，以实时弹幕为主、历史查询为补充。
+Public Web 适配器使用同一已核验账号的 Cookie、UID 与设备 buvid 建立 WebSocket，
+解析实际认证 code 后才允许发放挑战，不使用历史查询或匿名回退。
 发送者只取 `info[2][0]` 或 `info[0][15].user.uid`；两个有效 UID 冲突时丢弃，
 不会从昵称、粉丝勋章所属主播或用户哈希推测身份。事件时间接受 Unix 秒和毫秒，缺失或
-无效时丢弃，不用接收时间代替。历史接口可能为空，不能保证补回丢失的实时弹幕。
-解析、解码、历史请求与处理失败按房间、来源和原因限频记录，不记录弹幕正文或原始载荷。
+无效时丢弃，不用接收时间代替。断线期间发送的消息需要用户在恢复后重发。
+解析、解码与处理失败按房间、来源和原因限频记录，不记录弹幕正文或原始载荷。
 成功验证记录消息距验证的时间，便于排查延迟。
 
 页面等连接就绪后才展示验证码和发送指引；未过期的待验证挑战每两秒查询一次，首次查询
@@ -116,6 +119,22 @@ Public Web 适配器使用同一匿名会话的 buvid 建立 WebSocket，以实�
 会话有效期固定为 14 天，登录重新生成会话 ID。数据库只存 ID 摘要，普通会话保存只能
 更新已有记录；密码重置与登录按账号行串行化，延迟保存不能重建已撤销的会话。
 完整约束和运维边界见[账号认证](authentication.md)。
+
+## B站读取会话
+
+`BilibiliSessionService` 持有平台全局读取账号；`passport-client` 封装 BiliTV 协议，
+`session-runtime` 处理扫码轮询、到期检查和刷新恢复，统一由 `app.ts` 装配。
+`bilibili_sessions` 保存账号摘要、版本、加密活动凭据、待核验刷新结果与操作租约；
+`bilibili_login_attempts` 保存绑定管理员及 Club 会话的短期候选任务。
+
+网络请求不占用长事务，写结果时校验操作标识和版本。刷新先持久化意图，再保存完整响应；
+中断后恢复已保存结果，外部结果不明时要求重新扫码，不能靠本地回滚重放旧 token。
+独立版本密钥环和用途绑定复用现有 AES-GCM 实现，长期凭据只留在服务端。
+
+三个读取适配器共享 `BilibiliReadingSession` 边界。每个资料查询和名单 Attempt 固定一个
+不可变快照；版本替换同步撤销旧连接及在途读取。用户已获得的 VERIFIED 证明不受影响。
+运行器健康与 B站可用性分别判断，未配置账号不会阻塞管理员恢复入口或基础 Readiness。
+详见[B站集成](integrations/bilibili.md)。
 
 ## 主播身份
 
@@ -310,7 +329,7 @@ DRAFT -> PUBLISHED -> WITHDRAWN
 
 ## Runtime 与健康状态
 
-身份验证、名单和封面回收三个后台 Runtime 统一报告：
+B站读取会话、身份验证、名单和封面回收四个后台 Runtime 统一报告：
 
 ```text
 state: STARTING | RUNNING | DEGRADED | STOPPED
@@ -322,7 +341,7 @@ lastErrorCode
 nextRetryAt
 ```
 
-三个 Runtime 使用小型共同循环：任务不重叠，成功初始化只执行一次，每次完成后安排下一轮，失败按重试间隔再执行。身份验证需求变化在运行中合并为后续一轮。每个 Runtime 独立启动和重试。初始化失败不会阻止其他 Runtime，Tick 错误进入结构化
+四个 Runtime 使用小型共同循环：任务不重叠，成功初始化只执行一次，每次完成后安排下一轮，失败按重试间隔再执行。身份验证需求变化在运行中合并为后续一轮。每个 Runtime 独立启动和重试。初始化失败不会阻止其他 Runtime，Tick 错误进入结构化
 日志与状态。关闭时先停止创建新 Tick，再取消可取消的外部请求并等待所有已登记任务真正
 结束，最后才释放数据库和存储；进程级 watchdog 只负责处理违反取消约定的异常情况。
 
@@ -334,7 +353,7 @@ nextRetryAt
 | `/health/ready` | 迁移版本、数据库、私有存储和关键 Runtime 已初始化 |
 | 管理员系统页    | 额外区分 `READY`、`NEEDS_SETUP` 与 `DEGRADED`     |
 
-没有启用的验证直播间属于 `NEEDS_SETUP`，不会阻止管理员登录并完成配置。
+没有配置读取账号或启用的验证直播间属于 `NEEDS_SETUP`，不会阻止管理员登录并完成配置。
 
 ## API 契约
 
@@ -371,6 +390,7 @@ Web 以中文摘要作为主要反馈，同时允许展开错误码并复制请�
 | 领域           | 主要表                                                                                                         |
 | -------------- | -------------------------------------------------------------------------------------------------------------- |
 | 认证           | `users`, `password_credentials`, `sessions`, `identity_challenges`                                             |
+| B站读取会话    | `bilibili_sessions`, `bilibili_login_attempts`                                                                 |
 | 主播与验证房间 | `creators`, `verification_rooms`                                                                               |
 | 名单           | `snapshot_runs`, `snapshot_attempts`, `snapshot_pages`, `snapshot_attempt_members`                             |
 | 礼物           | `gift_releases`, `gift_cover_objects`, `gift_packages`, `gift_package_items`, `gift_tier_rules`, `gift_orders` |

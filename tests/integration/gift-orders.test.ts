@@ -103,8 +103,8 @@ integration('gift order lifecycle', () => {
       })
     ).id;
     encryption = new EncryptionKeyRing({
-      addressEncryptionActiveKeyVersion: 1,
-      addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      activeVersion: 1,
+      keyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
     addressService = new AddressService(database, encryption);
     releaseService = new GiftReleaseService(database, new SystemClock());

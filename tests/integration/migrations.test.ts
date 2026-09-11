@@ -121,6 +121,8 @@ integration('database migration baseline', () => {
         'password_credentials',
         'sessions',
         'identity_challenges',
+        'bilibili_sessions',
+        'bilibili_login_attempts',
         'creators',
         'snapshot_runs',
         'snapshot_pages',
@@ -273,9 +275,12 @@ integration('database migration baseline', () => {
       const before = await database.orm.execute(sql`select * from users`);
       await expect(database.checkSchema()).rejects.toThrow('migration identity');
       expect(await tableExists(database, 'identity_challenges_active_expiry_idx')).toBe(false);
+      expect(await tableExists(database, 'bilibili_sessions')).toBe(false);
       await migrateDatabase(database);
       await expect(database.checkSchema()).resolves.toBeUndefined();
       expect(await tableExists(database, 'identity_challenges_active_expiry_idx')).toBe(true);
+      expect(await tableExists(database, 'bilibili_sessions')).toBe(true);
+      expect(await tableExists(database, 'bilibili_login_attempts')).toBe(true);
       expect(await database.orm.execute(sql`select * from users`)).toEqual(before);
       const applied = await history(database);
       expect(applied).toEqual(

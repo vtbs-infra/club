@@ -445,8 +445,9 @@ export class SnapshotService {
         .update(snapshotAttempts)
         .set({ captureStartedAt, punctuality })
         .where(eq(snapshotAttempts.id, attemptId));
+      const capture = await this.source.openCapture(signal);
       const fetch = (pageNumber: number) =>
-        this.source.fetchPage({
+        capture.fetchPage({
           creatorUid: run.creatorBilibiliUid,
           pageNumber,
           pageSize: PAGE_SIZE,

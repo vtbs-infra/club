@@ -1,4 +1,6 @@
 import { PublicWebClient } from './public-web-client.js';
+import type { BilibiliApiClient } from 'bilibili-live-danmaku';
+import type { BilibiliReadingSession } from './reading-session.js';
 
 import {
   GUARD_ROSTER_PAGE_BYTE_LIMIT,
@@ -73,12 +75,22 @@ export class PublicWebGuardRosterSource implements GuardRosterSource {
   public readonly version = 'topListNew-v2';
   private readonly client: PublicWebClient;
 
-  public constructor(fetchImplementation: typeof fetch = globalThis.fetch) {
-    this.client = new PublicWebClient(fetchImplementation);
+  public constructor(
+    session: BilibiliReadingSession,
+    fetchImplementation: typeof fetch = globalThis.fetch,
+  ) {
+    this.client = new PublicWebClient(session, fetchImplementation);
   }
 
-  public async fetchPage(input: FetchGuardRosterPageInput): Promise<GuardRosterPage> {
-    const client = await this.client.forOperation(input.signal);
+  public async openCapture(signal: AbortSignal) {
+    const client = await this.client.forOperation(signal);
+    return { fetchPage: (input: FetchGuardRosterPageInput) => this.fetchPage(client, input) };
+  }
+
+  private async fetchPage(
+    client: BilibiliApiClient,
+    input: FetchGuardRosterPageInput,
+  ): Promise<GuardRosterPage> {
     const url = new URL('https://api.live.bilibili.com/xlive/app-room/v2/guardTab/topListNew');
     for (const [key, value] of Object.entries({
       page: String(input.pageNumber),

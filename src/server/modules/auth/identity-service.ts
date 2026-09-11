@@ -46,6 +46,7 @@ export class IdentityService {
     private readonly secret: string,
     private readonly connections: RoomConnectionManager,
     private readonly demandChanged: () => void,
+    private readonly readingAvailable: () => boolean,
   ) {}
   private ownerDigest(owner: string): string {
     return createHmac('sha256', this.secret)
@@ -103,20 +104,23 @@ export class IdentityService {
   }
   public async reconcileConnections(): Promise<void> {
     await this.expireChallenges();
+    if (!this.readingAvailable()) {
+      await this.connections.reconcile([]);
+      return;
+    }
     const rooms = await this.database.orm
-      .selectDistinct({ biliRoomId: verificationRooms.biliRoomId })
-      .from(identityChallenges)
-      .innerJoin(verificationRooms, eq(verificationRooms.id, identityChallenges.verificationRoomId))
-      .where(
-        and(
-          eq(identityChallenges.status, 'PENDING'),
-          gt(identityChallenges.expiresAt, this.clock.now()),
-          eq(verificationRooms.enabled, true),
-        ),
-      );
+      .select({ biliRoomId: verificationRooms.biliRoomId })
+      .from(verificationRooms)
+      .where(eq(verificationRooms.enabled, true));
     await this.connections.reconcile(rooms.map((room) => room.biliRoomId));
   }
   public async createChallenge(owner: string, input: CreateChallengeBody) {
+    if (!this.readingAvailable())
+      throw new AppError(
+        'BILIBILI_AUTH_REQUIRED',
+        'Bilibili identity verification is temporarily unavailable.',
+        503,
+      );
     const code = generateIdentityCode();
     const created = await this.database.orm.transaction(async (transaction) => {
       await transaction.execute(
@@ -144,19 +148,18 @@ export class IdentityService {
         );
       if ((active?.value ?? 0) >= MAX_ACTIVE_CHALLENGES)
         throw new AppError('IDENTITY_BUSY', 'Try again later.', 429);
-      const [room] = await transaction
+      const rooms = await transaction
         .select()
         .from(verificationRooms)
         .where(eq(verificationRooms.enabled, true))
-        .orderBy(
-          sql`case when ${verificationRooms.healthStatus} = 'HEALTHY' then 0 else 1 end`,
-          asc(verificationRooms.priority),
-        )
-        .limit(1);
+        .orderBy(asc(verificationRooms.priority), asc(verificationRooms.id));
+      const room = this.readingAvailable()
+        ? rooms.find((candidate) => this.connections.getState(candidate.biliRoomId) === 'HEALTHY')
+        : undefined;
       if (!room)
         throw new AppError(
-          'VERIFICATION_ROOM_UNAVAILABLE',
-          'No verification room is available.',
+          'VERIFICATION_CHANNEL_NOT_READY',
+          'The verification channel is connecting. Try again shortly.',
           503,
         );
       const [target] =

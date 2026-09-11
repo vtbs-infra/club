@@ -75,8 +75,8 @@ integration('claim windows and capacity', () => {
       })
     ).id;
     encryption = new EncryptionKeyRing({
-      addressEncryptionActiveKeyVersion: 1,
-      addressEncryptionKeyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      activeVersion: 1,
+      keyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
     addresses = new AddressService(fixture.database, encryption);
     addressId = (

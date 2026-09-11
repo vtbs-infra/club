@@ -1,4 +1,5 @@
-import { createServer } from 'node:net';
+import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
+import { availablePort } from '../helpers/tcp-port.js';
 import { resolve } from 'node:path';
 
 import { expect, test, type APIResponse, type Page } from '@playwright/test';
@@ -25,20 +26,6 @@ import { createTestConfig } from '../helpers/test-config.js';
 
 const NOW = new Date('2026-07-31T15:59:00.000Z');
 const PASSWORD = 'e2e-only-password-2026';
-
-async function availablePort(): Promise<number> {
-  const reservation = createServer();
-  await new Promise<void>((done, reject) => {
-    reservation.once('error', reject);
-    reservation.listen(0, '127.0.0.1', done);
-  });
-  const address = reservation.address();
-  if (!address || typeof address === 'string') throw new Error('Missing TCP port.');
-  await new Promise<void>((done, reject) =>
-    reservation.close((error) => (error ? reject(error) : done())),
-  );
-  return address.port;
-}
 
 async function json<T>(response: APIResponse): Promise<T> {
   expect(response.ok(), await response.text()).toBe(true);
@@ -69,6 +56,7 @@ test('registers, verifies, publishes, claims, exports, ships and corrects using 
     ]),
   );
   const app = await buildApp({
+    bilibiliReadingSession: new FakeBilibiliReadingSession(),
     auth,
     clock: { now: () => NOW },
     config,

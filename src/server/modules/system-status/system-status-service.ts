@@ -7,13 +7,18 @@ import {
   snapshotPages,
   snapshotRuns,
   verificationRooms,
+  bilibiliSessions,
 } from '../../infrastructure/db/schema/index.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import type { IdentityRuntime } from '../auth/identity-runtime.js';
 import type { GiftMediaRuntime } from '../gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
+import type { PeriodicRuntime } from '../../infrastructure/runtime/periodic-runtime.js';
+import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
 
 interface SystemStatusServiceOptions {
+  readonly bilibiliRuntime: PeriodicRuntime;
+  readonly roomConnections: RoomConnectionManager;
   readonly clock: Clock;
   readonly database: DatabaseService;
   readonly identityRuntime: IdentityRuntime;
@@ -40,13 +45,16 @@ export class SystemStatusService {
     const identityRuntime = this.options.identityRuntime.getStatus();
     const snapshotRuntime = this.options.snapshotRuntime.getStatus();
     const giftMediaRuntime = this.options.giftMediaRuntime.getStatus();
+    const bilibiliRuntime = this.options.bilibiliRuntime.getStatus();
     if (checks.database === 'down') {
       return {
+        bilibili: null,
         checks,
         integrityWarnings: [],
         recentSnapshotFailures: [],
         rooms: [],
         runtimes: {
+          bilibili: bilibiliRuntime,
           identity: identityRuntime,
           media: giftMediaRuntime,
           roster: snapshotRuntime,
@@ -56,7 +64,7 @@ export class SystemStatusService {
         version: this.options.version,
       };
     }
-    const [runCounts, failures, rooms, pageRows] = await Promise.all([
+    const [runCounts, failures, roomRows, pageRows, bilibiliRows] = await Promise.all([
       this.options.database.orm
         .select({ status: snapshotRuns.status, value: count() })
         .from(snapshotRuns)
@@ -76,6 +84,7 @@ export class SystemStatusService {
       this.options.database.orm
         .select({
           displayName: verificationRooms.displayName,
+          biliRoomId: verificationRooms.biliRoomId,
           enabled: verificationRooms.enabled,
           healthStatus: verificationRooms.healthStatus,
           lastConnectedAt: verificationRooms.lastConnectedAt,
@@ -94,7 +103,24 @@ export class SystemStatusService {
         .innerJoin(snapshotRuns, eq(snapshotRuns.id, snapshotAttempts.snapshotRunId))
         .orderBy(desc(snapshotPages.createdAt))
         .limit(50),
+      this.options.database.orm
+        .select({
+          validity: bilibiliSessions.validity,
+          reachability: bilibiliSessions.reachability,
+          account: bilibiliSessions.account,
+          errorCode: bilibiliSessions.errorCode,
+          checkedAt: bilibiliSessions.checkedAt,
+          refreshedAt: bilibiliSessions.refreshedAt,
+          nextCheckAt: bilibiliSessions.nextCheckAt,
+        })
+        .from(bilibiliSessions)
+        .where(eq(bilibiliSessions.id, 'global')),
     ]);
+    const bilibili = bilibiliRows[0] ?? null;
+    const rooms = roomRows.map((room) => ({
+      ...room,
+      healthStatus: this.options.roomConnections.getState(room.biliRoomId) ?? ('UNKNOWN' as const),
+    }));
     const integrityWarnings = (
       await Promise.all(
         pageRows.map(async (page) => {
@@ -113,11 +139,13 @@ export class SystemStatusService {
       )
     ).filter((warning) => warning !== null);
     return {
+      bilibili,
       checks,
       integrityWarnings,
       recentSnapshotFailures: failures,
       rooms,
       runtimes: {
+        bilibili: bilibiliRuntime,
         identity: identityRuntime,
         media: giftMediaRuntime,
         roster: snapshotRuntime,
@@ -127,12 +155,13 @@ export class SystemStatusService {
         checks.schema === 'down' ||
         checks.storage === 'down' ||
         integrityWarnings.length > 0 ||
-        [identityRuntime, giftMediaRuntime, snapshotRuntime].some(
+        [identityRuntime, giftMediaRuntime, snapshotRuntime, bilibiliRuntime].some(
           (runtime) => runtime.state !== 'RUNNING',
         ) ||
+        bilibili?.reachability === 'UNAVAILABLE' ||
         rooms.some((room) => room.enabled && room.healthStatus === 'UNHEALTHY')
           ? ('degraded' as const)
-          : rooms.every((room) => !room.enabled)
+          : !bilibili || bilibili.validity !== 'VALID' || rooms.every((room) => !room.enabled)
             ? ('needs_setup' as const)
             : ('ok' as const),
       version: this.options.version,

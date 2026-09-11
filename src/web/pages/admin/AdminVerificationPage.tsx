@@ -19,6 +19,8 @@ import {
 } from '../../components/Ui';
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
 import { roomHealthPresentation } from '../../lib/status-presentation';
+import { BilibiliReadingAccount } from './BilibiliReadingAccount';
+import { formatDate } from '../../lib/format';
 
 interface RoomForm {
   biliRoomId: string;
@@ -59,6 +61,7 @@ export function AdminVerificationPage() {
   const rooms = useQuery({
     queryFn: getVerificationRooms,
     queryKey: ['admin', 'verification'],
+    refetchInterval: 5000,
   });
   const [editing, setEditing] = useState<VerificationRoom | null>(null);
   const [form, setForm] = useState<RoomForm>(emptyRoom);
@@ -119,10 +122,11 @@ export function AdminVerificationPage() {
             </button>
           ) : undefined
         }
-        eyebrow="B站验证"
-        intro="维护注册和账号找回所需的验证直播间。"
-        title="B站验证"
+        eyebrow="B站集成"
+        intro="管理平台读取账号与身份验证直播间。"
+        title="B站集成"
       />
+      <BilibiliReadingAccount />
       {rooms.isPending ? (
         <section className="panel">
           <LoadingState label="正在读取验证直播间…" />
@@ -164,8 +168,15 @@ export function AdminVerificationPage() {
                       <small>
                         直播间 {room.biliRoomId} · 优先级 {room.priority}
                       </small>
+                      <small>
+                        {room.lastUidReceivedAt
+                          ? `最近收到真实 UID：${formatDate(room.lastUidReceivedAt, true)}`
+                          : '尚无真实 UID 弹幕样本'}
+                      </small>
                     </span>
-                    <StatusBadge {...roomHealthPresentation(room.healthStatus, room.enabled)} />
+                    <StatusBadge
+                      {...roomHealthPresentation(room.connectionState ?? 'UNKNOWN', room.enabled)}
+                    />
                   </button>
                 ))}
               </div>

@@ -1,7 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
-import type { AppConfig } from '../../config/env.js';
-
 export interface EncryptedValue {
   readonly authenticationTag: string;
   readonly ciphertext: string;
@@ -19,10 +17,8 @@ export class EncryptionError extends Error {
 export class EncryptionKeyRing {
   private readonly keys = new Map<number, Buffer>();
 
-  public constructor(
-    config: Pick<AppConfig, 'addressEncryptionActiveKeyVersion' | 'addressEncryptionKeyRing'>,
-  ) {
-    for (const entry of config.addressEncryptionKeyRing.split(',')) {
+  public constructor(config: { readonly activeVersion: number; readonly keyRing: string }) {
+    for (const entry of config.keyRing.split(',')) {
       const separator = entry.indexOf(':');
       const version = Number(entry.slice(0, separator));
       const key = Buffer.from(entry.slice(separator + 1), 'base64');
@@ -36,8 +32,8 @@ export class EncryptionKeyRing {
       }
       this.keys.set(version, key);
     }
-    if (!this.keys.has(config.addressEncryptionActiveKeyVersion)) throw new EncryptionError();
-    this.activeVersion = config.addressEncryptionActiveKeyVersion;
+    if (!this.keys.has(config.activeVersion)) throw new EncryptionError();
+    this.activeVersion = config.activeVersion;
   }
 
   private readonly activeVersion: number;

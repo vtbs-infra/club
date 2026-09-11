@@ -34,12 +34,14 @@ describe('active identity challenge capacity', () => {
       'test-secret',
       connections,
       () => undefined,
+      () => true,
     );
     const [room] = await fixture.database.orm
       .insert(verificationRooms)
       .values({ biliRoomId: '777001', displayName: 'Test room' })
       .returning();
     roomId = room!.id;
+    await identities.reconcileConnections();
   });
   afterEach(async () => {
     try {
@@ -147,7 +149,7 @@ describe('active identity challenge capacity', () => {
       .where(eq(verificationRooms.id, roomId));
     await expect(
       identities.createChallenge('same-browser', { purpose: 'REGISTER' }),
-    ).rejects.toMatchObject({ code: 'VERIFICATION_ROOM_UNAVAILABLE' });
+    ).rejects.toMatchObject({ code: 'VERIFICATION_CHANNEL_NOT_READY' });
     expect((await identities.getChallenge(old.id, 'same-browser')).status).toBe('PENDING');
     expect(await activeCount()).toBe(5000);
   });
@@ -174,6 +176,7 @@ describe('active identity challenge capacity', () => {
       'test-secret',
       connections,
       () => undefined,
+      () => true,
     );
     const results = await Promise.allSettled([
       identities.createChallenge('browser-a', { purpose: 'REGISTER' }),

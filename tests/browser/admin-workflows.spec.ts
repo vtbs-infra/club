@@ -1,3 +1,4 @@
+import { bilibiliSession } from './support/fixtures.js';
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';
 import type {
   AdminSnapshotPage,
@@ -29,6 +30,7 @@ test('keeps admin editors and status badges usable at 800px', async ({ appUrl, p
     if (pathname === '/api/v1/admin/users') {
       return [userRecord()];
     }
+    if (pathname === '/api/v1/admin/bilibili') return bilibiliSession();
     if (pathname === '/api/v1/admin/verification-rooms') return [verificationRoom()];
     if (pathname === '/api/v1/admin/announcements') return { items: [], nextCursor: null };
     if (pathname === '/api/v1/admin/system') return systemStatus();

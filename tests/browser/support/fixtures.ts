@@ -1,3 +1,4 @@
+import type { BilibiliSessionStatus } from '../../../src/shared/contracts/bilibili.js';
 import { APPLICATION_VERSION } from '../../../src/server/application-version.js';
 import type { AddressRecord } from '../../../src/shared/contracts/addresses.js';
 import type { Announcement } from '../../../src/shared/contracts/announcements.js';
@@ -229,6 +230,9 @@ export function userRecord(overrides: Partial<UserRecord> = {}): UserRecord {
 export function verificationRoom(overrides: Partial<VerificationRoom> = {}): VerificationRoom {
   return {
     biliRoomId: '123456',
+    connectionState: 'HEALTHY',
+    lastUidReceivedAt: null,
+    lastUidMessageAt: null,
     displayName: '主验证直播间',
     enabled: true,
     healthStatus: 'HEALTHY',
@@ -251,6 +255,7 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
   };
   return {
     checks: { database: 'ok', schema: 'ok', storage: 'ok' },
+    bilibili: null,
     integrityWarnings: [],
     recentSnapshotFailures: [],
     rooms: [
@@ -262,6 +267,7 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
       },
     ],
     runtimes: {
+      bilibili: runtime,
       identity: runtime,
       media: runtime,
       roster: runtime,
@@ -270,5 +276,21 @@ export function systemStatus(overrides: Partial<SystemStatus> = {}): SystemStatu
     status: 'ok',
     version: APPLICATION_VERSION,
     ...overrides,
+  };
+}
+
+export function bilibiliSession(): BilibiliSessionStatus {
+  return {
+    revision: 0,
+    validity: 'NOT_CONFIGURED',
+    reachability: 'UNKNOWN',
+    account: null,
+    operation: null,
+    errorCode: null,
+    loggedInAt: null,
+    checkedAt: null,
+    refreshedAt: null,
+    nextCheckAt: null,
+    loginAttempt: null,
   };
 }

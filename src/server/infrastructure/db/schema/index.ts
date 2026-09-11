@@ -1,4 +1,5 @@
 import { passwordCredentials, sessions, users } from './auth.js';
+import { bilibiliLoginAttempts, bilibiliSessions } from './bilibili.js';
 import { platformAppearance } from './appearance.js';
 import { announcementReads, announcements } from './announcements.js';
 import {
@@ -25,12 +26,15 @@ import {
 export * from './announcements.js';
 export * from './appearance.js';
 export * from './auth.js';
+export * from './bilibili.js';
 export * from './gifts.js';
 export * from './identity.js';
 export * from './shared.js';
 export * from './snapshots.js';
 
 export const schema = {
+  bilibiliLoginAttempts,
+  bilibiliSessions,
   passwordCredentials,
   addresses,
   announcementReads,
