@@ -15,9 +15,9 @@ export const CreatorProfileSchema = Type.Object({
 export const IdentitySchema = Type.Object({
   creator: Nullable(CreatorProfileSchema),
   user: Type.Object({
-    email: Type.String({ format: 'email' }),
+    username: Type.String(),
     id: IdSchema,
-    image: Nullable(Type.String()),
+    bilibiliUid: Nullable(Type.String()),
     name: Type.String(),
     role: AccountRoleSchema,
   }),
@@ -25,14 +25,8 @@ export const IdentitySchema = Type.Object({
 export type Identity = Static<typeof IdentitySchema>;
 
 export const UserRecordSchema = Type.Object({
-  bilibiliBinding: Nullable(
-    Type.Object({
-      biliDisplayName: Nullable(Type.String()),
-      biliUid: Type.String(),
-      id: IdSchema,
-    }),
-  ),
-  email: Type.String({ format: 'email' }),
+  bilibiliUid: Nullable(Type.String()),
+  username: Type.String(),
   id: IdSchema,
   name: Type.String(),
   role: AccountRoleSchema,
@@ -43,7 +37,7 @@ export const CreatorRecordSchema = Type.Object({
   bilibiliUid: Type.String(),
   createdAt: DateTimeSchema,
   displayName: Type.String(),
-  email: Type.String({ format: 'email' }),
+  username: Type.String(),
   id: IdSchema,
   monthlySyncEnabled: Type.Boolean(),
   profileSyncedAt: DateTimeSchema,

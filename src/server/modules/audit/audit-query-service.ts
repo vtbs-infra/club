@@ -45,13 +45,13 @@ export function redactAuditValue(value: unknown): unknown {
 }
 
 function response(row: {
-  readonly actorEmail: null | string;
+  readonly actorUsername: null | string;
   readonly actorName: null | string;
   readonly log: typeof auditLogs.$inferSelect;
 }) {
   return {
     action: row.log.action,
-    actorEmail: row.actorEmail,
+    actorUsername: row.actorUsername,
     actorName: row.actorName,
     actorUserId: row.log.actorUserId,
     afterSummary: redactAuditValue(row.log.afterSummary),
@@ -76,7 +76,7 @@ export class AuditQueryService {
     const cursor = input.cursor ? decodeCursor(input.cursor) : null;
     const rows = await this.database.orm
       .select({
-        actorEmail: users.email,
+        actorUsername: users.username,
         actorName: users.name,
         cursorCreatedAt: sql<string>`${auditLogs.createdAt}::text`,
         log: auditLogs,

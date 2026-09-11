@@ -7,7 +7,7 @@ import { effectiveOrderStatus, orderStatusSelection } from './order-status.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import {
-  bilibiliBindings,
+  users,
   creators,
   giftCoverObjects,
   giftOrderAddresses,
@@ -137,13 +137,13 @@ export class GiftOrderQueryService {
     this.audit = new AuditService(database);
   }
 
-  private async activeBinding(userId: string) {
+  private async verifiedIdentity(userId: string) {
     const [binding] = await this.database.orm
-      .select({ biliUid: bilibiliBindings.biliUid })
-      .from(bilibiliBindings)
-      .where(and(eq(bilibiliBindings.userId, userId), isNull(bilibiliBindings.unboundAt)))
+      .select({ biliUid: users.bilibiliUid })
+      .from(users)
+      .where(eq(users.id, userId))
       .limit(1);
-    return binding ?? null;
+    return binding?.biliUid ? { ...binding, biliUid: binding.biliUid } : null;
   }
 
   private async listSummaries(input: {
@@ -230,7 +230,7 @@ export class GiftOrderQueryService {
       readonly limit: number;
     },
   ) {
-    const binding = await this.activeBinding(userId);
+    const binding = await this.verifiedIdentity(userId);
     const access = binding
       ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
       : eq(giftOrders.userId, userId);
@@ -288,7 +288,7 @@ export class GiftOrderQueryService {
   }
 
   public async overviewForUser(userId: string) {
-    const binding = await this.activeBinding(userId);
+    const binding = await this.verifiedIdentity(userId);
     const access = binding
       ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))!
       : eq(giftOrders.userId, userId);
@@ -457,7 +457,7 @@ export class GiftOrderQueryService {
   }
 
   public async getForUser(userId: string, orderId: string) {
-    const binding = await this.activeBinding(userId);
+    const binding = await this.verifiedIdentity(userId);
     const access = binding
       ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
       : eq(giftOrders.userId, userId);

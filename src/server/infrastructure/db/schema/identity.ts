@@ -1,10 +1,11 @@
 import type { VerificationRoom } from '../../../../shared/contracts/verification-rooms.js';
-import type { BindingConflict, BilibiliChallenge } from '../../../../shared/contracts/binding.js';
+import type { ChallengePurpose, ChallengeStatus } from '../../../../shared/contracts/auth.js';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
   index,
+  foreignKey,
   integer,
   jsonb,
   pgTable,
@@ -24,9 +25,6 @@ export const creators = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
-    bindingId: uuid('binding_id')
-      .notNull()
-      .references(() => bilibiliBindings.id, { onDelete: 'restrict' }),
     bilibiliUid: text('bilibili_uid').notNull(),
     roomId: text('room_id').notNull(),
     displayName: text('display_name').notNull(),
@@ -39,7 +37,11 @@ export const creators = pgTable(
   },
   (table) => [
     uniqueIndex('creators_user_unique').on(table.userId),
-    uniqueIndex('creators_binding_unique').on(table.bindingId),
+    foreignKey({
+      columns: [table.userId, table.bilibiliUid],
+      foreignColumns: [users.id, users.bilibiliUid],
+      name: 'creators_user_uid_fk',
+    }).onDelete('restrict'),
     uniqueIndex('creators_bilibili_uid_unique').on(table.bilibiliUid),
     uniqueIndex('creators_room_id_unique').on(table.roomId),
     index('creators_monthly_sync_enabled_idx').on(table.monthlySyncEnabled),
@@ -95,106 +97,39 @@ export const verificationRooms = pgTable(
   ],
 );
 
-export const bindingChallenges = pgTable(
-  'binding_challenges',
+export const identityChallenges = pgTable(
+  'identity_challenges',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    ownerDigest: text('owner_digest').notNull(),
+    purpose: text('purpose').$type<ChallengePurpose>().notNull(),
     verificationRoomId: uuid('verification_room_id')
       .notNull()
       .references(() => verificationRooms.id, { onDelete: 'restrict' }),
     codeDigest: text('code_digest').notNull(),
-    status: text('status').$type<BilibiliChallenge['status']>().default('ACTIVE').notNull(),
+    status: text('status').$type<ChallengeStatus>().default('PENDING').notNull(),
+    expectedUid: text('expected_uid'),
+    expectedUserId: uuid('expected_user_id').references(() => users.id, { onDelete: 'cascade' }),
+    expectedAuthVersion: integer('expected_auth_version'),
+    verifiedUid: text('verified_uid'),
+    verifiedAt: timestamp('verified_at', { mode: 'date', withTimezone: true }),
+    eventId: text('event_id'),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
-    consumedAt: timestamp('consumed_at', { mode: 'date', withTimezone: true }),
-    consumedEventId: text('consumed_event_id'),
     ...timestamps,
   },
   (table) => [
-    uniqueIndex('binding_challenges_active_user_unique')
-      .on(table.userId)
-      .where(sql`${table.status} = 'ACTIVE'`),
-    uniqueIndex('binding_challenges_consumed_event_unique')
-      .on(table.consumedEventId)
-      .where(sql`${table.consumedEventId} is not null`),
-    index('binding_challenges_match_idx').on(
-      table.verificationRoomId,
-      table.codeDigest,
-      table.status,
-    ),
-    index('binding_challenges_expiry_idx').on(table.status, table.expiresAt),
+    uniqueIndex('identity_challenges_code_unique').on(table.codeDigest),
+    uniqueIndex('identity_challenges_event_unique').on(table.eventId),
+    index('identity_challenges_owner_idx').on(table.ownerDigest),
+    index('identity_challenges_expiry_idx').on(table.expiresAt),
+    check('identity_challenges_purpose_check', sql`${table.purpose} in ('REGISTER', 'RECOVER')`),
     check(
-      'binding_challenges_status_check',
-      sql`${table.status} in ('ACTIVE', 'CONSUMED', 'EXPIRED', 'CANCELLED', 'CONFLICT')`,
-    ),
-  ],
-);
-
-export const bilibiliBindings = pgTable(
-  'bilibili_bindings',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    challengeId: uuid('challenge_id')
-      .notNull()
-      .references(() => bindingChallenges.id, { onDelete: 'restrict' }),
-    biliUid: text('bili_uid').notNull(),
-    biliDisplayName: text('bili_display_name'),
-    boundAt: timestamp('bound_at', { mode: 'date', withTimezone: true }).defaultNow().notNull(),
-    unboundAt: timestamp('unbound_at', { mode: 'date', withTimezone: true }),
-    ...timestamps,
-  },
-  (table) => [
-    uniqueIndex('bilibili_bindings_challenge_unique').on(table.challengeId),
-    uniqueIndex('bilibili_bindings_active_user_unique')
-      .on(table.userId)
-      .where(sql`${table.unboundAt} is null`),
-    uniqueIndex('bilibili_bindings_active_uid_unique')
-      .on(table.biliUid)
-      .where(sql`${table.unboundAt} is null`),
-    index('bilibili_bindings_active_bound_id_idx')
-      .on(table.boundAt, table.id)
-      .where(sql`${table.unboundAt} is null`),
-    index('bilibili_bindings_user_history_idx').on(table.userId, table.boundAt),
-  ],
-);
-
-export const bindingConflicts = pgTable(
-  'binding_conflicts',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    challengeId: uuid('challenge_id')
-      .notNull()
-      .references(() => bindingChallenges.id, { onDelete: 'restrict' }),
-    observedBindingId: uuid('observed_binding_id')
-      .notNull()
-      .references(() => bilibiliBindings.id, { onDelete: 'restrict' }),
-    biliUid: text('bili_uid').notNull(),
-    status: text('status').$type<BindingConflict['status']>().default('OPEN').notNull(),
-    closedAt: timestamp('closed_at', { mode: 'date', withTimezone: true }),
-    closedByUserId: uuid('closed_by_user_id').references(() => users.id, {
-      onDelete: 'restrict',
-    }),
-    resolutionReason: text('resolution_reason'),
-    ...timestamps,
-  },
-  (table) => [
-    uniqueIndex('binding_conflicts_challenge_unique').on(table.challengeId),
-    index('binding_conflicts_open_created_idx').on(table.status, table.createdAt, table.id),
-    check(
-      'binding_conflicts_status_check',
-      sql`${table.status} in ('OPEN', 'RESOLVED', 'DISMISSED')`,
+      'identity_challenges_status_check',
+      sql`${table.status} in ('PENDING', 'VERIFIED', 'CONSUMED', 'EXPIRED', 'CANCELLED')`,
     ),
     check(
-      'binding_conflicts_lifecycle_check',
-      sql`(
-        (${table.status} = 'OPEN' and ${table.closedAt} is null and ${table.closedByUserId} is null and ${table.resolutionReason} is null)
-        or (${table.status} in ('RESOLVED', 'DISMISSED') and ${table.closedAt} is not null and ${table.closedByUserId} is not null and ${table.resolutionReason} is not null)
-      )`,
+      'identity_challenges_proof_check',
+      sql`${table.status} not in ('VERIFIED', 'CONSUMED') or (${table.verifiedUid} is not null and ${table.verifiedAt} is not null and ${table.eventId} is not null)`,
     ),
   ],
 );

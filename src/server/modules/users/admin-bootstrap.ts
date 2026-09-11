@@ -1,67 +1,75 @@
 import { eq } from 'drizzle-orm';
-
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
-import { users } from '../../infrastructure/db/schema/index.js';
+import { isUniqueViolation } from '../../infrastructure/db/errors.js';
+import { passwordCredentials, users } from '../../infrastructure/db/schema/index.js';
 import { AuditService } from '../audit/audit-service.js';
-import type { AppAuth } from '../auth/auth.js';
+import { replacePassword } from '../auth/auth.js';
+import { hashPassword, normalizeName, normalizeUsername } from '../auth/password.js';
 
-export interface BootstrapPlatformAdminInput {
-  readonly auth: AppAuth;
-  readonly database: DatabaseService;
-  readonly email: string;
-  readonly name: string;
-  readonly password: string;
-}
-
-export async function bootstrapPlatformAdmin(
-  input: BootstrapPlatformAdminInput,
-): Promise<{ readonly email: string; readonly id: string; readonly name: string }> {
-  const normalizedEmail = input.email.trim().toLowerCase();
-  const [existing] = await input.database.orm
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, normalizedEmail))
-    .limit(1);
-  if (existing) {
-    throw new AppError(
-      'ADMIN_ACCOUNT_ALREADY_EXISTS',
-      'An account with this email already exists; refusing to change its platform role.',
-      409,
-    );
+export async function bootstrapPlatformAdmin(input: {
+  database: DatabaseService;
+  username: string;
+  name: string;
+  password: string;
+}): Promise<{ username: string; id: string; name: string }> {
+  const username = normalizeUsername(input.username);
+  const name = normalizeName(input.name);
+  const passwordHash = await hashPassword(input.password);
+  try {
+    return await input.database.orm.transaction(async (transaction) => {
+      const [created] = await transaction
+        .insert(users)
+        .values({ username, name, role: 'PLATFORM_ADMIN' })
+        .returning();
+      if (!created) throw new Error('Administrator insert returned no row.');
+      await transaction.insert(passwordCredentials).values({ userId: created.id, passwordHash });
+      await new AuditService(input.database).record(
+        {
+          action: 'platform-admin.bootstrapped',
+          actorUserId: created.id,
+          afterSummary: { role: 'PLATFORM_ADMIN' },
+          targetId: created.id,
+          targetType: 'user',
+        },
+        transaction,
+      );
+      return { username: created.username, id: created.id, name: created.name };
+    });
+  } catch (error) {
+    if (isUniqueViolation(error))
+      throw new AppError(
+        'ADMIN_ACCOUNT_ALREADY_EXISTS',
+        'This username already exists; no account was changed.',
+        409,
+      );
+    throw error;
   }
-
-  await input.auth.api.signUpEmail({
-    body: {
-      email: normalizedEmail,
-      name: input.name.trim(),
-      password: input.password,
-    },
-  });
-
-  const [created] = await input.database.orm
-    .select({ email: users.email, id: users.id, name: users.name })
-    .from(users)
-    .where(eq(users.email, normalizedEmail))
-    .limit(1);
-  if (!created) throw new Error('Better Auth did not create the administrator account.');
-
-  const audit = new AuditService(input.database);
+}
+export async function resetPlatformAdminPassword(input: {
+  database: DatabaseService;
+  username: string;
+  password: string;
+}): Promise<void> {
+  const username = normalizeUsername(input.username);
+  const passwordHash = await hashPassword(input.password);
   await input.database.orm.transaction(async (transaction) => {
-    await transaction
-      .update(users)
-      .set({ emailVerified: true, role: 'PLATFORM_ADMIN', updatedAt: new Date() })
-      .where(eq(users.id, created.id));
-    await audit.record(
+    const [user] = await transaction
+      .select()
+      .from(users)
+      .where(eq(users.username, username))
+      .for('update');
+    if (!user || user.role !== 'PLATFORM_ADMIN')
+      throw new AppError('ADMIN_ACCOUNT_NOT_FOUND', 'Administrator account not found.', 404);
+    await replacePassword(transaction, user, passwordHash, new Date());
+    await new AuditService(input.database).record(
       {
-        action: 'platform-admin.bootstrapped',
-        actorUserId: created.id,
-        afterSummary: { role: 'PLATFORM_ADMIN' },
-        targetId: created.id,
+        action: 'platform-admin.password-reset',
+        actorUserId: user.id,
+        targetId: user.id,
         targetType: 'user',
       },
       transaction,
     );
   });
-  return created;
 }

@@ -2,7 +2,6 @@ import { Readable } from 'node:stream';
 
 import multipart from '@fastify/multipart';
 import { Type } from '@sinclair/typebox';
-import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { AppError } from '../../../shared/errors/app-error.js';
@@ -43,9 +42,7 @@ const giftMediaRoutes: FastifyPluginAsync<GiftMediaRoutesOptions> = async (app, 
       schema: { params: parameters, tags: ['gift-media'] },
     },
     async (request, reply) => {
-      const session = await options.auth.api.getSession({
-        headers: fromNodeHeaders(request.headers),
-      });
+      const session = await options.auth.getSession(request);
       return reply
         .header('cache-control', 'private, max-age=3600')
         .header('content-disposition', 'inline')

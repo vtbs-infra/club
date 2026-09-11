@@ -1,5 +1,4 @@
 import { eq } from 'drizzle-orm';
-import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyRequest, preHandlerHookHandler } from 'fastify';
 
 import { AppError } from '../../../shared/errors/app-error.js';
@@ -10,7 +9,7 @@ import type { AppAuth, AuthSession } from './auth.js';
 
 export async function resolveSession(request: FastifyRequest, auth: AppAuth): Promise<AuthSession> {
   if (request.authSession) return request.authSession;
-  const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
+  const session = await auth.getSession(request);
   if (!session) {
     throw new AppError('AUTHENTICATION_REQUIRED', 'Sign in is required.', 401);
   }

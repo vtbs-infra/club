@@ -1,5 +1,5 @@
 {
-  "id": "5a887c6b-0174-4c29-b6e9-2a27f9efd363",
+  "id": "87ede3de-0da1-49d1-bff9-0b45217520f2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -447,76 +447,21 @@
       },
       "isRLSEnabled": false
     },
-    "public.accounts": {
-      "name": "accounts",
+    "public.password_credentials": {
+      "name": "password_credentials",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "account_id": {
-          "name": "account_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_id": {
-          "name": "provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "user_id": {
           "name": "user_id",
           "type": "uuid",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true
         },
-        "access_token": {
-          "name": "access_token",
+        "password_hash": {
+          "name": "password_hash",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "refresh_token": {
-          "name": "refresh_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "id_token": {
-          "name": "id_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "access_token_expires_at": {
-          "name": "access_token_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "refresh_token_expires_at": {
-          "name": "refresh_token_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "password": {
-          "name": "password",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -533,48 +478,11 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "accounts_provider_account_unique": {
-          "name": "accounts_provider_account_unique",
-          "columns": [
-            {
-              "expression": "provider_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "accounts_user_id_idx": {
-          "name": "accounts_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "accounts_user_id_users_id_fk": {
-          "name": "accounts_user_id_users_id_fk",
-          "tableFrom": "accounts",
+        "password_credentials_user_id_users_id_fk": {
+          "name": "password_credentials_user_id_users_id_fk",
+          "tableFrom": "password_credentials",
           "tableTo": "users",
           "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
@@ -594,38 +502,31 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "text",
           "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
           "notNull": true
-        },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ip_address": {
-          "name": "ip_address",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_agent": {
-          "name": "user_agent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "user_id": {
           "name": "user_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auth_version": {
+          "name": "auth_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data": {
+          "name": "data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -645,21 +546,6 @@
         }
       },
       "indexes": {
-        "sessions_token_unique": {
-          "name": "sessions_token_unique",
-          "columns": [
-            {
-              "expression": "token",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "sessions_user_id_idx": {
           "name": "sessions_user_id_idx",
           "columns": [
@@ -719,30 +605,17 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "name": {
           "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "email_verified": {
-          "name": "email_verified",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "image": {
-          "name": "image",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "role": {
           "name": "role",
@@ -750,6 +623,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'USER'"
+        },
+        "bilibili_uid": {
+          "name": "bilibili_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auth_version": {
+          "name": "auth_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "created_at": {
           "name": "created_at",
@@ -767,11 +653,26 @@
         }
       },
       "indexes": {
-        "users_email_unique": {
-          "name": "users_email_unique",
+        "users_username_unique": {
+          "name": "users_username_unique",
           "columns": [
             {
-              "expression": "email",
+              "expression": "username",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "users_bilibili_uid_unique": {
+          "name": "users_bilibili_uid_unique",
+          "columns": [
+            {
+              "expression": "bilibili_uid",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -785,82 +686,32 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "users_id_uid_unique": {
+          "name": "users_id_uid_unique",
+          "nullsNotDistinct": false,
+          "columns": ["id", "bilibili_uid"]
+        }
+      },
       "policies": {},
       "checkConstraints": {
+        "users_username_check": {
+          "name": "users_username_check",
+          "value": "\"users\".\"username\" ~ '^[a-z0-9_]{3,30}$'"
+        },
         "users_role_check": {
           "name": "users_role_check",
           "value": "\"users\".\"role\" in ('USER', 'CREATOR', 'PLATFORM_ADMIN')"
+        },
+        "users_uid_check": {
+          "name": "users_uid_check",
+          "value": "(\"users\".\"bilibili_uid\" is not null and \"users\".\"bilibili_uid\" ~ '^[1-9][0-9]{0,19}$') or (\"users\".\"role\" = 'PLATFORM_ADMIN' and \"users\".\"bilibili_uid\" is null)"
+        },
+        "users_auth_version_check": {
+          "name": "users_auth_version_check",
+          "value": "\"users\".\"auth_version\" > 0"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.verifications": {
-      "name": "verifications",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "identifier": {
-          "name": "identifier",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "value": {
-          "name": "value",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "verifications_identifier_idx": {
-          "name": "verifications_identifier_idx",
-          "columns": [
-            {
-              "expression": "identifier",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.addresses": {
@@ -2587,526 +2438,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.bilibili_bindings": {
-      "name": "bilibili_bindings",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "challenge_id": {
-          "name": "challenge_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bili_uid": {
-          "name": "bili_uid",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bili_display_name": {
-          "name": "bili_display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bound_at": {
-          "name": "bound_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "unbound_at": {
-          "name": "unbound_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bilibili_bindings_challenge_unique": {
-          "name": "bilibili_bindings_challenge_unique",
-          "columns": [
-            {
-              "expression": "challenge_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bilibili_bindings_active_user_unique": {
-          "name": "bilibili_bindings_active_user_unique",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"bilibili_bindings\".\"unbound_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bilibili_bindings_active_uid_unique": {
-          "name": "bilibili_bindings_active_uid_unique",
-          "columns": [
-            {
-              "expression": "bili_uid",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"bilibili_bindings\".\"unbound_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bilibili_bindings_active_bound_id_idx": {
-          "name": "bilibili_bindings_active_bound_id_idx",
-          "columns": [
-            {
-              "expression": "bound_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"bilibili_bindings\".\"unbound_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bilibili_bindings_user_history_idx": {
-          "name": "bilibili_bindings_user_history_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bound_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bilibili_bindings_user_id_users_id_fk": {
-          "name": "bilibili_bindings_user_id_users_id_fk",
-          "tableFrom": "bilibili_bindings",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "bilibili_bindings_challenge_id_binding_challenges_id_fk": {
-          "name": "bilibili_bindings_challenge_id_binding_challenges_id_fk",
-          "tableFrom": "bilibili_bindings",
-          "tableTo": "binding_challenges",
-          "columnsFrom": ["challenge_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.binding_challenges": {
-      "name": "binding_challenges",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "verification_room_id": {
-          "name": "verification_room_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "code_digest": {
-          "name": "code_digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ACTIVE'"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "consumed_event_id": {
-          "name": "consumed_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "binding_challenges_active_user_unique": {
-          "name": "binding_challenges_active_user_unique",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"binding_challenges\".\"status\" = 'ACTIVE'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "binding_challenges_consumed_event_unique": {
-          "name": "binding_challenges_consumed_event_unique",
-          "columns": [
-            {
-              "expression": "consumed_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"binding_challenges\".\"consumed_event_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "binding_challenges_match_idx": {
-          "name": "binding_challenges_match_idx",
-          "columns": [
-            {
-              "expression": "verification_room_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "code_digest",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "binding_challenges_expiry_idx": {
-          "name": "binding_challenges_expiry_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "binding_challenges_user_id_users_id_fk": {
-          "name": "binding_challenges_user_id_users_id_fk",
-          "tableFrom": "binding_challenges",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "binding_challenges_verification_room_id_verification_rooms_id_fk": {
-          "name": "binding_challenges_verification_room_id_verification_rooms_id_fk",
-          "tableFrom": "binding_challenges",
-          "tableTo": "verification_rooms",
-          "columnsFrom": ["verification_room_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "binding_challenges_status_check": {
-          "name": "binding_challenges_status_check",
-          "value": "\"binding_challenges\".\"status\" in ('ACTIVE', 'CONSUMED', 'EXPIRED', 'CANCELLED', 'CONFLICT')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.binding_conflicts": {
-      "name": "binding_conflicts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "challenge_id": {
-          "name": "challenge_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "observed_binding_id": {
-          "name": "observed_binding_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bili_uid": {
-          "name": "bili_uid",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'OPEN'"
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "closed_by_user_id": {
-          "name": "closed_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "resolution_reason": {
-          "name": "resolution_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "binding_conflicts_challenge_unique": {
-          "name": "binding_conflicts_challenge_unique",
-          "columns": [
-            {
-              "expression": "challenge_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "binding_conflicts_open_created_idx": {
-          "name": "binding_conflicts_open_created_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "binding_conflicts_challenge_id_binding_challenges_id_fk": {
-          "name": "binding_conflicts_challenge_id_binding_challenges_id_fk",
-          "tableFrom": "binding_conflicts",
-          "tableTo": "binding_challenges",
-          "columnsFrom": ["challenge_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "binding_conflicts_observed_binding_id_bilibili_bindings_id_fk": {
-          "name": "binding_conflicts_observed_binding_id_bilibili_bindings_id_fk",
-          "tableFrom": "binding_conflicts",
-          "tableTo": "bilibili_bindings",
-          "columnsFrom": ["observed_binding_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "binding_conflicts_closed_by_user_id_users_id_fk": {
-          "name": "binding_conflicts_closed_by_user_id_users_id_fk",
-          "tableFrom": "binding_conflicts",
-          "tableTo": "users",
-          "columnsFrom": ["closed_by_user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "binding_conflicts_status_check": {
-          "name": "binding_conflicts_status_check",
-          "value": "\"binding_conflicts\".\"status\" in ('OPEN', 'RESOLVED', 'DISMISSED')"
-        },
-        "binding_conflicts_lifecycle_check": {
-          "name": "binding_conflicts_lifecycle_check",
-          "value": "(\n        (\"binding_conflicts\".\"status\" = 'OPEN' and \"binding_conflicts\".\"closed_at\" is null and \"binding_conflicts\".\"closed_by_user_id\" is null and \"binding_conflicts\".\"resolution_reason\" is null)\n        or (\"binding_conflicts\".\"status\" in ('RESOLVED', 'DISMISSED') and \"binding_conflicts\".\"closed_at\" is not null and \"binding_conflicts\".\"closed_by_user_id\" is not null and \"binding_conflicts\".\"resolution_reason\" is not null)\n      )"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.creators": {
       "name": "creators",
       "schema": "",
@@ -3120,12 +2451,6 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "binding_id": {
-          "name": "binding_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -3190,21 +2515,6 @@
           "columns": [
             {
               "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "creators_binding_unique": {
-          "name": "creators_binding_unique",
-          "columns": [
-            {
-              "expression": "binding_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3292,12 +2602,12 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "creators_binding_id_bilibili_bindings_id_fk": {
-          "name": "creators_binding_id_bilibili_bindings_id_fk",
+        "creators_user_uid_fk": {
+          "name": "creators_user_uid_fk",
           "tableFrom": "creators",
-          "tableTo": "bilibili_bindings",
-          "columnsFrom": ["binding_id"],
-          "columnsTo": ["id"],
+          "tableTo": "users",
+          "columnsFrom": ["user_id", "bilibili_uid"],
+          "columnsTo": ["id", "bilibili_uid"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3306,6 +2616,206 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.identity_challenges": {
+      "name": "identity_challenges",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "owner_digest": {
+          "name": "owner_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verification_room_id": {
+          "name": "verification_room_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code_digest": {
+          "name": "code_digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "expected_uid": {
+          "name": "expected_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_user_id": {
+          "name": "expected_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_auth_version": {
+          "name": "expected_auth_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_uid": {
+          "name": "verified_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "identity_challenges_code_unique": {
+          "name": "identity_challenges_code_unique",
+          "columns": [
+            {
+              "expression": "code_digest",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "identity_challenges_event_unique": {
+          "name": "identity_challenges_event_unique",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "identity_challenges_owner_idx": {
+          "name": "identity_challenges_owner_idx",
+          "columns": [
+            {
+              "expression": "owner_digest",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "identity_challenges_expiry_idx": {
+          "name": "identity_challenges_expiry_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "identity_challenges_verification_room_id_verification_rooms_id_fk": {
+          "name": "identity_challenges_verification_room_id_verification_rooms_id_fk",
+          "tableFrom": "identity_challenges",
+          "tableTo": "verification_rooms",
+          "columnsFrom": ["verification_room_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "identity_challenges_expected_user_id_users_id_fk": {
+          "name": "identity_challenges_expected_user_id_users_id_fk",
+          "tableFrom": "identity_challenges",
+          "tableTo": "users",
+          "columnsFrom": ["expected_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "identity_challenges_purpose_check": {
+          "name": "identity_challenges_purpose_check",
+          "value": "\"identity_challenges\".\"purpose\" in ('REGISTER', 'RECOVER')"
+        },
+        "identity_challenges_status_check": {
+          "name": "identity_challenges_status_check",
+          "value": "\"identity_challenges\".\"status\" in ('PENDING', 'VERIFIED', 'CONSUMED', 'EXPIRED', 'CANCELLED')"
+        },
+        "identity_challenges_proof_check": {
+          "name": "identity_challenges_proof_check",
+          "value": "\"identity_challenges\".\"status\" not in ('VERIFIED', 'CONSUMED') or (\"identity_challenges\".\"verified_uid\" is not null and \"identity_challenges\".\"verified_at\" is not null and \"identity_challenges\".\"event_id\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.verification_rooms": {

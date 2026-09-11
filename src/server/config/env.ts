@@ -78,7 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     nodeEnv,
     appUrl: env.APP_URL ?? 'http://localhost:3000',
     databaseUrl: env.DATABASE_URL,
-    authSecret: env.BETTER_AUTH_SECRET,
+    authSecret: env.AUTH_SECRET,
     addressEncryptionActiveKeyVersion: Number(env.ADDRESS_ENCRYPTION_ACTIVE_KEY_VERSION ?? '1'),
     addressEncryptionKeyRing:
       env.ADDRESS_ENCRYPTION_KEY_RING ?? (nodeEnv === 'production' ? undefined : developmentKey),

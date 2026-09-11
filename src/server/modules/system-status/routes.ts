@@ -12,7 +12,7 @@ import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import type { AppAuth } from '../auth/auth.js';
 import { createRequirePlatformAdmin } from '../auth/guards.js';
-import type { BindingRuntime } from '../binding/binding-runtime.js';
+import type { IdentityRuntime } from '../auth/identity-runtime.js';
 import type { GiftMediaRuntime } from '../gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 import { SystemStatusService } from './system-status-service.js';
@@ -20,7 +20,7 @@ import { SystemStatusService } from './system-status-service.js';
 interface SystemStatusOptions {
   readonly auth: AppAuth;
   readonly backgroundRequired: boolean;
-  readonly bindingRuntime: BindingRuntime;
+  readonly identityRuntime: IdentityRuntime;
   readonly clock: Clock;
   readonly database: DatabaseService;
   readonly giftMediaRuntime: GiftMediaRuntime;
@@ -63,7 +63,7 @@ const systemStatusRoutes: FastifyPluginCallback<SystemStatusOptions> = (app, opt
         options.storage.checkHealth(),
       ]);
       const runtimeStatuses = [
-        options.bindingRuntime.getStatus(),
+        options.identityRuntime.getStatus(),
         options.snapshotRuntime.getStatus(),
         options.giftMediaRuntime.getStatus(),
       ];

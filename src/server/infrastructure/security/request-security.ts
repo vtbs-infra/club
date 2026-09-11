@@ -6,7 +6,6 @@ import type {
   RawRequestDefaultExpression,
   RawServerBase,
 } from 'fastify';
-import { fromNodeHeaders } from 'better-auth/node';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { AppConfig } from '../../config/env.js';
@@ -124,9 +123,7 @@ export function registerRequestSecurity<
 
   app.addHook('preHandler', async (request, reply) => {
     if (!request.url.startsWith('/api/v1/') || !STATE_CHANGING_METHODS.has(request.method)) return;
-    const session = await options.auth.api.getSession({
-      headers: fromNodeHeaders(request.headers),
-    });
+    const session = await options.auth.getSession(request);
     request.authSession = session;
     const keys = [`ip:${request.ip}`, ...(session ? [`user:${session.user.id}`] : [])];
     const results = keys.map((key) => options.rateLimiter.consume(key, options.clock.now()));

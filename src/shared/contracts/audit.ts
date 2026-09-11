@@ -6,7 +6,7 @@ const SummarySchema = Nullable(Type.Record(Type.String(), Type.Unknown()));
 
 export const AuditLogSchema = Type.Object({
   action: Type.String(),
-  actorEmail: Nullable(Type.String({ format: 'email' })),
+  actorUsername: Nullable(Type.String()),
   actorName: Nullable(Type.String()),
   actorUserId: Nullable(IdSchema),
   afterSummary: SummarySchema,

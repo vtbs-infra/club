@@ -6,7 +6,7 @@ import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
-  bilibiliBindings,
+  users,
   giftOrderAddresses,
   giftOrderOptionValues,
   giftOrders,
@@ -43,16 +43,16 @@ export class GiftClaimService {
     this.audit = new AuditService(database);
   }
 
-  private async activeBinding(userId: string, executor: AppDatabase = this.database.orm) {
+  private async verifiedIdentity(userId: string, executor: AppDatabase = this.database.orm) {
     const [binding] = await executor
       .select({
-        biliDisplayName: bilibiliBindings.biliDisplayName,
-        biliUid: bilibiliBindings.biliUid,
+        biliDisplayName: users.name,
+        biliUid: users.bilibiliUid,
       })
-      .from(bilibiliBindings)
-      .where(and(eq(bilibiliBindings.userId, userId), isNull(bilibiliBindings.unboundAt)))
+      .from(users)
+      .where(eq(users.id, userId))
       .limit(1);
-    return binding ?? null;
+    return binding?.biliUid ? { ...binding, biliUid: binding.biliUid } : null;
   }
 
   private validateOptions(
@@ -127,10 +127,10 @@ export class GiftClaimService {
           409,
         );
       }
-      const binding = await this.activeBinding(userId, transaction);
+      const binding = await this.verifiedIdentity(userId, transaction);
       if (!binding || binding.biliUid !== order.biliUid) {
         throw new AppError(
-          'BILIBILI_BINDING_REQUIRED',
+          'BILIBILI_UID_REQUIRED',
           'Bind the Bilibili UID associated with this gift before claiming it.',
           403,
         );

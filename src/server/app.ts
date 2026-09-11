@@ -26,10 +26,8 @@ import { createAuth, type AppAuth } from './modules/auth/auth.js';
 import authRoutes from './modules/auth/routes.js';
 import { AddressService } from './modules/addresses/address-service.js';
 import addressRoutes from './modules/addresses/routes.js';
-import { createBindingRuntime, type BindingRuntime } from './modules/binding/binding-runtime.js';
-import { BindingService } from './modules/binding/binding-service.js';
-import { BindingConflictService } from './modules/binding/binding-conflict-service.js';
-import bindingRoutes from './modules/binding/routes.js';
+import { createIdentityRuntime, type IdentityRuntime } from './modules/auth/identity-runtime.js';
+import { IdentityService } from './modules/auth/identity-service.js';
 import { AnnouncementService } from './modules/announcements/announcement-service.js';
 import announcementRoutes from './modules/announcements/routes.js';
 import { AppearanceService } from './modules/appearance/appearance-service.js';
@@ -72,7 +70,7 @@ import { SnapshotService } from './modules/snapshots/snapshot-service.js';
 
 export interface BuildAppOptions {
   readonly auth?: AppAuth;
-  readonly bindingRuntime?: BindingRuntime;
+  readonly identityRuntime?: IdentityRuntime;
   readonly challengeLimiter?: InMemoryRateLimiter;
   readonly clock?: Clock;
   readonly config?: AppConfig;
@@ -110,7 +108,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const reportRuntimeError = (error: unknown, operation: string) => {
     logger.error({ err: error, operation }, 'background runtime operation failed');
   };
-  const auth = options.auth ?? createAuth({ config, database });
+  const auth = options.auth ?? createAuth({ config, database, clock });
   const encryption = new EncryptionKeyRing(config);
   const rateLimiter = options.rateLimiter ?? new InMemoryRateLimiter();
   const challengeLimiter = options.challengeLimiter ?? new InMemoryRateLimiter(5, 10 * 60_000);
@@ -118,7 +116,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const connections: RoomConnectionManager = new RoomConnectionManager({
     source: options.liveMessageSource ?? new PublicWebLiveMessageSource(),
     onMessage: async (event) => {
-      await bindings.handleLiveMessage(event);
+      await identities.handleLiveMessage(event);
     },
     onStateChange: async (biliRoomId, state) => {
       const now = clock.now();
@@ -132,26 +130,24 @@ export async function buildApp(options: BuildAppOptions = {}) {
         .where(eq(verificationRooms.biliRoomId, biliRoomId));
     },
   });
-  const conflicts = new BindingConflictService(database, clock);
-  const bindings: BindingService = new BindingService(
+  const identities: IdentityService = new IdentityService(
     database,
     clock,
     config.authSecret,
     connections,
-    conflicts,
-    () => bindingRuntime.requestTick(),
+    () => identityRuntime.requestTick(),
   );
   const rooms = new VerificationRoomService(
     database,
     connections,
-    () => bindingRuntime.requestTick(),
+    () => identityRuntime.requestTick(),
     reportRuntimeError,
   );
-  const bindingRuntime =
-    options.bindingRuntime ??
-    createBindingRuntime({
+  const identityRuntime =
+    options.identityRuntime ??
+    createIdentityRuntime({
       clock,
-      bindings,
+      identities,
       connections,
       reportError: reportRuntimeError,
     });
@@ -227,7 +223,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   app.addHook('onClose', async () => {
     const closeRuntimes = [
-      () => bindingRuntime.close(),
+      () => identityRuntime.close(),
       () => snapshotRuntime.close(),
       () => giftMediaRuntime.close(),
     ];
@@ -247,7 +243,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   if (backgroundRequired) {
     app.addHook('onReady', async () => {
       const runtimes = [
-        ['binding', bindingRuntime.start()],
+        ['identity', identityRuntime.start()],
         ['snapshot', snapshotRuntime.start()],
         ['gift-media', giftMediaRuntime.start()],
       ] as const;
@@ -285,17 +281,11 @@ export async function buildApp(options: BuildAppOptions = {}) {
     },
   });
 
-  await app.register(authRoutes, { auth });
+  await auth.install(app);
   registerRequestSecurity(app, { auth, clock, config, rateLimiter });
+  await app.register(authRoutes, { auth, identities, clock, config, challengeLimiter });
   await app.register(addressRoutes, { auth, service: addressService });
   await app.register(creatorRoutes, { auth, database, service: creatorService });
-  await app.register(bindingRoutes, {
-    auth,
-    challengeLimiter,
-    clock,
-    conflicts,
-    service: bindings,
-  });
   await app.register(giftReleaseRoutes, { auth, database, service: releaseService });
   await app.register(giftOrderRoutes, {
     auth,
@@ -323,7 +313,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await app.register(systemStatusRoutes, {
     auth,
     backgroundRequired,
-    bindingRuntime,
+    identityRuntime,
     clock,
     database,
     giftMediaRuntime,

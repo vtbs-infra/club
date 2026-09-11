@@ -7,7 +7,7 @@ import type { AppDatabase, DatabaseService } from '../../infrastructure/db/datab
 import {
   announcementReads,
   announcements,
-  bilibiliBindings,
+  users,
   giftOrders,
 } from '../../infrastructure/db/schema/index.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
@@ -128,15 +128,15 @@ export class AnnouncementService {
 
   private async visibleCondition(userId: string): Promise<SQL> {
     const [binding] = await this.database.orm
-      .select({ biliUid: bilibiliBindings.biliUid })
-      .from(bilibiliBindings)
-      .where(and(eq(bilibiliBindings.userId, userId), isNull(bilibiliBindings.unboundAt)))
+      .select({ biliUid: users.bilibiliUid })
+      .from(users)
+      .where(eq(users.id, userId))
       .limit(1);
     const accessibleCreators = this.database.orm
       .selectDistinct({ creatorId: giftOrders.creatorId })
       .from(giftOrders)
       .where(
-        binding
+        binding?.biliUid
           ? or(eq(giftOrders.userId, userId), eq(giftOrders.biliUid, binding.biliUid))
           : eq(giftOrders.userId, userId),
       );

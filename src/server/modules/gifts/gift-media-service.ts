@@ -7,7 +7,7 @@ import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
-  bilibiliBindings,
+  users,
   creators,
   giftCoverObjects,
   giftOrders,
@@ -295,9 +295,9 @@ export class GiftMediaService {
     if (!authorized && viewer && release.creatorUserId === viewer.userId) authorized = true;
     if (!authorized && viewer) {
       const [binding] = await this.database.orm
-        .select({ biliUid: bilibiliBindings.biliUid })
-        .from(bilibiliBindings)
-        .where(and(eq(bilibiliBindings.userId, viewer.userId), isNull(bilibiliBindings.unboundAt)))
+        .select({ biliUid: users.bilibiliUid })
+        .from(users)
+        .where(eq(users.id, viewer.userId))
         .limit(1);
       const [order] = await this.database.orm
         .select({ id: giftOrders.id })
@@ -305,7 +305,7 @@ export class GiftMediaService {
         .where(
           and(
             eq(giftOrders.giftReleaseId, releaseId),
-            binding
+            binding?.biliUid
               ? or(eq(giftOrders.userId, viewer.userId), eq(giftOrders.biliUid, binding.biliUid))
               : eq(giftOrders.userId, viewer.userId),
           ),

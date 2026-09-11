@@ -9,14 +9,14 @@ import {
   verificationRooms,
 } from '../../infrastructure/db/schema/index.js';
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
-import type { BindingRuntime } from '../binding/binding-runtime.js';
+import type { IdentityRuntime } from '../auth/identity-runtime.js';
 import type { GiftMediaRuntime } from '../gifts/gift-media-runtime.js';
 import type { SnapshotRuntime } from '../snapshots/snapshot-runtime.js';
 
 interface SystemStatusServiceOptions {
   readonly clock: Clock;
   readonly database: DatabaseService;
-  readonly bindingRuntime: BindingRuntime;
+  readonly identityRuntime: IdentityRuntime;
   readonly giftMediaRuntime: GiftMediaRuntime;
   readonly snapshotRuntime: SnapshotRuntime;
   readonly storage: StorageDriver;
@@ -37,7 +37,7 @@ export class SystemStatusService {
       schema: schemaCheck.status === 'fulfilled' ? ('ok' as const) : ('down' as const),
       storage: storageCheck.status === 'fulfilled' ? ('ok' as const) : ('down' as const),
     };
-    const bindingRuntime = this.options.bindingRuntime.getStatus();
+    const identityRuntime = this.options.identityRuntime.getStatus();
     const snapshotRuntime = this.options.snapshotRuntime.getStatus();
     const giftMediaRuntime = this.options.giftMediaRuntime.getStatus();
     if (checks.database === 'down') {
@@ -47,7 +47,7 @@ export class SystemStatusService {
         recentSnapshotFailures: [],
         rooms: [],
         runtimes: {
-          binding: bindingRuntime,
+          identity: identityRuntime,
           media: giftMediaRuntime,
           roster: snapshotRuntime,
         },
@@ -118,7 +118,7 @@ export class SystemStatusService {
       recentSnapshotFailures: failures,
       rooms,
       runtimes: {
-        binding: bindingRuntime,
+        identity: identityRuntime,
         media: giftMediaRuntime,
         roster: snapshotRuntime,
       },
@@ -127,7 +127,7 @@ export class SystemStatusService {
         checks.schema === 'down' ||
         checks.storage === 'down' ||
         integrityWarnings.length > 0 ||
-        [bindingRuntime, giftMediaRuntime, snapshotRuntime].some(
+        [identityRuntime, giftMediaRuntime, snapshotRuntime].some(
           (runtime) => runtime.state !== 'RUNNING',
         ) ||
         rooms.some((room) => room.enabled && room.healthStatus === 'UNHEALTHY')

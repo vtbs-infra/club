@@ -1,4 +1,4 @@
-import { accounts, sessions, users, verifications } from './auth.js';
+import { passwordCredentials, sessions, users } from './auth.js';
 import { platformAppearance } from './appearance.js';
 import { announcementReads, announcements } from './announcements.js';
 import {
@@ -14,14 +14,7 @@ import {
   giftReleases,
   giftTierRules,
 } from './gifts.js';
-import {
-  auditLogs,
-  bilibiliBindings,
-  bindingChallenges,
-  bindingConflicts,
-  creators,
-  verificationRooms,
-} from './identity.js';
+import { auditLogs, identityChallenges, creators, verificationRooms } from './identity.js';
 import {
   snapshotAttemptMembers,
   snapshotAttempts,
@@ -38,15 +31,13 @@ export * from './shared.js';
 export * from './snapshots.js';
 
 export const schema = {
-  accounts,
+  passwordCredentials,
   addresses,
   announcementReads,
   announcements,
   platformAppearance,
   auditLogs,
-  bilibiliBindings,
-  bindingChallenges,
-  bindingConflicts,
+  identityChallenges,
   creators,
   giftCoverObjects,
   giftOrderAddresses,
@@ -64,7 +55,6 @@ export const schema = {
   snapshotPages,
   snapshotRuns,
   users,
-  verifications,
   verificationRooms,
 };
 

@@ -53,7 +53,7 @@ export const SystemStatusSchema = Type.Object({
     }),
   ),
   runtimes: Type.Object({
-    binding: RuntimeStatusSchema,
+    identity: RuntimeStatusSchema,
     media: RuntimeStatusSchema,
     roster: RuntimeStatusSchema,
   }),

@@ -1,15 +1,10 @@
-import { and, count, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import { isUniqueViolation } from '../../infrastructure/db/errors.js';
-import {
-  bilibiliBindings,
-  creators,
-  snapshotRuns,
-  users,
-} from '../../infrastructure/db/schema/index.js';
+import { creators, snapshotRuns, users } from '../../infrastructure/db/schema/index.js';
 import {
   CreatorProfileSourceError,
   type BilibiliCreatorProfile,
@@ -136,7 +131,7 @@ export class CreatorService {
         bilibiliUid: creators.bilibiliUid,
         createdAt: creators.createdAt,
         displayName: creators.displayName,
-        email: users.email,
+        username: users.username,
         id: creators.id,
         monthlySyncEnabled: creators.monthlySyncEnabled,
         profileSyncedAt: creators.profileSyncedAt,
@@ -156,9 +151,9 @@ export class CreatorService {
   public async getIdentity(userId: string) {
     const [user] = await this.database.orm
       .select({
-        email: users.email,
+        username: users.username,
         id: users.id,
-        image: users.image,
+        bilibiliUid: users.bilibiliUid,
         name: users.name,
         role: users.role,
       })
@@ -191,27 +186,18 @@ export class CreatorService {
     const prefix = escapedPrefix(normalized);
     return this.database.orm
       .select({
-        bilibiliBinding: {
-          biliDisplayName: bilibiliBindings.biliDisplayName,
-          biliUid: bilibiliBindings.biliUid,
-          id: bilibiliBindings.id,
-        },
-        email: users.email,
+        bilibiliUid: users.bilibiliUid,
+        username: users.username,
         id: users.id,
         name: users.name,
         role: users.role,
       })
       .from(users)
-      .leftJoin(
-        bilibiliBindings,
-        and(eq(bilibiliBindings.userId, users.id), isNull(bilibiliBindings.unboundAt)),
-      )
       .where(
         or(
-          ilike(users.email, prefix),
+          ilike(users.username, prefix),
           ilike(users.name, prefix),
-          ilike(bilibiliBindings.biliUid, prefix),
-          ilike(bilibiliBindings.biliDisplayName, prefix),
+          ilike(users.bilibiliUid, prefix),
         ),
       )
       .orderBy(users.name, users.id)
@@ -229,7 +215,7 @@ export class CreatorService {
           bilibiliUid: creators.bilibiliUid,
           createdAt: creators.createdAt,
           displayName: creators.displayName,
-          email: users.email,
+          username: users.username,
           id: creators.id,
           monthlySyncEnabled: creators.monthlySyncEnabled,
           profileSyncedAt: creators.profileSyncedAt,
@@ -266,15 +252,10 @@ export class CreatorService {
     const timezone = normalizeTimezone(input.timezone);
     const [candidate] = await this.database.orm
       .select({
-        bindingId: bilibiliBindings.id,
-        biliUid: bilibiliBindings.biliUid,
+        biliUid: users.bilibiliUid,
         role: users.role,
       })
       .from(users)
-      .leftJoin(
-        bilibiliBindings,
-        and(eq(bilibiliBindings.userId, users.id), isNull(bilibiliBindings.unboundAt)),
-      )
       .where(eq(users.id, input.userId))
       .limit(1);
     if (!candidate) throw new AppError('USER_NOT_FOUND', 'User account not found.', 404);
@@ -285,38 +266,32 @@ export class CreatorService {
         409,
       );
     }
-    if (!candidate.bindingId || !candidate.biliUid) {
+    if (!candidate.biliUid) {
       throw new AppError(
-        'CREATOR_BILIBILI_BINDING_REQUIRED',
+        'CREATOR_BILIBILI_UID_REQUIRED',
         'The user must verify a Bilibili account before creator registration.',
         409,
       );
     }
-    const bindingId = candidate.bindingId;
     const profile = await this.fetchProfile(candidate.biliUid);
     try {
       return await this.database.orm.transaction(async (transaction) => {
         const [locked] = await transaction
           .select({
-            bindingId: bilibiliBindings.id,
-            biliUid: bilibiliBindings.biliUid,
-            email: users.email,
+            biliUid: users.bilibiliUid,
+            username: users.username,
             name: users.name,
             role: users.role,
             userId: users.id,
           })
           .from(users)
-          .innerJoin(
-            bilibiliBindings,
-            and(eq(bilibiliBindings.userId, users.id), isNull(bilibiliBindings.unboundAt)),
-          )
-          .where(and(eq(users.id, input.userId), eq(bilibiliBindings.id, bindingId)))
+          .where(eq(users.id, input.userId))
           .limit(1)
           .for('update');
         if (!locked || locked.role !== 'USER' || locked.biliUid !== profile.biliUid) {
           throw new AppError(
             'CREATOR_REGISTRATION_CHANGED',
-            'The account or Bilibili binding changed during creator registration.',
+            'The account or Bilibili identity changed during creator registration.',
             409,
           );
         }
@@ -325,7 +300,6 @@ export class CreatorService {
           .insert(creators)
           .values({
             bilibiliUid: profile.biliUid,
-            bindingId: locked.bindingId,
             displayName: profile.displayName,
             monthlySyncEnabled: input.monthlySyncEnabled ?? true,
             profileSyncedAt: now,
@@ -339,10 +313,6 @@ export class CreatorService {
           .update(users)
           .set({ role: 'CREATOR', updatedAt: now })
           .where(eq(users.id, locked.userId));
-        await transaction
-          .update(bilibiliBindings)
-          .set({ biliDisplayName: profile.displayName, updatedAt: now })
-          .where(eq(bilibiliBindings.id, locked.bindingId));
         await this.audit.record(
           {
             action: 'creator.registered',
@@ -363,7 +333,7 @@ export class CreatorService {
           },
           transaction,
         );
-        return { ...creator, email: locked.email, userName: locked.name };
+        return { ...creator, username: locked.username, userName: locked.name };
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -494,10 +464,6 @@ export class CreatorService {
           .where(eq(creators.id, before.id))
           .returning();
         if (!updated) throw new Error('Creator profile refresh returned no row.');
-        await transaction
-          .update(bilibiliBindings)
-          .set({ biliDisplayName: profile.displayName, updatedAt: now })
-          .where(eq(bilibiliBindings.id, before.bindingId));
         await transaction
           .update(snapshotRuns)
           .set({

@@ -50,52 +50,37 @@ CREATE TABLE "platform_appearance" (
 	CONSTRAINT "platform_appearance_theme_preset_check" CHECK ("platform_appearance"."theme_preset" in ('moe', 'neon', 'archive', 'pixel'))
 );
 --> statement-breakpoint
-CREATE TABLE "accounts" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"account_id" text NOT NULL,
-	"provider_id" text NOT NULL,
-	"user_id" uuid NOT NULL,
-	"access_token" text,
-	"refresh_token" text,
-	"id_token" text,
-	"access_token_expires_at" timestamp with time zone,
-	"refresh_token_expires_at" timestamp with time zone,
-	"scope" text,
-	"password" text,
+CREATE TABLE "password_credentials" (
+	"user_id" uuid PRIMARY KEY NOT NULL,
+	"password_hash" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "sessions" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"token" text NOT NULL,
-	"ip_address" text,
-	"user_agent" text,
+	"id" text PRIMARY KEY NOT NULL,
 	"user_id" uuid NOT NULL,
+	"auth_version" integer NOT NULL,
+	"data" jsonb NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"username" text NOT NULL,
 	"name" text NOT NULL,
-	"email" text NOT NULL,
-	"email_verified" boolean DEFAULT false NOT NULL,
-	"image" text,
 	"role" text DEFAULT 'USER' NOT NULL,
+	"bilibili_uid" text,
+	"auth_version" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "users_role_check" CHECK ("users"."role" in ('USER', 'CREATOR', 'PLATFORM_ADMIN'))
-);
---> statement-breakpoint
-CREATE TABLE "verifications" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"identifier" text NOT NULL,
-	"value" text NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	CONSTRAINT "users_id_uid_unique" UNIQUE("id","bilibili_uid"),
+	CONSTRAINT "users_username_check" CHECK ("users"."username" ~ '^[a-z0-9_]{3,30}$'),
+	CONSTRAINT "users_role_check" CHECK ("users"."role" in ('USER', 'CREATOR', 'PLATFORM_ADMIN')),
+	CONSTRAINT "users_uid_check" CHECK (("users"."bilibili_uid" is not null and "users"."bilibili_uid" ~ '^[1-9][0-9]{0,19}$') or ("users"."role" = 'PLATFORM_ADMIN' and "users"."bilibili_uid" is null)),
+	CONSTRAINT "users_auth_version_check" CHECK ("users"."auth_version" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "addresses" (
@@ -270,54 +255,9 @@ CREATE TABLE "audit_logs" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "bilibili_bindings" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
-	"challenge_id" uuid NOT NULL,
-	"bili_uid" text NOT NULL,
-	"bili_display_name" text,
-	"bound_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"unbound_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "binding_challenges" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
-	"verification_room_id" uuid NOT NULL,
-	"code_digest" text NOT NULL,
-	"status" text DEFAULT 'ACTIVE' NOT NULL,
-	"expires_at" timestamp with time zone NOT NULL,
-	"consumed_at" timestamp with time zone,
-	"consumed_event_id" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "binding_challenges_status_check" CHECK ("binding_challenges"."status" in ('ACTIVE', 'CONSUMED', 'EXPIRED', 'CANCELLED', 'CONFLICT'))
-);
---> statement-breakpoint
-CREATE TABLE "binding_conflicts" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"challenge_id" uuid NOT NULL,
-	"observed_binding_id" uuid NOT NULL,
-	"bili_uid" text NOT NULL,
-	"status" text DEFAULT 'OPEN' NOT NULL,
-	"closed_at" timestamp with time zone,
-	"closed_by_user_id" uuid,
-	"resolution_reason" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "binding_conflicts_status_check" CHECK ("binding_conflicts"."status" in ('OPEN', 'RESOLVED', 'DISMISSED')),
-	CONSTRAINT "binding_conflicts_lifecycle_check" CHECK ((
-        ("binding_conflicts"."status" = 'OPEN' and "binding_conflicts"."closed_at" is null and "binding_conflicts"."closed_by_user_id" is null and "binding_conflicts"."resolution_reason" is null)
-        or ("binding_conflicts"."status" in ('RESOLVED', 'DISMISSED') and "binding_conflicts"."closed_at" is not null and "binding_conflicts"."closed_by_user_id" is not null and "binding_conflicts"."resolution_reason" is not null)
-      ))
-);
---> statement-breakpoint
 CREATE TABLE "creators" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" uuid NOT NULL,
-	"binding_id" uuid NOT NULL,
 	"bilibili_uid" text NOT NULL,
 	"room_id" text NOT NULL,
 	"display_name" text NOT NULL,
@@ -326,6 +266,27 @@ CREATE TABLE "creators" (
 	"profile_synced_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "identity_challenges" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"owner_digest" text NOT NULL,
+	"purpose" text NOT NULL,
+	"verification_room_id" uuid NOT NULL,
+	"code_digest" text NOT NULL,
+	"status" text DEFAULT 'PENDING' NOT NULL,
+	"expected_uid" text,
+	"expected_user_id" uuid,
+	"expected_auth_version" integer,
+	"verified_uid" text,
+	"verified_at" timestamp with time zone,
+	"event_id" text,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "identity_challenges_purpose_check" CHECK ("identity_challenges"."purpose" in ('REGISTER', 'RECOVER')),
+	CONSTRAINT "identity_challenges_status_check" CHECK ("identity_challenges"."status" in ('PENDING', 'VERIFIED', 'CONSUMED', 'EXPIRED', 'CANCELLED')),
+	CONSTRAINT "identity_challenges_proof_check" CHECK ("identity_challenges"."status" not in ('VERIFIED', 'CONSUMED') or ("identity_challenges"."verified_uid" is not null and "identity_challenges"."verified_at" is not null and "identity_challenges"."event_id" is not null))
 );
 --> statement-breakpoint
 CREATE TABLE "verification_rooms" (
@@ -424,7 +385,7 @@ ALTER TABLE "announcement_reads" ADD CONSTRAINT "announcement_reads_user_id_user
 ALTER TABLE "announcements" ADD CONSTRAINT "announcements_creator_id_creators_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."creators"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "announcements" ADD CONSTRAINT "announcements_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "platform_appearance" ADD CONSTRAINT "platform_appearance_updated_by_user_id_users_id_fk" FOREIGN KEY ("updated_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "password_credentials" ADD CONSTRAINT "password_credentials_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "addresses" ADD CONSTRAINT "addresses_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gift_cover_objects" ADD CONSTRAINT "gift_cover_objects_gift_release_id_gift_releases_id_fk" FOREIGN KEY ("gift_release_id") REFERENCES "public"."gift_releases"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -447,15 +408,10 @@ ALTER TABLE "gift_tier_rules" ADD CONSTRAINT "gift_tier_rules_gift_release_id_gi
 ALTER TABLE "gift_tier_rules" ADD CONSTRAINT "gift_tier_rules_gift_package_id_gift_packages_id_fk" FOREIGN KEY ("gift_package_id") REFERENCES "public"."gift_packages"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_actor_user_id_users_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_creator_id_creators_id_fk" FOREIGN KEY ("creator_id") REFERENCES "public"."creators"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bilibili_bindings" ADD CONSTRAINT "bilibili_bindings_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "bilibili_bindings" ADD CONSTRAINT "bilibili_bindings_challenge_id_binding_challenges_id_fk" FOREIGN KEY ("challenge_id") REFERENCES "public"."binding_challenges"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "binding_challenges" ADD CONSTRAINT "binding_challenges_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "binding_challenges" ADD CONSTRAINT "binding_challenges_verification_room_id_verification_rooms_id_fk" FOREIGN KEY ("verification_room_id") REFERENCES "public"."verification_rooms"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "binding_conflicts" ADD CONSTRAINT "binding_conflicts_challenge_id_binding_challenges_id_fk" FOREIGN KEY ("challenge_id") REFERENCES "public"."binding_challenges"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "binding_conflicts" ADD CONSTRAINT "binding_conflicts_observed_binding_id_bilibili_bindings_id_fk" FOREIGN KEY ("observed_binding_id") REFERENCES "public"."bilibili_bindings"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "binding_conflicts" ADD CONSTRAINT "binding_conflicts_closed_by_user_id_users_id_fk" FOREIGN KEY ("closed_by_user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "creators" ADD CONSTRAINT "creators_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "creators" ADD CONSTRAINT "creators_binding_id_bilibili_bindings_id_fk" FOREIGN KEY ("binding_id") REFERENCES "public"."bilibili_bindings"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "creators" ADD CONSTRAINT "creators_user_uid_fk" FOREIGN KEY ("user_id","bilibili_uid") REFERENCES "public"."users"("id","bilibili_uid") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "identity_challenges" ADD CONSTRAINT "identity_challenges_verification_room_id_verification_rooms_id_fk" FOREIGN KEY ("verification_room_id") REFERENCES "public"."verification_rooms"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "identity_challenges" ADD CONSTRAINT "identity_challenges_expected_user_id_users_id_fk" FOREIGN KEY ("expected_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "snapshot_attempt_members" ADD CONSTRAINT "snapshot_attempt_members_snapshot_attempt_id_snapshot_attempts_id_fk" FOREIGN KEY ("snapshot_attempt_id") REFERENCES "public"."snapshot_attempts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "snapshot_attempts" ADD CONSTRAINT "snapshot_attempts_snapshot_run_id_snapshot_runs_id_fk" FOREIGN KEY ("snapshot_run_id") REFERENCES "public"."snapshot_runs"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "snapshot_attempts" ADD CONSTRAINT "snapshot_attempts_requested_by_user_id_users_id_fk" FOREIGN KEY ("requested_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -468,13 +424,10 @@ CREATE INDEX "announcement_reads_user_read_idx" ON "announcement_reads" USING bt
 CREATE INDEX "announcements_visibility_idx" ON "announcements" USING btree ("scope","status","published_at","expires_at");--> statement-breakpoint
 CREATE INDEX "announcements_scope_status_created_idx" ON "announcements" USING btree ("scope","status","created_at","id");--> statement-breakpoint
 CREATE INDEX "announcements_creator_created_idx" ON "announcements" USING btree ("creator_id","created_at","id");--> statement-breakpoint
-CREATE UNIQUE INDEX "accounts_provider_account_unique" ON "accounts" USING btree ("provider_id","account_id");--> statement-breakpoint
-CREATE INDEX "accounts_user_id_idx" ON "accounts" USING btree ("user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "sessions_token_unique" ON "sessions" USING btree ("token");--> statement-breakpoint
 CREATE INDEX "sessions_user_id_idx" ON "sessions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "sessions_expires_at_idx" ON "sessions" USING btree ("expires_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "users_email_unique" ON "users" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "verifications_identifier_idx" ON "verifications" USING btree ("identifier");--> statement-breakpoint
+CREATE UNIQUE INDEX "users_username_unique" ON "users" USING btree ("username");--> statement-breakpoint
+CREATE UNIQUE INDEX "users_bilibili_uid_unique" ON "users" USING btree ("bilibili_uid");--> statement-breakpoint
 CREATE INDEX "addresses_user_created_idx" ON "addresses" USING btree ("user_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "addresses_user_default_unique" ON "addresses" USING btree ("user_id") WHERE "addresses"."is_default" = true;--> statement-breakpoint
 CREATE UNIQUE INDEX "gift_cover_objects_release_unique" ON "gift_cover_objects" USING btree ("gift_release_id");--> statement-breakpoint
@@ -501,23 +454,15 @@ CREATE UNIQUE INDEX "gift_tier_rules_release_tier_unique" ON "gift_tier_rules" U
 CREATE INDEX "audit_logs_created_id_idx" ON "audit_logs" USING btree ("created_at","id");--> statement-breakpoint
 CREATE INDEX "audit_logs_creator_created_idx" ON "audit_logs" USING btree ("creator_id","created_at");--> statement-breakpoint
 CREATE INDEX "audit_logs_actor_created_idx" ON "audit_logs" USING btree ("actor_user_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "bilibili_bindings_challenge_unique" ON "bilibili_bindings" USING btree ("challenge_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "bilibili_bindings_active_user_unique" ON "bilibili_bindings" USING btree ("user_id") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
-CREATE UNIQUE INDEX "bilibili_bindings_active_uid_unique" ON "bilibili_bindings" USING btree ("bili_uid") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
-CREATE INDEX "bilibili_bindings_active_bound_id_idx" ON "bilibili_bindings" USING btree ("bound_at","id") WHERE "bilibili_bindings"."unbound_at" is null;--> statement-breakpoint
-CREATE INDEX "bilibili_bindings_user_history_idx" ON "bilibili_bindings" USING btree ("user_id","bound_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "binding_challenges_active_user_unique" ON "binding_challenges" USING btree ("user_id") WHERE "binding_challenges"."status" = 'ACTIVE';--> statement-breakpoint
-CREATE UNIQUE INDEX "binding_challenges_consumed_event_unique" ON "binding_challenges" USING btree ("consumed_event_id") WHERE "binding_challenges"."consumed_event_id" is not null;--> statement-breakpoint
-CREATE INDEX "binding_challenges_match_idx" ON "binding_challenges" USING btree ("verification_room_id","code_digest","status");--> statement-breakpoint
-CREATE INDEX "binding_challenges_expiry_idx" ON "binding_challenges" USING btree ("status","expires_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "binding_conflicts_challenge_unique" ON "binding_conflicts" USING btree ("challenge_id");--> statement-breakpoint
-CREATE INDEX "binding_conflicts_open_created_idx" ON "binding_conflicts" USING btree ("status","created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "creators_user_unique" ON "creators" USING btree ("user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "creators_binding_unique" ON "creators" USING btree ("binding_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "creators_bilibili_uid_unique" ON "creators" USING btree ("bilibili_uid");--> statement-breakpoint
 CREATE UNIQUE INDEX "creators_room_id_unique" ON "creators" USING btree ("room_id");--> statement-breakpoint
 CREATE INDEX "creators_monthly_sync_enabled_idx" ON "creators" USING btree ("monthly_sync_enabled");--> statement-breakpoint
 CREATE INDEX "creators_created_id_idx" ON "creators" USING btree ("created_at","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "identity_challenges_code_unique" ON "identity_challenges" USING btree ("code_digest");--> statement-breakpoint
+CREATE UNIQUE INDEX "identity_challenges_event_unique" ON "identity_challenges" USING btree ("event_id");--> statement-breakpoint
+CREATE INDEX "identity_challenges_owner_idx" ON "identity_challenges" USING btree ("owner_digest");--> statement-breakpoint
+CREATE INDEX "identity_challenges_expiry_idx" ON "identity_challenges" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "verification_rooms_bili_room_id_unique" ON "verification_rooms" USING btree ("bili_room_id");--> statement-breakpoint
 CREATE INDEX "verification_rooms_selection_idx" ON "verification_rooms" USING btree ("enabled","priority");--> statement-breakpoint
 CREATE UNIQUE INDEX "snapshot_attempt_members_attempt_uid_unique" ON "snapshot_attempt_members" USING btree ("snapshot_attempt_id","bili_uid");--> statement-breakpoint
@@ -564,28 +509,6 @@ CREATE TRIGGER gift_order_status_history_append_only
 CREATE TRIGGER announcement_reads_append_only
 	BEFORE UPDATE OR DELETE ON "announcement_reads"
 	FOR EACH ROW EXECUTE FUNCTION club_reject_mutation();--> statement-breakpoint
-
--- Binding conflicts preserve the exact challenge and binding observed when the conflict opened.
-CREATE FUNCTION enforce_binding_conflict_lifecycle() RETURNS trigger AS $$
-BEGIN
-	IF TG_OP = 'DELETE' THEN
-		RAISE EXCEPTION 'binding conflicts cannot be deleted';
-	END IF;
-	IF NEW.challenge_id IS DISTINCT FROM OLD.challenge_id
-		OR NEW.observed_binding_id IS DISTINCT FROM OLD.observed_binding_id
-		OR NEW.bili_uid IS DISTINCT FROM OLD.bili_uid
-		OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
-		RAISE EXCEPTION 'binding conflict evidence is immutable';
-	END IF;
-	IF OLD.status <> 'OPEN' OR NEW.status NOT IN ('RESOLVED', 'DISMISSED') THEN
-		RAISE EXCEPTION 'invalid binding conflict state transition';
-	END IF;
-	RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;--> statement-breakpoint
-CREATE TRIGGER binding_conflicts_lifecycle
-	BEFORE UPDATE OR DELETE ON "binding_conflicts"
-	FOR EACH ROW EXECUTE FUNCTION enforce_binding_conflict_lifecycle();--> statement-breakpoint
 
 -- Monthly roster evidence becomes immutable at its durable boundaries.
 CREATE FUNCTION preserve_completed_snapshot_attempt() RETURNS trigger AS $$
@@ -936,3 +859,17 @@ $$ LANGUAGE plpgsql;--> statement-breakpoint
 CREATE TRIGGER announcements_lifecycle
 	BEFORE UPDATE OR DELETE ON "announcements"
 	FOR EACH ROW EXECUTE FUNCTION enforce_announcement_lifecycle();
+
+--> statement-breakpoint
+CREATE FUNCTION preserve_account_identity() RETURNS trigger AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.username IS DISTINCT FROM OLD.username
+    OR NEW.bilibili_uid IS DISTINCT FROM OLD.bilibili_uid THEN
+    RAISE EXCEPTION 'account identity is immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+--> statement-breakpoint
+CREATE TRIGGER users_preserve_identity BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION preserve_account_identity();

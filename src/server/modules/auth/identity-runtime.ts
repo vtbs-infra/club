@@ -4,21 +4,21 @@ import {
   type PeriodicRuntime,
 } from '../../infrastructure/runtime/periodic-runtime.js';
 import type { RoomConnectionManager } from '../bilibili/room-connection-manager.js';
-import type { BindingService } from './binding-service.js';
+import type { IdentityService } from './identity-service.js';
 
-export type BindingRuntime = PeriodicRuntime;
+export type IdentityRuntime = PeriodicRuntime;
 
-export function createBindingRuntime(input: {
+export function createIdentityRuntime(input: {
   readonly clock: Clock;
-  readonly bindings: Pick<BindingService, 'reconcileConnections'>;
+  readonly identities: Pick<IdentityService, 'reconcileConnections'>;
   readonly connections: Pick<RoomConnectionManager, 'close'>;
   readonly reportError?: (error: unknown, operation: string) => void;
-}): BindingRuntime {
+}): IdentityRuntime {
   const runtime = createPeriodicRuntime({
     clock: input.clock,
-    name: 'binding',
+    name: 'identity',
     intervalMs: 30_000,
-    run: () => input.bindings.reconcileConnections(),
+    run: () => input.identities.reconcileConnections(),
     ...(input.reportError ? { reportError: input.reportError } : {}),
   });
   return {

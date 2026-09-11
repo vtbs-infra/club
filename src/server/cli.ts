@@ -5,8 +5,10 @@ import './config/load-local-env.js';
 
 import { loadConfig } from './config/env.js';
 import { createDatabase } from './infrastructure/db/database.js';
-import { createAuth } from './modules/auth/auth.js';
-import { bootstrapPlatformAdmin } from './modules/users/admin-bootstrap.js';
+import {
+  bootstrapPlatformAdmin,
+  resetPlatformAdminPassword,
+} from './modules/users/admin-bootstrap.js';
 
 async function promptHidden(prompt: string): Promise<string> {
   if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stdin.setRawMode) {
@@ -45,35 +47,41 @@ async function promptHidden(prompt: string): Promise<string> {
 
 async function main(): Promise<void> {
   const [command, ...arguments_] = process.argv.slice(2);
-  if (command !== 'admin:create') {
-    throw new Error('Usage: pnpm club admin:create --email <email> --name <display-name>');
+  if (command !== 'admin:create' && command !== 'admin:reset-password') {
+    throw new Error(
+      'Usage: pnpm club admin:create --username <username> --name <display-name> | admin:reset-password --username <username>',
+    );
   }
   const { values } = parseArgs({
     args: arguments_,
     options: {
-      email: { type: 'string' },
+      username: { type: 'string' },
       name: { type: 'string' },
     },
     strict: true,
   });
-  if (!values.email || !values.name) {
-    throw new Error('Both --email and --name are required.');
+  if (!values.username || (command === 'admin:create' && !values.name)) {
+    throw new Error('--username is required, and admin:create also requires --name.');
   }
   const password = process.env.CLUB_ADMIN_PASSWORD ?? (await promptHidden('Password: '));
-  if (password.length < 8) throw new Error('Password must be at least 8 characters.');
+  if (password.length < 12) throw new Error('Password must be at least 12 characters.');
 
   const config = loadConfig();
   const database = createDatabase(config.databaseUrl);
   try {
-    const auth = createAuth({ config, database });
-    const administrator = await bootstrapPlatformAdmin({
-      auth,
-      database,
-      email: values.email,
-      name: values.name,
-      password,
-    });
-    process.stdout.write(`Created platform administrator ${administrator.email}.\n`);
+    await database.checkSchema();
+    if (command === 'admin:create') {
+      const administrator = await bootstrapPlatformAdmin({
+        database,
+        username: values.username,
+        name: values.name!,
+        password,
+      });
+      process.stdout.write(`Created platform administrator ${administrator.username}.\n`);
+    } else {
+      await resetPlatformAdminPassword({ database, username: values.username, password });
+      process.stdout.write('Administrator password reset; all sessions revoked.\n');
+    }
   } finally {
     await database.close();
   }
