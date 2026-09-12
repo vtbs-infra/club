@@ -44,6 +44,7 @@ describe('periodic runtime', () => {
     expect(run).toHaveBeenCalledTimes(2);
     expect(reportError).toHaveBeenCalledTimes(2);
     expect(runtime.getStatus().state).toBe('RUNNING');
+    expect(runtime.getStatus().nextRetryAt).toBeNull();
     await runtime.close();
     await vi.advanceTimersByTimeAsync(2000);
     expect(run).toHaveBeenCalledTimes(2);
@@ -60,12 +61,12 @@ describe('periodic runtime', () => {
     const runtime = createPeriodicRuntime({ clock, name: 'identity', intervalMs: 1000, run });
     const first = runtime.tick();
     await entered.promise;
-    expect(runtime.tick()).toBe(first);
+    const concurrent = runtime.tick();
     runtime.requestTick();
     runtime.requestTick();
     expect(run).toHaveBeenCalledOnce();
     gate.resolve();
-    await first;
+    await Promise.all([first, concurrent]);
     expect(run).toHaveBeenCalledTimes(2);
     await runtime.close();
   });

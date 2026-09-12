@@ -4,12 +4,7 @@ export const THEME_PRESETS = ['moe', 'neon', 'archive', 'pixel'] as const;
 
 export type ThemePreset = (typeof THEME_PRESETS)[number];
 
-export const ThemePresetSchema = Type.Union([
-  Type.Literal('moe'),
-  Type.Literal('neon'),
-  Type.Literal('archive'),
-  Type.Literal('pixel'),
-]);
+export const ThemePresetSchema = Type.Union(THEME_PRESETS.map((preset) => Type.Literal(preset)));
 
 export const AppearanceSchema = Type.Object({
   themePreset: ThemePresetSchema,

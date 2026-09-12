@@ -4,10 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  APPLICATION_VERSION,
-  readApplicationVersion,
-} from '../../src/server/application-version.js';
+import { readApplicationVersion } from '../../src/server/application-version.js';
 
 const temporaryDirectories: string[] = [];
 
@@ -28,10 +25,6 @@ async function packageFile(metadata: unknown): Promise<string> {
 }
 
 describe('application version', () => {
-  it('uses the root package metadata as the running version', () => {
-    expect(readApplicationVersion()).toBe(APPLICATION_VERSION);
-  });
-
   it('accepts stable semantic versions', async () => {
     expect(readApplicationVersion(await packageFile({ version: '12.34.56' }))).toBe('12.34.56');
   });

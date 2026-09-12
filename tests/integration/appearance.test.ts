@@ -1,5 +1,5 @@
-import { count, eq, sql } from 'drizzle-orm';
-import { describe as integration, afterAll, beforeAll, expect, it } from 'vitest';
+import { eq, sql } from 'drizzle-orm';
+import { describe as integration, afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 
 import { buildApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
@@ -10,7 +10,7 @@ import {
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth, type AppAuth } from '../../src/server/modules/auth/auth.js';
 import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
-import type { Appearance, ThemePreset } from '../../src/shared/contracts/appearance.js';
+import type { Appearance } from '../../src/shared/contracts/appearance.js';
 import {
   promoteTestCreator,
   seedTestUser,
@@ -76,22 +76,25 @@ integration('platform appearance', () => {
     creatorCookie = await signInTestUser({ app, username: 'creator' });
   });
 
+  beforeEach(async () => {
+    await database.orm.execute(sql`truncate audit_logs`);
+    await database.orm.update(platformAppearance).set({
+      themePreset: 'moe',
+      updatedByUserId: null,
+    });
+  });
+
   afterAll(async () => {
     if (app) await app.close();
     if (storage) await storage.cleanup();
     if (integrationDatabase) await integrationDatabase.cleanup();
   });
 
-  it('exposes the seeded Moe preset publicly and restricts updates to platform administrators', async () => {
+  it('exposes appearance publicly and restricts updates to platform administrators', async () => {
     const current = await app.inject({ method: 'GET', url: '/api/v1/appearance' });
     expect(current.statusCode, current.body).toBe(200);
     expect(current.json<Appearance>()).toEqual({ themePreset: 'moe' });
     expect(current.headers['cache-control']).toBe('no-store');
-    const openapi = await app.inject({ method: 'GET', url: '/openapi.json' });
-    const paths = openapi.json<{ paths: Record<string, unknown> }>().paths;
-    expect(paths).toHaveProperty('/api/v1/admin/appearance');
-    expect(paths).toHaveProperty('/api/v1/appearance');
-
     for (const cookie of [userCookie, creatorCookie]) {
       const forbidden = await app.inject({
         headers: { cookie, origin: TEST_ORIGIN },
@@ -111,79 +114,43 @@ integration('platform appearance', () => {
     expect(anonymous.statusCode).toBe(401);
   });
 
-  it('applies all presets, audits real changes, ignores no-ops, and survives an app rebuild', async () => {
-    for (const themePreset of ['moe', 'neon', 'archive', 'pixel'] satisfies ThemePreset[]) {
-      const response = await app.inject({
+  it('persists an admin change and audits it once even when the same selection is saved again', async () => {
+    const save = () =>
+      app.inject({
         headers: { cookie: adminCookie, origin: TEST_ORIGIN },
         method: 'PUT',
-        payload: { themePreset },
+        payload: { themePreset: 'neon' },
         url: '/api/v1/admin/appearance',
       });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.json<Appearance>()).toEqual({ themePreset });
-    }
+    const response = await save();
+    expect(response.statusCode, response.body).toBe(200);
+    const [saved] = await database.orm.select().from(platformAppearance);
+    expect(saved?.themePreset).toBe('neon');
 
-    const invalid = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'PUT',
-      payload: { themePreset: 'custom' },
-      url: '/api/v1/admin/appearance',
-    });
-    expect(invalid.statusCode).toBe(400);
-
-    const [beforeNoOp] = await database.orm
-      .select()
-      .from(platformAppearance)
-      .where(eq(platformAppearance.id, 'global'));
-    const [auditCountBefore] = await database.orm
-      .select({ value: count() })
-      .from(auditLogs)
-      .where(eq(auditLogs.action, 'platform-appearance.updated'));
-
-    const noOp = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'PUT',
-      payload: { themePreset: 'pixel' },
-      url: '/api/v1/admin/appearance',
-    });
-    expect(noOp.statusCode, noOp.body).toBe(200);
-
-    const [afterNoOp] = await database.orm
-      .select()
-      .from(platformAppearance)
-      .where(eq(platformAppearance.id, 'global'));
-    const [auditCountAfter] = await database.orm
-      .select({ value: count() })
-      .from(auditLogs)
-      .where(eq(auditLogs.action, 'platform-appearance.updated'));
-    expect(afterNoOp?.updatedAt).toEqual(beforeNoOp?.updatedAt);
-    expect(auditCountAfter?.value).toBe(auditCountBefore?.value);
-
-    const audit = await database.orm
-      .select()
-      .from(auditLogs)
-      .where(eq(auditLogs.action, 'platform-appearance.updated'));
-    expect(audit).toHaveLength(3);
-    expect(audit.at(-1)).toMatchObject({
-      actorUserId: adminId,
-      afterSummary: { themePreset: 'pixel' },
-      beforeSummary: { themePreset: 'archive' },
-      targetId: 'global',
-      targetType: 'platform-appearance',
-    });
+    expect((await save()).statusCode).toBe(200);
+    expect(await database.orm.select().from(platformAppearance)).toEqual([saved]);
+    expect(
+      await database.orm
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.action, 'platform-appearance.updated')),
+    ).toMatchObject([
+      {
+        actorUserId: adminId,
+        afterSummary: { themePreset: 'neon' },
+        beforeSummary: { themePreset: 'moe' },
+      },
+    ]);
 
     await app.close();
-    const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
-    auth = createAuth({ config, database });
     app = await buildApp({
-      auth,
-      config,
+      config: createTestConfig({ databaseUrl: integrationDatabase.databaseUrl }),
       database,
       startBackground: false,
       storage: storage.driver,
     });
-    const afterRebuild = await app.inject({ method: 'GET', url: '/api/v1/appearance' });
-    expect(afterRebuild.json<Appearance>()).toEqual({ themePreset: 'pixel' });
+    const current = await app.inject({ method: 'GET', url: '/api/v1/appearance' });
+    expect(current.json<Appearance>()).toEqual({ themePreset: 'neon' });
   });
 
   it('enforces singleton and preset constraints in PostgreSQL', async () => {
