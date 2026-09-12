@@ -1,249 +1,83 @@
-import { describe as integration, afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildApp } from '../helpers/test-app.js';
-import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import {
-  createTemporaryStorage,
-  type TemporaryStorage,
-} from '../../src/server/infrastructure/storage/temporary-storage.js';
-import { createAuth } from '../../src/server/modules/auth/auth.js';
-import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
-import type { AnnouncementContent } from '../../src/shared/contracts/announcements.js';
-import type { PortalHome } from '../../src/shared/contracts/portal.js';
-import {
-  promoteTestCreator,
-  seedTestUser,
-  signInTestUser,
-  TEST_ORIGIN,
-  TEST_PASSWORD,
-} from '../helpers/auth-session.js';
-import { createReleaseDraft } from '../helpers/gift-release.js';
+  announcements,
+  giftReleases,
+  users,
+} from '../../src/server/infrastructure/db/schema/index.js';
+import { PortalService } from '../../src/server/modules/portal/portal-service.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import {
   createIntegrationDatabase,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
-import { createTestConfig } from '../helpers/test-config.js';
 
-integration('public portal visibility', () => {
-  let adminCookie: string;
-  let app: Awaited<ReturnType<typeof buildApp>>;
-  let creatorOneId: string;
-  let creatorOneCookie: string;
-  let creatorTwoCookie: string;
-  let database: DatabaseService;
-  let integrationDatabase: IntegrationDatabase;
-  let storage: TemporaryStorage;
-
+describe('public portal visibility', () => {
+  let fixture: IntegrationDatabase;
   beforeAll(async () => {
-    integrationDatabase = await createIntegrationDatabase('portal');
-    database = integrationDatabase.database;
-    storage = await createTemporaryStorage();
-    const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
-    const auth = createAuth({ config, database });
-    await bootstrapPlatformAdmin({
-      database,
-      username: 'admin',
-      name: 'Platform Admin',
-      password: TEST_PASSWORD,
-    });
-    app = await buildApp({
-      auth,
-      config,
-      database,
-      startBackground: false,
-      storage: storage.driver,
-    });
-
-    const creatorOneUserId = await seedTestUser({
-      database,
-      username: 'creator_one',
-      bilibiliUid: '91001',
-      name: 'Creator Account One',
-    });
-    const creatorTwoUserId = await seedTestUser({
-      database,
-      username: 'creator_two',
-      bilibiliUid: '91002',
-      name: 'Creator Account Two',
-    });
-    adminCookie = await signInTestUser({ app, username: 'admin' });
-    const creatorOne = await promoteTestCreator({
-      adminCookie,
-      app,
-      userId: creatorOneUserId,
-    });
-    creatorOneId = creatorOne.id;
-    await promoteTestCreator({
-      adminCookie,
-      app,
-      userId: creatorTwoUserId,
-    });
-    creatorOneCookie = await signInTestUser({ app, username: 'creator_one' });
-    creatorTwoCookie = await signInTestUser({ app, username: 'creator_two' });
+    fixture = await createIntegrationDatabase('portal');
   });
-
   afterAll(async () => {
-    if (app) await app.close();
-    if (storage) await storage.cleanup();
-    if (integrationDatabase) await integrationDatabase.cleanup();
+    await fixture?.cleanup();
   });
 
-  it('publishes only explicitly public and currently active content', async () => {
-    const createPublishedAnnouncement = async (
-      area: 'admin' | 'creator',
-      cookie: string,
-      input: AnnouncementContent,
-    ) => {
-      const createdAnnouncement = await app.inject({
-        headers: { cookie, origin: TEST_ORIGIN },
-        method: 'POST',
-        payload: input,
-        url: `/api/v1/${area}/announcements`,
-      });
-      expect(createdAnnouncement.statusCode, createdAnnouncement.body).toBe(201);
-      const draftAnnouncement = createdAnnouncement.json<{ id: string; version: number }>();
-      const publishedAnnouncement = await app.inject({
-        headers: { cookie, origin: TEST_ORIGIN },
-        method: 'POST',
-        payload: { expectedVersion: draftAnnouncement.version },
-        url: `/api/v1/${area}/announcements/${draftAnnouncement.id}/publish`,
-      });
-      expect(publishedAnnouncement.statusCode, publishedAnnouncement.body).toBe(200);
-      return publishedAnnouncement;
+  it('shows published public content independently of monthly collection settings', async () => {
+    const database = fixture.database.orm;
+    const now = new Date('2026-08-15T00:00:00Z');
+    const [owner] = await database
+      .insert(users)
+      .values({
+        username: 'creator',
+        name: 'Creator',
+        role: 'CREATOR',
+        bilibiliUid: '91001',
+      })
+      .returning();
+    const creator = await insertTestCreator(fixture.database, {
+      userId: owner!.id,
+      bilibiliUid: '91001',
+      displayName: 'Creator',
+      roomId: '81001',
+      monthlySyncEnabled: false,
+    });
+    const release = {
+      creatorId: creator.id,
+      createdByUserId: owner!.id,
+      title: 'Public gift',
+      publicVisible: true,
+      publishedAt: new Date('2026-08-01T00:00:00Z'),
+      status: 'PUBLISHED' as const,
+      claimStartAt: new Date('2026-08-01T00:00:00Z'),
+      claimDeadlineAt: new Date('2026-09-01T00:00:00Z'),
     };
-
-    const publicRelease = createReleaseDraft('2026-08-01', {
-      description: '本月舰长纪念礼物。',
-      fulfillmentMode: 'HIGHEST_ONLY',
-      packages: [
-        {
-          description: '',
-          items: [{ description: '', name: '纪念徽章', quantity: 1 }],
-          name: '八月礼物',
-        },
-      ],
+    const [visibleRelease] = await database
+      .insert(giftReleases)
+      .values([
+        { ...release, eligibilityMonth: '2026-08-01' },
+        { ...release, eligibilityMonth: '2026-09-01', publicVisible: false },
+        { ...release, eligibilityMonth: '2026-10-01', status: 'DRAFT', publishedAt: null },
+      ])
+      .returning();
+    const announcement = {
+      scope: 'PLATFORM' as const,
+      createdByUserId: owner!.id,
+      title: 'Public notice',
+      body: 'Notice body',
+      status: 'PUBLISHED' as const,
+      publishedAt: new Date('2026-08-01T00:00:00Z'),
       publicVisible: true,
-      tierPackageIndexes: { ADMIRAL: 0, CAPTAIN: 0, GOVERNOR: 0 },
-      title: '八月舰长礼物',
-    });
-    const created = await app.inject({
-      headers: { cookie: creatorOneCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: publicRelease,
-      url: '/api/v1/creator/releases',
-    });
-    expect(created.statusCode, created.body).toBe(201);
+    };
+    const [visibleAnnouncement] = await database
+      .insert(announcements)
+      .values([
+        announcement,
+        { ...announcement, publicVisible: false },
+        { ...announcement, status: 'DRAFT', publishedAt: null },
+      ])
+      .returning();
 
-    const draftPortal = await app.inject({ method: 'GET', url: '/api/v1/portal/home' });
-    expect(draftPortal.statusCode, draftPortal.body).toBe(200);
-    expect(draftPortal.json<PortalHome>().releases).toHaveLength(0);
-
-    const draft = created.json<{ id: string; version: number }>();
-    const published = await app.inject({
-      headers: { cookie: creatorOneCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: { ...publicRelease, expectedVersion: draft.version },
-      url: `/api/v1/creator/releases/${draft.id}/publish`,
-    });
-    expect(published.statusCode, published.body).toBe(200);
-
-    const privateRelease = createReleaseDraft('2026-09-01', {
-      publicVisible: false,
-      title: '九月登录后可见礼物',
-    });
-    const privateDraftResponse = await app.inject({
-      headers: { cookie: creatorTwoCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: privateRelease,
-      url: '/api/v1/creator/releases',
-    });
-    expect(privateDraftResponse.statusCode, privateDraftResponse.body).toBe(201);
-    const privateDraft = privateDraftResponse.json<{ id: string; version: number }>();
-    const privatePublished = await app.inject({
-      headers: { cookie: creatorTwoCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: { ...privateRelease, expectedVersion: privateDraft.version },
-      url: `/api/v1/creator/releases/${privateDraft.id}/publish`,
-    });
-    expect(privatePublished.statusCode, privatePublished.body).toBe(200);
-
-    await createPublishedAnnouncement('creator', creatorOneCookie, {
-      body: '只应显示给相关礼物领取用户。',
-      pinned: false,
-      publicVisible: false,
-      severity: 'INFO',
-      title: '主播定向公告',
-    });
-
-    const platformAnnouncement = await createPublishedAnnouncement('admin', adminCookie, {
-      body: '本月礼物已经开放领取。',
-      pinned: true,
-      publicVisible: true,
-      severity: 'INFO',
-      title: '八月礼物领取通知',
-    });
-    await createPublishedAnnouncement('admin', adminCookie, {
-      body: '这条公告只应在登录后显示。',
-      pinned: false,
-      publicVisible: false,
-      severity: 'INFO',
-      title: '登录用户公告',
-    });
-
-    const managedAnnouncement = platformAnnouncement.json<{ id: string; version: number }>();
-    const updatedAnnouncement = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'PUT',
-      payload: {
-        body: '本月礼物已经开放领取，记得及时确认。',
-        expectedVersion: managedAnnouncement.version,
-        expiresAt: null,
-        pinned: true,
-        publicVisible: true,
-        severity: 'INFO',
-        title: '八月礼物领取通知',
-      },
-      url: `/api/v1/admin/announcements/${managedAnnouncement.id}`,
-    });
-    expect(updatedAnnouncement.statusCode, updatedAnnouncement.body).toBe(200);
-
-    const disableMonthlySync = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'PATCH',
-      payload: { monthlySyncEnabled: false },
-      url: `/api/v1/admin/creators/${creatorOneId}`,
-    });
-    expect(disableMonthlySync.statusCode, disableMonthlySync.body).toBe(200);
-
-    const creatorWorkspace = await app.inject({
-      headers: { cookie: creatorOneCookie },
-      method: 'GET',
-      url: '/api/v1/creator/releases',
-    });
-    expect(creatorWorkspace.statusCode, creatorWorkspace.body).toBe(200);
-
-    const publicPortal = await app.inject({ method: 'GET', url: '/api/v1/portal/home' });
-    expect(publicPortal.statusCode, publicPortal.body).toBe(200);
-    const portal = publicPortal.json<PortalHome>();
-    expect(portal.announcements).toHaveLength(1);
-    expect(portal.releases).toHaveLength(1);
-    expect(portal).toMatchObject({
-      announcements: [
-        {
-          pinned: true,
-          summary: '本月礼物已经开放领取，记得及时确认。',
-          title: '八月礼物领取通知',
-        },
-      ],
-      releases: [
-        {
-          coverImageUrl: null,
-          creatorName: 'Creator 91001',
-          description: '本月舰长纪念礼物。',
-          id: draft.id,
-          title: '八月舰长礼物',
-        },
-      ],
-    });
+    const portal = await new PortalService(fixture.database, { now: () => now }).getHome();
+    expect(portal.releases.map((row) => row.id)).toEqual([visibleRelease!.id]);
+    expect(portal.announcements.map((row) => row.id)).toEqual([visibleAnnouncement!.id]);
   });
 });

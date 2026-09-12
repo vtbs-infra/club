@@ -90,3 +90,21 @@ export async function insertReadySnapshot(
     return { run: run!, attemptId: attempt!.id };
   });
 }
+
+/** Supplies an accepted roster to tests whose subject starts after capture and review. */
+export async function insertFinalizedSnapshot(
+  database: DatabaseService,
+  input: Parameters<typeof insertReadySnapshot>[1],
+) {
+  const { run, attemptId } = await insertReadySnapshot(database, input);
+  const [finalized] = await database.orm
+    .update(snapshotRuns)
+    .set({
+      acceptedAttemptId: attemptId,
+      finalizedAt: new Date(),
+      status: 'FINALIZED',
+    })
+    .where(eq(snapshotRuns.id, run.id))
+    .returning();
+  return finalized!;
+}

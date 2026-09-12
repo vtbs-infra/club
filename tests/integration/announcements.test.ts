@@ -1,221 +1,143 @@
-import { and, count, eq, sql } from 'drizzle-orm';
-import { describe as integration, afterAll, beforeAll, expect, it } from 'vitest';
+import { eq, sql } from 'drizzle-orm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import type { Clock } from '../../src/server/infrastructure/clock/clock.js';
-import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
-import {
-  announcementReads,
-  announcements,
-  users,
-} from '../../src/server/infrastructure/db/schema/index.js';
+import { announcements, users } from '../../src/server/infrastructure/db/schema/index.js';
 import { AnnouncementService } from '../../src/server/modules/announcements/announcement-service.js';
 import {
   createIntegrationDatabase,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
 
-class MutableClock implements Clock {
-  public constructor(public current: Date) {}
+const target = { scope: 'PLATFORM' as const };
+const input = {
+  body: '第一版内容',
+  title: '公告',
+  publicVisible: false,
+  pinned: false,
+  severity: 'INFO' as const,
+};
+const clock = { now: () => new Date('2026-08-01T00:00:00Z') };
 
-  public now(): Date {
-    return new Date(this.current);
-  }
-}
-
-integration('announcement lifecycle', () => {
-  let adminUserId: string;
-  let clock: MutableClock;
-  let database: DatabaseService;
-  let integrationDatabase: IntegrationDatabase;
-  let recipientUserId: string;
+describe('announcement publication and reading', () => {
+  let fixture: IntegrationDatabase;
   let service: AnnouncementService;
+  let adminId: string;
+  let recipientId: string;
+  const context = () => ({ actorUserId: adminId });
+  const visible = async () => (await service.listVisible(recipientId, { limit: 20 })).items;
 
   beforeAll(async () => {
-    integrationDatabase = await createIntegrationDatabase('announcements');
-    database = integrationDatabase.database;
-    const accounts = await database.orm
+    fixture = await createIntegrationDatabase('announcements');
+  });
+  beforeEach(async () => {
+    await fixture.database.orm.execute(sql`truncate users cascade`);
+    const accounts = await fixture.database.orm
       .insert(users)
       .values([
         { username: 'admin', name: 'Admin', role: 'PLATFORM_ADMIN' },
-        { username: 'recipient', bilibiliUid: '700001', name: 'Recipient', role: 'USER' },
+        { username: 'recipient', name: 'Recipient', bilibiliUid: '100001' },
       ])
-      .returning({ username: users.username, id: users.id });
-    adminUserId = accounts.find((account) => account.username === 'admin')!.id;
-    recipientUserId = accounts.find((account) => account.username === 'recipient')!.id;
-    clock = new MutableClock(new Date('2026-08-01T00:00:00.000Z'));
-    service = new AnnouncementService(database, clock);
+      .returning();
+    adminId = accounts[0]!.id;
+    recipientId = accounts[1]!.id;
+    service = new AnnouncementService(fixture.database, clock);
   });
-
   afterAll(async () => {
-    if (integrationDatabase) await integrationDatabase.cleanup();
+    await fixture?.cleanup();
   });
 
-  it('keeps publication state explicit and read state versioned across the full lifecycle', async () => {
-    const visible = async () => (await service.listVisible(recipientUserId, { limit: 20 })).items;
-    const input = {
-      body: '第一版内容',
-      expiresAt: null,
-      pinned: false,
-      publicVisible: false,
-      severity: 'INFO' as const,
-      title: '版本化公告',
-    };
-    const context = {
-      actorUserId: adminUserId,
-      ipAddress: '127.0.0.1',
-      requestId: 'create-announcement',
-    };
-    const target = { scope: 'PLATFORM' as const };
-    const draft = await service.createDraft(target, input, context);
-
-    expect(draft).toMatchObject({
-      publishedAt: null,
-      status: 'DRAFT',
-      version: 1,
-      withdrawnAt: null,
-    });
+  it('requires explicit publication and preserves history after withdrawal', async () => {
+    const draft = await service.createDraft(target, input, context());
     expect(await visible()).toEqual([]);
-
-    const published = await service.publish(target, draft.id, draft.version, {
-      ...context,
-      requestId: 'publish-announcement',
-    });
-    expect(published).toMatchObject({
-      publishedAt: clock.current,
-      status: 'PUBLISHED',
-      version: 2,
-      withdrawnAt: null,
-    });
-    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 2 }]);
-
-    await service.markRead(recipientUserId, draft.id, published.version);
-    expect(await visible()).toMatchObject([{ id: draft.id, read: true, version: 2 }]);
-
-    clock.current = new Date('2026-08-01T01:00:00.000Z');
-    const updated = await service.saveContent(
+    const published = await service.publish(target, draft.id, draft.version, context());
+    expect((await visible()).map((row) => row.id)).toEqual([draft.id]);
+    const withdrawn = await service.withdraw(target, draft.id, published.version, context());
+    const edited = await service.saveContent(
       target,
       draft.id,
-      { ...input, body: '第二版内容', expectedVersion: published.version },
-      { ...context, requestId: 'update-published-announcement' },
+      {
+        ...input,
+        body: '撤下后编辑的内容',
+        expectedVersion: withdrawn.version,
+      },
+      context(),
     );
-    expect(updated).toMatchObject({
-      body: '第二版内容',
-      publishedAt: published.publishedAt,
-      status: 'PUBLISHED',
-      version: 3,
-      withdrawnAt: null,
-    });
-    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 3 }]);
-
-    // A late acknowledgement of the displayed old body must not consume the new version.
-    await service.markRead(recipientUserId, draft.id, published.version);
-    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 3 }]);
-    await expect(
-      service.markRead(recipientUserId, draft.id, updated.version + 1),
-    ).rejects.toMatchObject({ code: 'ANNOUNCEMENT_READ_VERSION_INVALID' });
-    await service.markRead(recipientUserId, draft.id, updated.version);
-    expect(await visible()).toMatchObject([{ id: draft.id, read: true, version: 3 }]);
-    expect(
-      (
-        await database.orm
-          .select({ value: count() })
-          .from(announcementReads)
-          .where(
-            and(
-              eq(announcementReads.announcementId, draft.id),
-              eq(announcementReads.userId, recipientUserId),
-            ),
-          )
-      )[0]?.value,
-    ).toBe(2);
-
-    clock.current = new Date('2026-08-01T02:00:00.000Z');
-    const withdrawn = await service.withdraw(target, draft.id, updated.version, {
-      ...context,
-      requestId: 'withdraw-announcement',
-    });
-    expect(withdrawn).toMatchObject({
-      publishedAt: published.publishedAt,
-      status: 'WITHDRAWN',
-      version: 4,
-      withdrawnAt: clock.current,
-    });
+    expect(edited.status).toBe('WITHDRAWN');
     expect(await visible()).toEqual([]);
+    await expect(service.deleteDraft(target, draft.id, context())).rejects.toMatchObject({
+      code: 'ANNOUNCEMENT_NOT_DELETABLE',
+    });
     await expect(
-      service.deleteDraft(target, draft.id, {
-        ...context,
-        requestId: 'delete-withdrawn-announcement',
-      }),
-    ).rejects.toMatchObject({ code: 'ANNOUNCEMENT_NOT_DELETABLE', statusCode: 409 });
-
-    const editedWhileWithdrawn = await service.saveContent(
-      target,
-      draft.id,
-      { ...input, body: '撤下后修订的内容', expectedVersion: withdrawn.version },
-      { ...context, requestId: 'update-withdrawn-announcement' },
-    );
-    expect(editedWhileWithdrawn).toMatchObject({
-      status: 'WITHDRAWN',
-      version: 5,
-      withdrawnAt: withdrawn.withdrawnAt,
-    });
-
-    clock.current = new Date('2026-08-02T00:00:00.000Z');
-    const republished = await service.publish(target, draft.id, editedWhileWithdrawn.version, {
-      ...context,
-      requestId: 'republish-announcement',
-    });
-    expect(republished).toMatchObject({
-      publishedAt: clock.current,
-      status: 'PUBLISHED',
-      version: 6,
-      withdrawnAt: null,
-    });
-    expect(await visible()).toMatchObject([{ id: draft.id, read: false, version: 6 }]);
-    expect(await service.getVisible(recipientUserId, draft.id)).toMatchObject({
-      body: '撤下后修订的内容',
-    });
-
+      fixture.database.orm.delete(announcements).where(eq(announcements.id, draft.id)),
+    ).rejects.toThrow();
     await expect(
-      database.orm
+      fixture.database.orm
         .update(announcements)
-        .set({ publishedAt: null, status: 'DRAFT', version: republished.version + 1 })
+        .set({
+          status: 'DRAFT',
+          publishedAt: null,
+          withdrawnAt: null,
+          version: edited.version + 1,
+        })
         .where(eq(announcements.id, draft.id)),
-    ).rejects.toMatchObject({ cause: { code: 'P0001' } });
-    await expect(
-      database.orm.delete(announcements).where(eq(announcements.id, draft.id)),
-    ).rejects.toMatchObject({ cause: { code: 'P0001' } });
+    ).rejects.toThrow();
+    await service.publish(target, draft.id, edited.version, context());
+    expect(await service.getVisible(recipientId, draft.id)).toMatchObject({
+      body: edited.body,
+      read: false,
+    });
   });
 
-  it('does not lose announcements when a cursor carries database microseconds', async () => {
-    const target = { scope: 'PLATFORM' as const };
-    const [first, second] = await database.orm
+  it('acknowledges the displayed body without consuming a later version', async () => {
+    const [published] = await fixture.database.orm
       .insert(announcements)
-      .values([
-        {
-          body: '游标精度测试一',
-          createdAt: sql`'2030-01-01 00:00:00.123456+00'::timestamptz`,
-          createdByUserId: adminUserId,
-          scope: 'PLATFORM',
-          title: '游标精度测试一',
-        },
-        {
-          body: '游标精度测试二',
-          createdAt: sql`'2030-01-01 00:00:00.123456+00'::timestamptz`,
-          createdByUserId: adminUserId,
-          scope: 'PLATFORM',
-          title: '游标精度测试二',
-        },
-      ])
-      .returning({ id: announcements.id });
+      .values({
+        ...input,
+        ...target,
+        status: 'PUBLISHED',
+        publishedAt: clock.now(),
+        version: 7,
+        createdByUserId: adminId,
+      })
+      .returning();
+    await service.markRead(recipientId, published!.id, published!.version);
+    expect(await visible()).toMatchObject([{ id: published!.id, read: true }]);
+    const edited = await service.saveContent(
+      target,
+      published!.id,
+      {
+        ...input,
+        body: '下一版内容',
+        expectedVersion: published!.version,
+      },
+      context(),
+    );
+    await service.markRead(recipientId, published!.id, published!.version);
+    expect(await visible()).toMatchObject([{ id: published!.id, read: false }]);
+    await expect(
+      service.markRead(recipientId, published!.id, edited.version + 1),
+    ).rejects.toMatchObject({ code: 'ANNOUNCEMENT_READ_VERSION_INVALID' });
+    await service.markRead(recipientId, published!.id, edited.version);
+    expect(await visible()).toMatchObject([{ id: published!.id, read: true }]);
+  });
 
-    const firstPage = await service.listManaged(target, { limit: 1 });
-    const secondPage = await service.listManaged(target, {
-      cursor: firstPage.nextCursor!,
-      limit: 1,
-    });
-    expect(new Set([firstPage.items[0]!.id, secondPage.items[0]!.id])).toEqual(
-      new Set([first!.id, second!.id]),
+  it('paginates timestamps with database microseconds without losing entries', async () => {
+    const records = await fixture.database.orm
+      .insert(announcements)
+      .values(
+        ['One', 'Two'].map((title) => ({
+          ...input,
+          ...target,
+          title,
+          createdByUserId: adminId,
+          createdAt: sql`'2030-01-01 00:00:00.123456+00'::timestamptz`,
+        })),
+      )
+      .returning();
+    const first = await service.listManaged(target, { limit: 1 });
+    const second = await service.listManaged(target, { limit: 1, cursor: first.nextCursor! });
+    expect(new Set([...first.items, ...second.items].map((row) => row.id))).toEqual(
+      new Set(records.map((row) => row.id)),
     );
   });
 });

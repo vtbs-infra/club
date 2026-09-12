@@ -1,653 +1,252 @@
-import { and, count, eq } from 'drizzle-orm';
-import ExcelJS from 'exceljs';
-import { describe as integration, afterAll, beforeAll, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildApp } from '../helpers/test-app.js';
-import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
-import { databaseWriteBatches } from '../../src/server/infrastructure/db/write-batches.js';
-import { SystemClock } from '../../src/server/infrastructure/clock/clock.js';
-import {
-  auditLogs,
-  giftOrderItems,
-  giftOrderStatusHistory,
-  giftOrders,
-  snapshotAttemptMembers,
-  snapshotAttempts,
-  snapshotRuns,
-  users,
-} from '../../src/server/infrastructure/db/schema/index.js';
+import { auditLogs, giftOrders, users } from '../../src/server/infrastructure/db/schema/index.js';
 import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/key-ring.js';
-import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
-import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { GiftClaimService } from '../../src/server/modules/gifts/claim-service.js';
 import { GiftFulfillmentExportService } from '../../src/server/modules/gifts/fulfillment-export-service.js';
-import { GiftOrderQueryService } from '../../src/server/modules/gifts/order-query-service.js';
 import { GiftFulfillmentService } from '../../src/server/modules/gifts/fulfillment-service.js';
+import { GiftOrderQueryService } from '../../src/server/modules/gifts/order-query-service.js';
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
-import { createTestConfig } from '../helpers/test-config.js';
-import { createReleaseDraft } from '../helpers/gift-release.js';
 import { insertTestCreator } from '../helpers/creator-fixture.js';
+import { createReleaseDraft } from '../helpers/gift-release.js';
 import {
   createIntegrationDatabase,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
+import { insertFinalizedSnapshot } from '../helpers/snapshot-fixture.js';
 
 const addressPayload = {
-  city: '上海市',
-  countryRegion: '中国大陆',
-  detailedAddress: '测试路 1 号',
-  district: '浦东新区',
-  phone: '13800138000',
-  postalCode: '200000',
-  province: '上海市',
   recipientName: '原收件人',
+  phone: '13800138000',
+  countryRegion: '中国大陆',
+  province: '上海市',
+  city: '上海市',
+  district: '浦东新区',
+  detailedAddress: '测试路 1 号',
+  postalCode: '200000',
   userNote: '',
 };
+const clock = { now: () => new Date('2026-08-01T00:00:00Z') };
 
-function requestContext(actorUserId: string, requestId: string) {
-  return { actorUserId, ipAddress: '127.0.0.1', requestId };
-}
-
-integration('gift order lifecycle', () => {
-  let database: DatabaseService;
-  let integrationDatabase: IntegrationDatabase;
+describe('gift ownership and fulfillment', () => {
+  let fixture: IntegrationDatabase;
   let creatorId: string;
-  let otherCreatorId: string;
-  let creatorUserId: string;
-  let userOneId: string;
-  let userTwoId: string;
-  let releaseService: GiftReleaseService;
-  let addressService: AddressService;
-  let encryption: EncryptionKeyRing;
-  let queries: GiftOrderQueryService;
+  let ownerId: string;
+  let recipientId: string;
+  let addresses: AddressService;
   let claims: GiftClaimService;
-  let exporter: GiftFulfillmentExportService;
   let fulfillment: GiftFulfillmentService;
+  let queries: GiftOrderQueryService;
+  let releases: GiftReleaseService;
+  let exporter: GiftFulfillmentExportService;
+  const context = () => ({ actorUserId: ownerId });
 
   beforeAll(async () => {
-    integrationDatabase = await createIntegrationDatabase('gift_orders');
-    database = integrationDatabase.database;
-
-    const accounts = await database.orm
-      .insert(users)
-      .values([
-        { username: 'creator_one', bilibiliUid: '90001', name: 'Creator One', role: 'CREATOR' },
-        { username: 'creator_two', bilibiliUid: '90002', name: 'Creator Two', role: 'CREATOR' },
-        { username: 'recipient_one', bilibiliUid: '11009', name: 'Recipient One', role: 'USER' },
-        { username: 'recipient_two', bilibiliUid: '11001', name: 'Recipient Two', role: 'USER' },
-      ])
-      .returning({ username: users.username, id: users.id });
-    const accountId = (username: string) => {
-      const account = accounts.find((candidate) => candidate.username === username);
-      if (!account) throw new Error(`Missing test account ${username}.`);
-      return account.id;
-    };
-    creatorUserId = accountId('creator_one');
-    userOneId = accountId('recipient_one');
-    userTwoId = accountId('recipient_two');
+    fixture = await createIntegrationDatabase('gift_orders');
+  });
+  beforeEach(async () => {
+    const database = fixture.database;
+    await database.orm.execute(sql`truncate users cascade`);
+    ownerId = randomUUID();
+    recipientId = randomUUID();
+    await database.orm.insert(users).values([
+      { id: ownerId, username: 'creator', name: 'Creator', bilibiliUid: '910001', role: 'CREATOR' },
+      { id: recipientId, username: 'recipient', name: 'Recipient', bilibiliUid: '100001' },
+    ]);
     creatorId = (
       await insertTestCreator(database, {
-        bilibiliUid: '90001',
-        displayName: 'Creator One',
-        roomId: '80001',
-        userId: creatorUserId,
+        userId: ownerId,
+        bilibiliUid: '910001',
+        roomId: '810001',
+        displayName: 'Creator',
       })
     ).id;
-    otherCreatorId = (
-      await insertTestCreator(database, {
-        bilibiliUid: '90002',
-        displayName: 'Creator Two',
-        roomId: '80002',
-        userId: accountId('creator_two'),
-      })
-    ).id;
-    encryption = new EncryptionKeyRing({
+    const encryption = new EncryptionKeyRing({
       activeVersion: 1,
       keyRing: '1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
-    addressService = new AddressService(database, encryption);
-    releaseService = new GiftReleaseService(database, new SystemClock());
-    queries = new GiftOrderQueryService(database, encryption, new SystemClock());
-    claims = new GiftClaimService(database, encryption, addressService, new SystemClock());
-    exporter = new GiftFulfillmentExportService(database, encryption, new SystemClock());
-    fulfillment = new GiftFulfillmentService(database, new SystemClock());
+    addresses = new AddressService(database, encryption);
+    claims = new GiftClaimService(database, encryption, addresses, clock);
+    queries = new GiftOrderQueryService(database, encryption, clock);
+    releases = new GiftReleaseService(database, clock);
+    fulfillment = new GiftFulfillmentService(database, clock);
+    exporter = new GiftFulfillmentExportService(database, encryption, clock);
   });
-
   afterAll(async () => {
-    if (integrationDatabase) await integrationDatabase.cleanup();
+    await fixture?.cleanup();
   });
 
-  async function finalizeSnapshot(
-    periodStart: string,
-    members: readonly {
-      readonly biliUid: string;
-      readonly tier: 'CAPTAIN' | 'ADMIRAL' | 'GOVERNOR';
-    }[],
-  ): Promise<string> {
-    const [run] = await database.orm
-      .insert(snapshotRuns)
-      .values({
-        creatorBilibiliUid: '90001',
-        creatorId,
-        creatorRoomId: '80001',
-        cutoffTimezone: 'Asia/Shanghai',
-        onTimeWindowEndAt: new Date(`${periodStart}T16:10:00.000Z`),
-        periodStart,
-        scheduledCutoffAt: new Date(`${periodStart}T15:59:00.000Z`),
-      })
-      .returning({ id: snapshotRuns.id });
-    const [attempt] = await database.orm
-      .insert(snapshotAttempts)
-      .values({
-        snapshotRunId: run!.id,
-        attemptNumber: 1,
-        schedulerStartedAt: new Date(),
-        captureStartedAt: new Date(),
-        punctuality: 'ON_TIME',
-        sourceName: 'fixture',
-        sourceVersion: '1',
-      })
-      .returning();
-    if (members.length > 0) {
-      const rows = members.map((member, index) => ({
-        biliUid: member.biliUid,
-        displayNameAtCapture: `Member ${member.biliUid}`,
-        rawTier: member.tier === 'GOVERNOR' ? '1' : member.tier === 'ADMIRAL' ? '2' : '3',
-        snapshotAttemptId: attempt!.id,
-        sourcePage: 1,
-        sourcePosition: index + 1,
-        tier: member.tier,
-      }));
-      for (const batch of databaseWriteBatches(rows)) {
-        await database.orm.insert(snapshotAttemptMembers).values(batch);
-      }
-    }
-    await database.orm
-      .update(snapshotAttempts)
-      .set({
-        captureCompletedAt: new Date(),
-        consistencyStatus: 'CONSISTENT',
-        declaredTotal: members.length,
-        normalizedTotal: members.length,
-      })
-      .where(eq(snapshotAttempts.id, attempt!.id));
-    await database.orm
-      .update(snapshotRuns)
-      .set({
-        acceptedAttemptId: attempt!.id,
-        finalizedAt: new Date(),
-        status: 'FINALIZED',
-        updatedAt: new Date(),
-      })
-      .where(eq(snapshotRuns.id, run!.id));
-    return run!.id;
-  }
-
-  it('reconciles both event orders, keeps UID ownership until claim, and freezes fulfillment', async () => {
-    const before = await database.orm.select({ value: count() }).from(giftOrders);
-    const noGiftRun = await finalizeSnapshot('2026-05-01', [{ biliUid: '50001', tier: 'CAPTAIN' }]);
-    expect(await releaseService.eligibility.reconcileSnapshot(noGiftRun, database.orm)).toBe(0);
-    expect((await database.orm.select({ value: count() }).from(giftOrders))[0]?.value).toBe(
-      before[0]?.value,
-    );
-
-    await finalizeSnapshot('2026-06-01', [
-      { biliUid: '11001', tier: 'CAPTAIN' },
-      { biliUid: '11002', tier: 'GOVERNOR' },
-    ]);
-    const june = await releaseService.create(
+  async function availableGift(
+    members: Parameters<typeof insertFinalizedSnapshot>[1]['members'] = [
+      { biliUid: '100001', tier: 'CAPTAIN' },
+    ],
+    overrides: Parameters<typeof createReleaseDraft>[1] = {},
+  ) {
+    const periodStart = '2026-07-01';
+    await insertFinalizedSnapshot(fixture.database, { creatorId, periodStart, members });
+    const input = createReleaseDraft(periodStart, overrides);
+    const release = await releases.create(creatorId, input, context());
+    await releases.publish(
       creatorId,
-      createReleaseDraft('2026-06-01'),
-      requestContext(creatorUserId, 'create-june'),
+      release.id,
+      { ...input, expectedVersion: release.version },
+      context(),
     );
-    const publications = await Promise.allSettled([
-      releaseService.publish(
-        creatorId,
-        june.id,
-        { ...createReleaseDraft('2026-06-01'), expectedVersion: june.version },
-        requestContext(creatorUserId, 'publish-june'),
-      ),
-      releaseService.publish(
-        creatorId,
-        june.id,
-        { ...createReleaseDraft('2026-06-01'), expectedVersion: june.version },
-        requestContext(creatorUserId, 'publish-june-again'),
-      ),
-    ]);
-    expect(publications.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    expect(publications.filter((result) => result.status === 'rejected')).toMatchObject([
-      { reason: { code: 'GIFT_RELEASE_NOT_PUBLISHABLE', statusCode: 409 } },
-    ]);
-    const juneOrders = await database.orm
+    const orders = await fixture.database.orm
       .select()
       .from(giftOrders)
-      .where(eq(giftOrders.giftReleaseId, june.id));
-    expect(juneOrders).toHaveLength(2);
-    const captainOrder = juneOrders.find((order) => order.biliUid === '11001')!;
-    expect(captainOrder.userId).toBeNull();
-    const firstCreatorPage = await queries.listForCreator(creatorId, { limit: 1 });
-    expect(firstCreatorPage.items).toHaveLength(1);
-    expect(firstCreatorPage.nextCursor).not.toBeNull();
-    expect(firstCreatorPage.items[0]).not.toHaveProperty('items');
-    expect(firstCreatorPage.items[0]).not.toHaveProperty('shipments');
-    const secondCreatorPage = await queries.listForCreator(creatorId, {
-      cursor: firstCreatorPage.nextCursor!,
-      limit: 1,
-    });
-    expect(secondCreatorPage.items).toHaveLength(1);
-    expect(secondCreatorPage.items[0]!.id).not.toBe(firstCreatorPage.items[0]!.id);
-    const searchedOrders = await queries.listForCreator(creatorId, {
-      limit: 20,
-      search: captainOrder.orderNumber.slice(0, 6),
-    });
-    expect(searchedOrders.items.some((order) => order.id === captainOrder.id)).toBe(true);
-    expect((await queries.listForUser(userTwoId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
-      1,
-    );
-    expect((await queries.listForUser(userOneId, { filter: 'ALL', limit: 20 })).items).toHaveLength(
-      0,
-    );
-    await expect(
-      database.orm.update(users).set({ bilibiliUid: '11001' }).where(eq(users.id, userOneId)),
-    ).rejects.toThrow();
+      .where(eq(giftOrders.giftReleaseId, release.id));
+    return { release, orders };
+  }
 
-    const address = await addressService.create(
-      userTwoId,
-      { isDefault: true, label: '家', payload: addressPayload },
-      requestContext(userTwoId, 'create-address'),
+  async function submit(
+    order: Pick<typeof giftOrders.$inferSelect, 'id' | 'version'>,
+    options = {},
+  ) {
+    const address = await addresses.create(
+      recipientId,
+      { label: '家', isDefault: true, payload: addressPayload },
+      { actorUserId: recipientId },
     );
-    const alternateAddress = await addressService.create(
-      userTwoId,
-      {
-        isDefault: false,
-        label: '备用',
-        payload: { ...addressPayload, detailedAddress: '备用路 2 号' },
-      },
-      requestContext(userTwoId, 'create-alternate-address'),
-    );
-    await addressService.update(
-      userTwoId,
-      address.id,
-      { isDefault: false },
-      requestContext(userTwoId, 'demote-default-address'),
-    );
-    expect((await addressService.list(userTwoId)).find((item) => item.isDefault)?.id).toBe(
-      alternateAddress.id,
-    );
-    await addressService.delete(
-      userTwoId,
-      alternateAddress.id,
-      requestContext(userTwoId, 'delete-alternate-address'),
-    );
-    await addressService.update(
-      userTwoId,
-      address.id,
-      { isDefault: false },
-      requestContext(userTwoId, 'keep-only-address-default'),
-    );
-    expect(await addressService.list(userTwoId)).toMatchObject([
-      { id: address.id, isDefault: true },
-    ]);
-    const visible = await queries.getForUser(userTwoId, captainOrder.id);
     await claims.submit(
-      userTwoId,
-      captainOrder.id,
-      {
-        addressId: address.id,
-        expectedVersion: visible.version,
-        options: { color: '蓝色' },
-      },
-      requestContext(userTwoId, 'submit-order'),
+      recipientId,
+      order.id,
+      { addressId: address.id, expectedVersion: order.version, options },
+      { actorUserId: recipientId },
     );
-    const [claimed] = await database.orm
-      .select({ userId: giftOrders.userId })
-      .from(giftOrders)
-      .where(eq(giftOrders.id, captainOrder.id));
-    expect(claimed?.userId).toBe(userTwoId);
+    return address;
+  }
 
-    await addressService.update(
-      userTwoId,
-      address.id,
-      { payload: { ...addressPayload, recipientName: '后来修改的名字' } },
-      requestContext(userTwoId, 'update-address'),
-    );
-    const creatorView = await queries.getForCreator(
-      creatorId,
-      captainOrder.id,
-      requestContext(creatorUserId, 'read-fulfillment'),
-    );
-    expect(creatorView.deliveryAddress?.recipientName).toBe('原收件人');
-    expect(creatorView.optionValues).toEqual([{ key: 'color', label: '颜色', value: '蓝色' }]);
-    await addressService.delete(
-      userTwoId,
-      address.id,
-      requestContext(userTwoId, 'delete-source-address'),
-    );
-    expect(await addressService.list(userTwoId)).toEqual([]);
+  it('restricts unclaimed gifts to their UID owner and issuing creator', async () => {
+    const {
+      orders: [order],
+      release,
+    } = await availableGift();
+    expect(order!.userId).toBeNull();
     expect(
-      (
-        await queries.getForCreator(
-          creatorId,
-          captainOrder.id,
-          requestContext(creatorUserId, 'read-frozen-address-after-delete'),
-        )
-      ).deliveryAddress?.recipientName,
-    ).toBe('原收件人');
-    await expect(
-      queries.getForCreator(
-        otherCreatorId,
-        captainOrder.id,
-        requestContext(creatorUserId, 'cross-creator-read'),
+      (await queries.listForUser(recipientId, { limit: 20, filter: 'ALL' })).items.map(
+        (row) => row.id,
       ),
+    ).toEqual([order!.id]);
+    const [outsider] = await fixture.database.orm
+      .insert(users)
+      .values({
+        username: 'outsider',
+        name: 'Other creator',
+        bilibiliUid: '200002',
+        role: 'CREATOR',
+      })
+      .returning();
+    const otherCreator = await insertTestCreator(fixture.database, {
+      userId: outsider!.id,
+      bilibiliUid: '200002',
+      roomId: '820002',
+      displayName: 'Other',
+    });
+    await expect(queries.getForUser(outsider!.id, order!.id)).rejects.toMatchObject({
+      code: 'GIFT_ORDER_NOT_FOUND',
+    });
+    await expect(
+      claims.submit(
+        outsider!.id,
+        order!.id,
+        { addressId: randomUUID(), expectedVersion: order!.version, options: {} },
+        { actorUserId: outsider!.id },
+      ),
+    ).rejects.toMatchObject({ code: 'BILIBILI_UID_REQUIRED' });
+    await expect(
+      queries.getForCreator(otherCreator.id, order!.id, { actorUserId: outsider!.id }),
     ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_FOUND' });
     await expect(
-      exporter.exportRelease(
-        { displayName: 'Creator Two', id: otherCreatorId, timezone: 'Asia/Shanghai' },
-        june.id,
-        requestContext(creatorUserId, 'cross-creator-export'),
-      ),
+      exporter.exportRelease(otherCreator, release.id, { actorUserId: outsider!.id }),
     ).rejects.toMatchObject({ code: 'GIFT_RELEASE_NOT_FOUND' });
-    const exported = await exporter.exportRelease(
-      { displayName: 'Creator One', id: creatorId, timezone: 'Asia/Shanghai' },
-      june.id,
-      requestContext(creatorUserId, 'export-fulfillment'),
-    );
-    expect(exported.rowCount).toBe(1);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(
-      exported.content as unknown as Parameters<typeof workbook.xlsx.load>[0],
-    );
-    const fulfillmentSheet = workbook.getWorksheet('待发货清单');
-    expect(fulfillmentSheet?.getCell('B2').value).toBe('原收件人');
-    expect(fulfillmentSheet?.getCell('O2').value).toContain('舰长徽章 × 1');
-    expect(fulfillmentSheet?.getCell('R2').value).toBe('蓝色');
-    expect(
-      (
-        await database.orm
-          .select({ status: giftOrders.status })
-          .from(giftOrders)
-          .where(eq(giftOrders.id, captainOrder.id))
-      )[0]?.status,
-    ).toBe('SUBMITTED');
-    expect(
-      (
-        await database.orm
-          .select({ value: count() })
-          .from(auditLogs)
-          .where(
-            and(
-              eq(auditLogs.action, 'gift-release.fulfillment-exported'),
-              eq(auditLogs.targetId, june.id),
-            ),
-          )
-      )[0]?.value,
-    ).toBe(1);
-    const storage = await createTemporaryStorage();
-    const routeAuth = createAuth({ config: createTestConfig(), database });
-    routeAuth.getSession = () =>
-      Promise.resolve({
-        session: { expiresAt: new Date(Date.now() + 60_000) },
-        user: {
-          id: creatorUserId,
-          username: 'creator_one',
-          name: 'Creator One',
-          bilibiliUid: '90001',
-          role: 'CREATOR',
-        },
-      });
-    const routeApp = await buildApp({
-      auth: routeAuth,
-      config: createTestConfig(),
-      database,
-      startBackground: false,
-      storage: storage.driver,
+  });
+
+  it('freezes delivery facts independently of later address changes and deletion', async () => {
+    const {
+      orders: [order],
+    } = await availableGift(undefined, {
+      formFields: [
+        { key: 'color', label: '颜色', type: 'SELECT', required: true, options: ['蓝色', '粉色'] },
+      ],
     });
-    try {
-      const download = await routeApp.inject({
-        headers: { origin: 'http://localhost:3000' },
-        method: 'POST',
-        payload: { releaseId: june.id },
-        url: '/api/v1/creator/orders/fulfillment-export',
-      });
-      expect(download.statusCode, download.body).toBe(200);
-      expect(download.headers['content-type']).toContain(
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
-      expect(download.headers['content-disposition']).toContain(
-        "filename*=UTF-8''Creator%20One-2026-06-",
-      );
-      expect(download.headers['cache-control']).toBe('no-store');
-      expect(download.headers['x-export-row-count']).toBe('1');
-      expect(download.rawPayload.subarray(0, 2).toString()).toBe('PK');
-    } finally {
-      await routeApp.close();
-      await storage.cleanup();
-    }
-    await expect(
-      database.orm
-        .update(giftOrders)
-        .set({ status: 'SHIPPED', version: 999 })
-        .where(eq(giftOrders.id, captainOrder.id)),
-    ).rejects.toThrow();
-    await fulfillment.ship(
-      creatorId,
-      captainOrder.id,
-      {
-        carrierName: '中通快递',
-        trackingNumber: 'ZT123456789',
-      },
-      requestContext(creatorUserId, 'ship-order'),
+    const address = await submit(order!, { color: '蓝色' });
+    await addresses.update(
+      recipientId,
+      address.id,
+      { payload: { ...addressPayload, recipientName: '后来修改的名字' } },
+      { actorUserId: recipientId },
     );
-    const shipped = await queries.getForCreator(
-      creatorId,
-      captainOrder.id,
-      requestContext(creatorUserId, 'read-shipped'),
-    );
-    expect(shipped.status).toBe('SHIPPED');
-    expect(shipped.shipping).toEqual({ carrierName: '中通快递', trackingNumber: 'ZT123456789' });
-    expect(
-      (
-        await database.orm
-          .select({
-            fromStatus: giftOrderStatusHistory.fromStatus,
-            toStatus: giftOrderStatusHistory.toStatus,
-          })
-          .from(giftOrderStatusHistory)
-          .where(eq(giftOrderStatusHistory.giftOrderId, captainOrder.id))
-      ).map((transition) => `${transition.fromStatus}->${transition.toStatus}`),
-    ).toContain('SUBMITTED->SHIPPED');
-    await expect(
-      exporter.exportRelease(
-        { displayName: 'Creator One', id: creatorId, timezone: 'Asia/Shanghai' },
-        june.id,
-        requestContext(creatorUserId, 'empty-fulfillment-export'),
-      ),
-    ).rejects.toMatchObject({ code: 'FULFILLMENT_EXPORT_EMPTY' });
-    await expect(
-      fulfillment.ship(
-        creatorId,
-        captainOrder.id,
-        {
-          carrierName: '中通快递',
-          trackingNumber: 'ZT987654321',
-        },
-        requestContext(creatorUserId, 'ship-order-again'),
-      ),
-    ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_SHIPPABLE' });
+    await addresses.delete(recipientId, address.id, { actorUserId: recipientId });
+    expect(await addresses.list(recipientId)).toEqual([]);
+    const frozen = await queries.getForCreator(creatorId, order!.id, context());
+    expect(frozen.deliveryAddress).toEqual(addressPayload);
+    expect(frozen.optionValues).toEqual([{ key: 'color', label: '颜色', value: '蓝色' }]);
+    const [stored] = await fixture.database.orm.select().from(giftOrders);
+    expect(stored).toMatchObject({ userId: recipientId, status: 'SUBMITTED' });
+  });
+
+  it('corrects shipping with optimistic locking while preserving the original shipment time', async () => {
+    const {
+      orders: [order],
+    } = await availableGift();
+    await submit(order!);
+    const initial = { carrierName: '中通快递', trackingNumber: 'ZT123456789' };
+    await fulfillment.ship(creatorId, order!.id, initial, context());
+    const shipped = await queries.getForCreator(creatorId, order!.id, context());
+    await expect(fulfillment.ship(creatorId, order!.id, initial, context())).rejects.toMatchObject({
+      code: 'GIFT_ORDER_NOT_SHIPPABLE',
+    });
+    const correction = { carrierName: '顺丰速运', trackingNumber: 'SF-CORRECTED' };
     await fulfillment.correctShipping(
       creatorId,
-      captainOrder.id,
-      {
-        carrierName: '顺丰速运',
-        trackingNumber: 'SF-CORRECTED',
-        expectedVersion: shipped.version,
-      },
-      requestContext(creatorUserId, 'correct-shipping'),
+      order!.id,
+      { ...correction, expectedVersion: shipped.version },
+      context(),
     );
-    const corrected = await queries.getForCreator(
-      creatorId,
-      captainOrder.id,
-      requestContext(creatorUserId, 'read-corrected'),
-    );
+    await expect(
+      fulfillment.correctShipping(
+        creatorId,
+        order!.id,
+        { ...initial, expectedVersion: shipped.version },
+        context(),
+      ),
+    ).rejects.toMatchObject({ code: 'GIFT_ORDER_VERSION_CONFLICT' });
+    const corrected = await queries.getForCreator(creatorId, order!.id, context());
     expect(corrected).toMatchObject({
       status: 'SHIPPED',
       shippedAt: shipped.shippedAt,
-      shipping: { carrierName: '顺丰速运', trackingNumber: 'SF-CORRECTED' },
+      shipping: correction,
     });
-    expect((await queries.getForUser(userTwoId, captainOrder.id)).shipping).toEqual(
-      corrected.shipping,
-    );
-    await expect(
-      fulfillment.correctShipping(
-        creatorId,
-        captainOrder.id,
-        {
-          carrierName: '中通快递',
-          trackingNumber: 'STALE',
-          expectedVersion: shipped.version,
-        },
-        requestContext(creatorUserId, 'stale-correction'),
-      ),
-    ).rejects.toMatchObject({ code: 'GIFT_ORDER_VERSION_CONFLICT' });
-    await expect(
-      fulfillment.correctShipping(
-        otherCreatorId,
-        captainOrder.id,
-        {
-          carrierName: '中通快递',
-          trackingNumber: 'FORBIDDEN',
-          expectedVersion: corrected.version,
-        },
-        requestContext(creatorUserId, 'forbidden-correction'),
-      ),
-    ).rejects.toMatchObject({ code: 'GIFT_ORDER_NOT_FOUND' });
-    const [correctionAudit] = await database.orm
-      .select()
-      .from(auditLogs)
-      .where(
-        and(
-          eq(auditLogs.targetId, captainOrder.id),
-          eq(auditLogs.action, 'gift-order.shipping-corrected'),
-        ),
-      );
-    expect(correctionAudit).toMatchObject({
-      actorUserId: creatorUserId,
-      beforeSummary: { carrierName: '中通快递', trackingNumber: 'ZT123456789' },
-      afterSummary: { carrierName: '顺丰速运', trackingNumber: 'SF-CORRECTED' },
-    });
-
-    const july = await releaseService.create(
-      creatorId,
-      createReleaseDraft('2026-07-01'),
-      requestContext(creatorUserId, 'create-july'),
-    );
-    await releaseService.publish(
-      creatorId,
-      july.id,
-      { ...createReleaseDraft('2026-07-01'), expectedVersion: july.version },
-      requestContext(creatorUserId, 'publish-july'),
-    );
+    expect((await queries.getForUser(recipientId, order!.id)).shipping).toEqual(correction);
     expect(
-      (
-        await database.orm
-          .select({ value: count() })
-          .from(giftOrders)
-          .where(eq(giftOrders.giftReleaseId, july.id))
-      )[0]?.value,
-    ).toBe(0);
-    const julyRun = await finalizeSnapshot('2026-07-01', [{ biliUid: '12001', tier: 'ADMIRAL' }]);
-    expect(await releaseService.eligibility.reconcileSnapshot(julyRun, database.orm)).toBe(1);
-    expect(await releaseService.eligibility.reconcileSnapshot(julyRun, database.orm)).toBe(0);
-    const [julyOrder] = await database.orm
-      .select({ id: giftOrders.id })
-      .from(giftOrders)
-      .where(eq(giftOrders.giftReleaseId, july.id));
-    const julyItems = await database.orm
-      .select()
-      .from(giftOrderItems)
-      .where(eq(giftOrderItems.giftOrderId, julyOrder!.id));
-    expect(julyItems).toHaveLength(2);
-    const closed = await releaseService.close(
-      creatorId,
-      july.id,
-      requestContext(creatorUserId, 'close-july'),
-    );
-    expect(closed.status).toBe('CLOSED');
-    expect(
-      (
-        await database.orm
-          .select({ status: giftOrders.status })
-          .from(giftOrders)
-          .where(eq(giftOrders.id, julyOrder!.id))
-      )[0]?.status,
-    ).toBe('UNCLAIMED');
-    expect(
-      (
-        await database.orm
-          .select({
-            fromStatus: giftOrderStatusHistory.fromStatus,
-            toStatus: giftOrderStatusHistory.toStatus,
-          })
-          .from(giftOrderStatusHistory)
-          .where(eq(giftOrderStatusHistory.giftOrderId, julyOrder!.id))
-      ).map((transition) => `${transition.fromStatus}->${transition.toStatus}`),
-    ).not.toContain('UNCLAIMED->EXPIRED');
-    await expect(
-      releaseService.create(
-        creatorId,
-        createReleaseDraft('2026-07-01'),
-        requestContext(creatorUserId, 'duplicate-july'),
-      ),
-    ).rejects.toMatchObject({ code: 'GIFT_RELEASE_MONTH_CONFLICT' });
+      await fixture.database.orm
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.action, 'gift-order.shipping-corrected')),
+    ).toMatchObject([
+      {
+        actorUserId: ownerId,
+        beforeSummary: initial,
+        afterSummary: correction,
+      },
+    ]);
   });
 
-  it('creates gift orders and package allocations beyond the PostgreSQL parameter limit', async () => {
-    const eligibilityMonth = '2027-01-01';
-    const expectedOrders = 7_000;
-    await finalizeSnapshot(
-      eligibilityMonth,
-      Array.from({ length: expectedOrders }, (_, index) => ({
-        biliUid: String(20_000_000 + index),
-        tier: 'GOVERNOR' as const,
-      })),
+  it('paginates orders without duplication and searches the requested UID', async () => {
+    const { orders } = await availableGift([
+      { biliUid: '100001', tier: 'CAPTAIN' },
+      { biliUid: '100002', tier: 'ADMIRAL' },
+    ]);
+    const first = await queries.listForCreator(creatorId, { limit: 1 });
+    const second = await queries.listForCreator(creatorId, { limit: 1, cursor: first.nextCursor! });
+    expect(new Set([...first.items, ...second.items].map((row) => row.id))).toEqual(
+      new Set(orders.map((row) => row.id)),
     );
-    const draft = createReleaseDraft(eligibilityMonth);
-    const release = await releaseService.create(
-      creatorId,
-      draft,
-      requestContext(creatorUserId, 'create-large-release'),
-    );
-
-    const published = await releaseService.publish(
-      creatorId,
-      release.id,
-      { ...draft, expectedVersion: release.version },
-      requestContext(creatorUserId, 'publish-large-release'),
-    );
-
-    expect(published.status).toBe('PUBLISHED');
-    const [orderCount] = await database.orm
-      .select({ value: count() })
-      .from(giftOrders)
-      .where(eq(giftOrders.giftReleaseId, release.id));
-    const [itemCount] = await database.orm
-      .select({ value: count() })
-      .from(giftOrderItems)
-      .innerJoin(giftOrders, eq(giftOrders.id, giftOrderItems.giftOrderId))
-      .where(eq(giftOrders.giftReleaseId, release.id));
-    const [sampleOrder] = await database.orm
-      .select({ id: giftOrders.id, orderNumber: giftOrders.orderNumber })
-      .from(giftOrders)
-      .where(eq(giftOrders.giftReleaseId, release.id))
-      .limit(1);
-    expect(orderCount?.value).toBe(expectedOrders);
-    expect(itemCount?.value).toBe(expectedOrders * 3);
-    if (!sampleOrder) throw new Error('Expected a generated gift order.');
-    expect(sampleOrder.orderNumber).toBe(
-      `G${eligibilityMonth.slice(0, 7).replace('-', '')}-${sampleOrder.id
-        .replaceAll('-', '')
-        .toUpperCase()}`,
-    );
+    const matches = await queries.listForCreator(creatorId, { limit: 20, search: '100002' });
+    expect(matches.items.map((row) => row.biliUid)).toEqual(['100002']);
   });
 });

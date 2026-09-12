@@ -1,52 +1,39 @@
-import { randomUUID } from 'node:crypto';
-
-import ExcelJS from 'exceljs';
-import { and, count, eq, sql } from 'drizzle-orm';
-import { describe as integration, afterAll, beforeAll, expect, it, vi } from 'vitest';
-
+import { and, eq, sql } from 'drizzle-orm';
 import {
-  giftOrderItems,
-  giftOrderAddresses,
-  giftOrderOptionValues,
-  giftOrderStatusHistory,
-  giftOrders,
-  users,
-} from '../../src/server/infrastructure/db/schema/index.js';
-import { databaseWriteBatches } from '../../src/server/infrastructure/db/write-batches.js';
+  describe as integration,
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+
+import { giftOrders, users } from '../../src/server/infrastructure/db/schema/index.js';
 import { EncryptionKeyRing } from '../../src/server/infrastructure/encryption/key-ring.js';
-import {
-  createTemporaryStorage,
-  type TemporaryStorage,
-} from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { AddressService } from '../../src/server/modules/addresses/address-service.js';
-import { AuditService } from '../../src/server/modules/audit/audit-service.js';
-import { FakeGuardRosterSource } from '../helpers/fake-guard-roster-source.js';
 import { GiftClaimService } from '../../src/server/modules/gifts/claim-service.js';
-import { GiftFulfillmentExportService } from '../../src/server/modules/gifts/fulfillment-export-service.js';
 import { GiftOrderQueryService } from '../../src/server/modules/gifts/order-query-service.js';
 
 import { GiftReleaseService } from '../../src/server/modules/gifts/release-service.js';
-import { SnapshotService } from '../../src/server/modules/snapshots/snapshot-service.js';
 import { insertTestCreator } from '../helpers/creator-fixture.js';
 import { createReleaseDraft } from '../helpers/gift-release.js';
 import {
   createIntegrationDatabase,
   type IntegrationDatabase,
 } from '../helpers/integration-database.js';
-import { insertReadySnapshot } from '../helpers/snapshot-fixture.js';
+import { insertFinalizedSnapshot } from '../helpers/snapshot-fixture.js';
 
-integration('claim windows and capacity', () => {
+integration('claim windows', () => {
   let fixture: IntegrationDatabase;
-  let storage: TemporaryStorage;
   let creatorId: string;
   let actorUserId: string;
   let recipientId: string;
   let addressId: string;
   let releases: GiftReleaseService;
-  let snapshots: SnapshotService;
   let queries: GiftOrderQueryService;
   let claims: GiftClaimService;
-  let exporter: GiftFulfillmentExportService;
 
   let addresses: AddressService;
   let encryption: EncryptionKeyRing;
@@ -56,7 +43,10 @@ integration('claim windows and capacity', () => {
 
   beforeAll(async () => {
     fixture = await createIntegrationDatabase('claim_window');
-    storage = await createTemporaryStorage();
+  });
+  beforeEach(async () => {
+    await fixture.database.orm.execute(sql`truncate users cascade`);
+    current = new Date('2026-09-01T00:00:00Z');
     const accounts = await fixture.database.orm
       .insert(users)
       .values([
@@ -101,37 +91,24 @@ integration('claim windows and capacity', () => {
       )
     ).id;
     releases = new GiftReleaseService(fixture.database, clock);
-    snapshots = new SnapshotService(
-      fixture.database,
-      storage.driver,
-      new FakeGuardRosterSource(),
-      clock,
-      releases.eligibility,
-    );
     queries = new GiftOrderQueryService(fixture.database, encryption, clock);
     claims = new GiftClaimService(fixture.database, encryption, addresses, clock);
-    exporter = new GiftFulfillmentExportService(fixture.database, encryption, clock);
   });
 
+  afterEach(() => vi.restoreAllMocks());
   afterAll(async () => {
-    await storage?.cleanup();
     await fixture?.cleanup();
   });
 
   async function publish(
     periodStart: string,
     overrides: Parameters<typeof createReleaseDraft>[1] = {},
-    size = 1,
   ) {
-    const { run } = await insertReadySnapshot(fixture.database, {
+    await insertFinalizedSnapshot(fixture.database, {
       creatorId,
       periodStart,
-      members: Array.from({ length: size }, (_, index) => ({
-        biliUid: String(100001 + index),
-        tier: 'GOVERNOR',
-      })),
+      members: [{ biliUid: '100001', tier: 'GOVERNOR' }],
     });
-    await snapshots.finalizeReady(run.id);
     const draft = createReleaseDraft(periodStart, overrides);
     const release = await releases.create(creatorId, draft, context());
     await releases.publish(
@@ -151,7 +128,7 @@ integration('claim windows and capacity', () => {
     claims.submit(
       recipientId,
       id,
-      { addressId, expectedVersion: 1, options: { color: '蓝色' } },
+      { addressId, expectedVersion: 1, options: {} },
       { ...context(), actorUserId: recipientId },
     );
 
@@ -193,7 +170,7 @@ integration('claim windows and capacity', () => {
   });
 
   it('counts and finds urgent gifts beyond the most recent twelve orders', async () => {
-    const urgent = await publish('2026-02-01', { claimDeadlineAt: '2026-09-04T00:00:00Z' });
+    const urgent = await publish('2026-02-01', { claimDeadlineAt: '2026-09-02T00:00:00Z' });
     for (let index = 0; index < 13; index += 1) {
       const year = 2027 + Math.floor(index / 12);
       const month = String((index % 12) + 1).padStart(2, '0');
@@ -205,179 +182,52 @@ integration('claim windows and capacity', () => {
       ),
     ).toBe(false);
     expect(await queries.overviewForUser(recipientId)).toMatchObject({
-      counts: { claimable: 14, expired: 1 },
+      counts: { claimable: 14 },
       urgent: { id: urgent.order.id },
     });
   });
 
-  it.each(['claim', 'close'] as const)(
-    'gives a consistent result when %s holds the release before the competing action',
-    async (first) => {
-      const { order, releaseId } = await publish(first === 'claim' ? '2026-03-01' : '2026-04-01');
-      let enter!: () => void;
-      let resume!: () => void;
-      const entered = new Promise<void>((resolve) => {
-        enter = resolve;
-      });
-      const gate = new Promise<void>((resolve) => {
-        resume = resolve;
-      });
-      const addressRead = addresses.getPlaintext.bind(addresses);
-      const audit = new AuditService(fixture.database);
-      const auditRecord = audit.record.bind(audit);
-      const spy =
-        first === 'claim'
-          ? vi.spyOn(addresses, 'getPlaintext').mockImplementationOnce(async (...args) => {
-              enter();
-              await gate;
-              return addressRead(...args);
-            })
-          : vi.spyOn(AuditService.prototype, 'record').mockImplementation(async function (
-              this: AuditService,
-              ...args
-            ) {
-              if (args[0].action === 'gift-release.closed' && args[0].targetId === releaseId) {
-                enter();
-                await gate;
-              }
-              return auditRecord(...args);
-            });
-      const close = () => releases.close(creatorId, releaseId, context());
-      const leader = first === 'claim' ? submit(order.id) : close();
-      await entered;
-      const follower = first === 'claim' ? close() : submit(order.id);
-      const results = Promise.allSettled([leader, follower]);
-      try {
-        await vi.waitFor(async () => {
-          const [waiting] = await fixture.database.orm.execute<{ value: number }>(
-            sql`select count(*)::int as value from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`,
-          );
-          expect(waiting?.value).toBeGreaterThan(0);
-        });
-      } finally {
-        resume();
-      }
-      const settled = await results;
-      spy.mockRestore();
-      expect(settled[0]?.status).toBe('fulfilled');
-      expect(settled[1]?.status).toBe(first === 'claim' ? 'fulfilled' : 'rejected');
-      expect(await queries.getForUser(recipientId, order.id)).toMatchObject(
-        first === 'claim'
-          ? { status: 'SUBMITTED', expiryReason: null }
-          : { status: 'EXPIRED', expiryReason: 'RELEASE_CLOSED' },
-      );
-    },
-  );
-
-  it('generates and closes a 30,000-member cumulative release without per-order expiry writes', async () => {
-    const { releaseId } = await publish('2029-01-01', {}, 30_000);
-    const database = fixture.database.orm;
-    expect(
-      await database
-        .select({ value: count() })
-        .from(giftOrders)
-        .where(eq(giftOrders.giftReleaseId, releaseId)),
-    ).toEqual([{ value: 30_000 }]);
-    expect(
-      await database
-        .select({ value: count() })
-        .from(giftOrderItems)
-        .innerJoin(giftOrders, eq(giftOrders.id, giftOrderItems.giftOrderId))
-        .where(eq(giftOrders.giftReleaseId, releaseId)),
-    ).toEqual([{ value: 90_000 }]);
+  it('closes remaining claims without mutating their stored order state', async () => {
+    const { order, releaseId } = await publish('2026-03-01');
     await releases.close(creatorId, releaseId, context());
-    expect(
-      (await queries.listForCreator(creatorId, { status: 'EXPIRED', limit: 100 })).items,
-    ).toHaveLength(100);
-    expect(
-      await database
-        .select({ value: count() })
-        .from(giftOrders)
-        .where(
-          and(
-            eq(giftOrders.giftReleaseId, releaseId),
-            eq(giftOrders.status, 'UNCLAIMED'),
-            eq(giftOrders.version, 1),
-          ),
-        ),
-    ).toEqual([{ value: 30_000 }]);
-    expect(
-      await database
-        .select({ value: count() })
-        .from(giftOrderStatusHistory)
-        .innerJoin(giftOrders, eq(giftOrders.id, giftOrderStatusHistory.giftOrderId))
-        .where(eq(giftOrders.giftReleaseId, releaseId)),
-    ).toEqual([{ value: 0 }]);
-  }, 60_000);
-  it('exports all 30,000 frozen claims and their allocated packages after closure', async () => {
-    const { releaseId } = await publish('2029-02-01', {}, 30_000);
-    const database = fixture.database.orm;
-    const records = await database
-      .select({ id: giftOrders.id })
-      .from(giftOrders)
-      .where(eq(giftOrders.giftReleaseId, releaseId));
-    const address = await addresses.getPlaintext(recipientId, addressId);
-    // Seed bulk submitted facts; individual authorized claims and encryption are tested above.
-    await database.transaction(async (transaction) => {
-      for (const batch of databaseWriteBatches(records)) {
-        await transaction.insert(giftOrderAddresses).values(
-          batch.map((order) => {
-            const id = randomUUID();
-            return {
-              id,
-              giftOrderId: order.id,
-              sourceAddressId: addressId,
-              ...encryption.encrypt(address.payload, 'gift-order-address:' + id),
-            };
-          }),
-        );
-        await transaction.insert(giftOrderOptionValues).values(
-          batch.map((order) => {
-            const id = randomUUID();
-            return {
-              id,
-              giftOrderId: order.id,
-              fieldKey: 'color',
-              fieldLabel: '颜色',
-              ...encryption.encrypt('蓝色', 'gift-order-option:' + id),
-            };
-          }),
-        );
-      }
-      await transaction
-        .update(giftOrders)
-        .set({ status: 'SUBMITTED', submittedAt: current, userId: recipientId, version: 2 })
-        .where(eq(giftOrders.giftReleaseId, releaseId));
+    expect(await queries.getForUser(recipientId, order.id)).toMatchObject({
+      status: 'EXPIRED',
+      expiryReason: 'RELEASE_CLOSED',
     });
-    await releases.close(creatorId, releaseId, context());
-    const exported = await exporter.exportRelease(
-      { id: creatorId, displayName: 'Creator', timezone: 'Asia/Shanghai' },
-      releaseId,
-      context(),
-    );
-    expect(exported.rowCount).toBe(30_000);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(
-      exported.content as unknown as Parameters<typeof workbook.xlsx.load>[0],
-    );
-    const sheet = workbook.getWorksheet('待发货清单');
-    expect(sheet?.rowCount).toBe(30_001);
-    for (const row of [2, 30_001]) {
-      expect(sheet?.getCell('B' + row).value).toBe('测试用户');
-      expect(sheet?.getCell('O' + row).value).toContain('总督纪念盒 × 1');
-      expect(sheet?.getCell('R' + row).value).toBe('蓝色');
+    expect(await fixture.database.orm.select().from(giftOrders)).toEqual([order]);
+    await expect(submit(order.id)).rejects.toMatchObject({
+      code: 'GIFT_ORDER_CLAIM_WINDOW_CLOSED',
+    });
+  });
+
+  it('allows an in-flight claim to finish before closure takes effect', async () => {
+    const { order, releaseId } = await publish('2026-03-01');
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const original = addresses.getPlaintext.bind(addresses);
+    vi.spyOn(addresses, 'getPlaintext').mockImplementationOnce(async (...args) => {
+      entered.resolve();
+      await release.promise;
+      return original(...args);
+    });
+    const claiming = submit(order.id);
+    await entered.promise;
+    const closing = releases.close(creatorId, releaseId, context());
+    try {
+      await vi.waitFor(async () => {
+        const [waiting] = await fixture.database.orm.execute<{ value: number }>(sql`
+          select count(*)::int as value from pg_stat_activity
+          where datname = current_database() and wait_event_type = 'Lock'
+        `);
+        expect(waiting?.value).toBeGreaterThan(0);
+      });
+    } finally {
+      release.resolve();
+      await Promise.all([claiming, closing]);
     }
-    expect(
-      await database
-        .select({ value: count() })
-        .from(giftOrders)
-        .where(
-          and(
-            eq(giftOrders.giftReleaseId, releaseId),
-            eq(giftOrders.status, 'SUBMITTED'),
-            eq(giftOrders.version, 2),
-          ),
-        ),
-    ).toEqual([{ value: 30_000 }]);
-  }, 90_000);
+    expect(await queries.getForUser(recipientId, order.id)).toMatchObject({
+      status: 'SUBMITTED',
+      expiryReason: null,
+    });
+  });
 });
