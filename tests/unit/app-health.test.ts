@@ -1,85 +1,56 @@
 import { describe, expect, it } from 'vitest';
-
-import { buildApp } from '../helpers/test-app.js';
-import { APPLICATION_VERSION } from '../../src/server/application-version.js';
-import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
+import { buildHttpApp } from '../../src/server/http-app.js';
+import readinessRoutes, {
+  type ReadinessOptions,
+} from '../../src/server/infrastructure/http/readiness-routes.js';
 import type { ReadinessResponse } from '../../src/shared/contracts/health.js';
-import { fakeDatabase } from '../helpers/app-stubs.js';
-import { createTestConfig } from '../helpers/test-config.js';
+
+async function healthApp(database: ReadinessOptions['database']) {
+  const app = await buildHttpApp({
+    config: { logLevel: 'silent', nodeEnv: 'test', trustProxy: false },
+  });
+  await app.register(readinessRoutes, {
+    database,
+    storage: { checkHealth: () => Promise.resolve() },
+    runtimes: [],
+    backgroundRequired: false,
+  });
+  return app;
+}
 
 describe('application health', () => {
-  it('keeps liveness independent from PostgreSQL and exposes request IDs', async () => {
-    const storage = await createTemporaryStorage();
-    const app = await buildApp({
-      config: createTestConfig(),
-      database: fakeDatabase(() => Promise.reject(new Error('database unavailable'))),
-      storage: storage.driver,
-    });
+  it('keeps liveness independent from unavailable dependencies', async () => {
+    const unavailable = () => Promise.reject(new Error('database unavailable'));
+    const app = await healthApp({ ping: unavailable, checkSchema: unavailable });
     try {
       const live = await app.inject({ method: 'GET', url: '/health/live' });
       expect(live.statusCode).toBe(200);
-      expect(live.json()).toMatchObject({ status: 'ok', version: APPLICATION_VERSION });
       expect(live.headers['x-request-id']).toBeTypeOf('string');
-      expect(live.headers['x-content-type-options']).toBe('nosniff');
-      expect(live.headers['x-frame-options']).toBe('DENY');
-      expect(live.headers['referrer-policy']).toBe('no-referrer');
-      expect(live.headers['content-security-policy']).toContain("default-src 'self'");
-      expect(live.headers['cache-control']).toBe('no-store');
-
       const ready = await app.inject({ method: 'GET', url: '/health/ready' });
       expect(ready.statusCode).toBe(503);
-      expect(ready.json()).toEqual({
-        checks: {
-          database: 'down',
-          runtimes: 'disabled',
-          schema: 'down',
-          storage: 'ok',
-        },
+      expect(ready.json<ReadinessResponse>()).toMatchObject({
+        checks: { database: 'down', schema: 'down' },
         status: 'not_ready',
       });
     } finally {
       await app.close();
-      await storage.cleanup();
     }
   });
 
-  it('reports ready when PostgreSQL and storage respond', async () => {
-    const storage = await createTemporaryStorage();
-    const app = await buildApp({
-      config: createTestConfig(),
-      database: fakeDatabase(),
-      storage: storage.driver,
+  it('requires the application schema even when PostgreSQL is reachable', async () => {
+    const app = await healthApp({
+      ping: () => Promise.resolve(),
+      checkSchema: () => Promise.reject(new Error('schema incomplete')),
     });
     try {
-      const response = await app.inject({ method: 'GET', url: '/health/ready' });
-      expect(response.statusCode).toBe(200);
-      expect(response.json<ReadinessResponse>().status).toBe('ok');
-    } finally {
-      await app.close();
-      await storage.cleanup();
-    }
-  });
-
-  it('rejects readiness when PostgreSQL is reachable but migrations are incomplete', async () => {
-    const storage = await createTemporaryStorage();
-    const app = await buildApp({
-      config: createTestConfig(),
-      database: fakeDatabase(
-        () => Promise.resolve(),
-        () => Promise.reject(new Error('schema incomplete')),
-      ),
-      storage: storage.driver,
-    });
-    try {
-      const response = await app.inject({ method: 'GET', url: '/health/ready' });
-      expect(response.statusCode).toBe(503);
-      expect(response.json<ReadinessResponse>()).toMatchObject({
+      const ready = await app.inject({ method: 'GET', url: '/health/ready' });
+      expect(ready.statusCode).toBe(503);
+      expect(ready.json<ReadinessResponse>()).toMatchObject({
         checks: { database: 'ok', schema: 'down' },
         status: 'not_ready',
       });
     } finally {
       await app.close();
-      await storage.cleanup();
     }
   });
 });

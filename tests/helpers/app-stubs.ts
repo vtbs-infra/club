@@ -1,7 +1,5 @@
 import type { AppDatabase, DatabaseService } from '../../src/server/infrastructure/db/database.js';
-import type { IdentityRuntime } from '../../src/server/modules/auth/identity-runtime.js';
-import type { GiftMediaRuntime } from '../../src/server/modules/gifts/gift-media-runtime.js';
-import type { SnapshotRuntime } from '../../src/server/modules/snapshots/snapshot-runtime.js';
+import type { PeriodicRuntime } from '../../src/server/infrastructure/runtime/periodic-runtime.js';
 
 export function fakeDatabase(
   ping: () => Promise<void> = () => Promise.resolve(),
@@ -28,35 +26,9 @@ export function runtimeStatus(state: 'DEGRADED' | 'RUNNING' | 'STOPPED') {
   };
 }
 
-export function identityRuntimeStub(
-  overrides: Partial<Pick<IdentityRuntime, 'close' | 'getStatus' | 'start'>> = {},
-): IdentityRuntime {
-  return {
-    close: () => Promise.resolve(),
-    getStatus: () => runtimeStatus('STOPPED'),
-    start: () => Promise.resolve(),
-    requestTick: () => undefined,
-    tick: () => Promise.resolve(),
-    ...overrides,
-  };
-}
-
-export function giftMediaRuntimeStub(
-  overrides: Partial<Pick<GiftMediaRuntime, 'close' | 'getStatus' | 'start'>> = {},
-): GiftMediaRuntime {
-  return {
-    close: () => Promise.resolve(),
-    getStatus: () => runtimeStatus('STOPPED'),
-    start: () => Promise.resolve(),
-    requestTick: () => undefined,
-    tick: () => Promise.resolve(),
-    ...overrides,
-  };
-}
-
-export function snapshotRuntimeStub(
-  overrides: Partial<Pick<SnapshotRuntime, 'close' | 'getStatus' | 'start'>> = {},
-): SnapshotRuntime {
+export function runtimeStub(
+  overrides: Partial<Pick<PeriodicRuntime, 'close' | 'getStatus' | 'start'>> = {},
+): PeriodicRuntime {
   return {
     close: () => Promise.resolve(),
     getStatus: () => runtimeStatus('STOPPED'),

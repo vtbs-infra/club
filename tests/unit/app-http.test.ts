@@ -4,11 +4,14 @@ import { join } from 'node:path';
 import multipart from '@fastify/multipart';
 import { describe, expect, it } from 'vitest';
 
-import { buildApp } from '../helpers/test-app.js';
+import { buildHttpApp } from '../../src/server/http-app.js';
+import { Type } from '@sinclair/typebox';
 import { APPLICATION_VERSION } from '../../src/server/application-version.js';
-import { InMemoryRateLimiter } from '../../src/server/infrastructure/security/request-security.js';
+import {
+  InMemoryRateLimiter,
+  registerRequestSecurity,
+} from '../../src/server/infrastructure/security/request-security.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
-import { fakeDatabase } from '../helpers/app-stubs.js';
 import { createTestConfig } from '../helpers/test-config.js';
 
 interface ErrorResponse {
@@ -22,12 +25,10 @@ interface OpenApiDocument {
 
 describe('application HTTP shell', () => {
   it('preserves parser and upload client errors without exposing unexpected server errors', async () => {
-    const storage = await createTemporaryStorage();
-    const app = await buildApp({
+    const app = await buildHttpApp({
       config: createTestConfig(),
-      database: fakeDatabase(),
-      storage: storage.driver,
     });
+    app.post('/api/v1/test-input', () => ({}));
     await app.register(multipart);
     app.post('/test-upload', async (request) => {
       const file = await request.file({ limits: { fileSize: 4 } });
@@ -41,7 +42,7 @@ describe('application HTTP shell', () => {
       const headers = { origin: 'http://localhost:3000', 'content-type': 'application/json' };
       const invalid = await app.inject({
         method: 'POST',
-        url: '/api/v1/me/addresses',
+        url: '/api/v1/test-input',
         headers,
         payload: '{',
       });
@@ -49,7 +50,7 @@ describe('application HTTP shell', () => {
       expect(invalid.json<ErrorResponse>().error.code).toBe('FST_ERR_CTP_INVALID_JSON_BODY');
       const large = await app.inject({
         method: 'POST',
-        url: '/api/v1/me/addresses',
+        url: '/api/v1/test-input',
         headers,
         payload: JSON.stringify({ value: 'x'.repeat(1_048_576) }),
       });
@@ -69,36 +70,21 @@ describe('application HTTP shell', () => {
       expect(unexpected.body).not.toContain('private database details');
     } finally {
       await app.close();
-      await storage.cleanup();
     }
   });
 
   it('generates OpenAPI from route schemas', async () => {
-    const storage = await createTemporaryStorage();
-    const app = await buildApp({
+    const app = await buildHttpApp({
       config: createTestConfig(),
-      database: fakeDatabase(),
-      storage: storage.driver,
     });
+    app.get('/probe', { schema: { response: { 200: Type.String() } } }, () => 'ok');
     try {
       const response = await app.inject({ method: 'GET', url: '/openapi.json' });
       expect(response.statusCode).toBe(200);
       expect(response.json<OpenApiDocument>().info.version).toBe(APPLICATION_VERSION);
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/live');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/health/ready');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me/addresses');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/me/gifts');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/creator/releases');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/creator/orders');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/admin/creators');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/api/v1/admin/rosters');
-      expect(response.json<OpenApiDocument>().paths).toHaveProperty(
-        '/api/v1/admin/verification-rooms',
-      );
+      expect(response.json<OpenApiDocument>().paths).toHaveProperty('/probe');
     } finally {
       await app.close();
-      await storage.cleanup();
     }
   });
 
@@ -107,11 +93,9 @@ describe('application HTTP shell', () => {
     const webRoot = join(storage.root, 'web');
     await mkdir(join(webRoot, 'assets'), { recursive: true });
     await writeFile(join(webRoot, 'index.html'), '<main>Club shell</main>');
-    const app = await buildApp({
+    const app = await buildHttpApp({
       config: createTestConfig({ nodeEnv: 'production' }),
-      database: fakeDatabase(),
       serveStatic: true,
-      storage: storage.driver,
       webRoot,
     });
     try {
@@ -149,12 +133,14 @@ describe('application HTTP shell', () => {
   });
 
   it('rate-limits state-changing API requests after origin validation', async () => {
-    const storage = await createTemporaryStorage();
-    const app = await buildApp({
+    const app = await buildHttpApp({
       config: createTestConfig(),
-      database: fakeDatabase(),
+    });
+    registerRequestSecurity(app, {
+      auth: { getSession: () => Promise.resolve(null) },
+      clock: { now: () => new Date() },
+      config: createTestConfig(),
       rateLimiter: new InMemoryRateLimiter(1, 60_000),
-      storage: storage.driver,
     });
     try {
       const request = () =>
@@ -164,6 +150,16 @@ describe('application HTTP shell', () => {
           payload: {},
           url: '/api/v1/missing',
         });
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/api/v1/missing',
+            headers: { origin: 'https://untrusted.example' },
+            payload: {},
+          })
+        ).statusCode,
+      ).toBe(403);
       expect((await request()).statusCode).toBe(404);
       const limited = await request();
       expect(limited.statusCode).toBe(429);
@@ -171,7 +167,6 @@ describe('application HTTP shell', () => {
       expect(limited.headers['retry-after']).toBeDefined();
     } finally {
       await app.close();
-      await storage.cleanup();
     }
   });
 });

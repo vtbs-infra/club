@@ -1,11 +1,6 @@
 import { Type } from '@sinclair/typebox';
 import type { FastifyPluginCallback } from 'fastify';
 
-import {
-  LivenessResponseSchema,
-  ReadinessResponseSchema,
-  type ReadinessResponse,
-} from '../../../shared/contracts/health.js';
 import { SystemStatusSchema } from '../../../shared/contracts/system.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
@@ -23,7 +18,6 @@ interface SystemStatusOptions {
   readonly bilibiliRuntime: PeriodicRuntime;
   readonly roomConnections: RoomConnectionManager;
   readonly auth: AppAuth;
-  readonly backgroundRequired: boolean;
   readonly identityRuntime: IdentityRuntime;
   readonly clock: Clock;
   readonly database: DatabaseService;
@@ -36,67 +30,6 @@ interface SystemStatusOptions {
 const systemStatusRoutes: FastifyPluginCallback<SystemStatusOptions> = (app, options, done) => {
   const service = new SystemStatusService(options);
   const requirePlatformAdmin = createRequirePlatformAdmin(options.auth);
-  app.get(
-    '/health/live',
-    {
-      schema: {
-        description: 'Process liveness check.',
-        response: { 200: LivenessResponseSchema },
-        tags: ['system'],
-      },
-    },
-    () => ({
-      now: options.clock.now().toISOString(),
-      status: 'ok' as const,
-      version: options.version,
-    }),
-  );
-  app.get(
-    '/health/ready',
-    {
-      schema: {
-        description: 'Readiness check for PostgreSQL, schema, storage, and background runtimes.',
-        response: { 200: ReadinessResponseSchema, 503: ReadinessResponseSchema },
-        tags: ['system'],
-      },
-    },
-    async (_request, reply) => {
-      const [database, schema, storage] = await Promise.allSettled([
-        options.database.ping(),
-        options.database.checkSchema(),
-        options.storage.checkHealth(),
-      ]);
-      const runtimeStatuses = [
-        options.bilibiliRuntime.getStatus(),
-        options.identityRuntime.getStatus(),
-        options.snapshotRuntime.getStatus(),
-        options.giftMediaRuntime.getStatus(),
-      ];
-      const runtimes =
-        options.backgroundRequired &&
-        runtimeStatuses.every((runtime) => runtime.state === 'RUNNING')
-          ? 'ok'
-          : options.backgroundRequired
-            ? 'down'
-            : 'disabled';
-      const response: ReadinessResponse = {
-        checks: {
-          database: database.status === 'fulfilled' ? 'ok' : 'down',
-          runtimes,
-          schema: schema.status === 'fulfilled' ? 'ok' : 'down',
-          storage: storage.status === 'fulfilled' ? 'ok' : 'down',
-        },
-        status:
-          database.status === 'fulfilled' &&
-          schema.status === 'fulfilled' &&
-          storage.status === 'fulfilled' &&
-          runtimes !== 'down'
-            ? 'ok'
-            : 'not_ready',
-      };
-      return reply.status(response.status === 'ok' ? 200 : 503).send(response);
-    },
-  );
   app.get(
     '/api/v1/system/version',
     {

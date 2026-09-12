@@ -3,13 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../helpers/test-app.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import type { ReadinessResponse } from '../../src/shared/contracts/health.js';
-import {
-  identityRuntimeStub,
-  fakeDatabase,
-  giftMediaRuntimeStub,
-  runtimeStatus,
-  snapshotRuntimeStub,
-} from '../helpers/app-stubs.js';
+import { runtimeStub, fakeDatabase, runtimeStatus } from '../helpers/app-stubs.js';
 import { createTestConfig } from '../helpers/test-config.js';
 
 describe('application runtime lifecycle', () => {
@@ -21,11 +15,11 @@ describe('application runtime lifecycle', () => {
     const databaseClose = vi.fn(() => Promise.resolve());
     const database = fakeDatabase();
     const app = await buildApp({
-      identityRuntime: identityRuntimeStub({ close: identityClose }),
+      identityRuntime: runtimeStub({ close: identityClose }),
       config: createTestConfig(),
       database: { ...database, close: databaseClose },
-      giftMediaRuntime: giftMediaRuntimeStub({ close: giftMediaClose }),
-      snapshotRuntime: snapshotRuntimeStub({ close: snapshotClose }),
+      giftMediaRuntime: runtimeStub({ close: giftMediaClose }),
+      snapshotRuntime: runtimeStub({ close: snapshotClose }),
       startBackground: false,
       storage: storage.driver,
     });
@@ -44,17 +38,17 @@ describe('application runtime lifecycle', () => {
     const snapshotStart = vi.fn(() => Promise.resolve());
     const giftMediaStart = vi.fn(() => Promise.resolve());
     const app = await buildApp({
-      identityRuntime: identityRuntimeStub({
+      identityRuntime: runtimeStub({
         getStatus: () => runtimeStatus('DEGRADED'),
         start: identityStart,
       }),
       config: createTestConfig(),
       database: fakeDatabase(),
-      giftMediaRuntime: giftMediaRuntimeStub({
+      giftMediaRuntime: runtimeStub({
         getStatus: () => runtimeStatus('RUNNING'),
         start: giftMediaStart,
       }),
-      snapshotRuntime: snapshotRuntimeStub({
+      snapshotRuntime: runtimeStub({
         getStatus: () => runtimeStatus('RUNNING'),
         start: snapshotStart,
       }),

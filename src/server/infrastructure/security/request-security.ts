@@ -82,7 +82,7 @@ export class InMemoryRateLimiter {
 }
 
 export interface RequestSecurityOptions {
-  readonly auth: AppAuth;
+  readonly auth: Pick<AppAuth, 'getSession'>;
   readonly clock: Clock;
   readonly config: AppConfig;
   readonly rateLimiter: InMemoryRateLimiter;
