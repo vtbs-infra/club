@@ -50,8 +50,8 @@ jobs:
       - run: pnpm test:integration
       - run: pnpm build
       - run: pnpm browser:install --with-deps
-      - run: pnpm test:browser
-      - run: pnpm test:e2e
+      - run: pnpm exec playwright test --project chromium
+      - run: pnpm exec playwright test --project e2e
       - run: docker build --tag club-ci:${{ github.sha }} .
 
   publish:

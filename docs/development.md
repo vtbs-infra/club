@@ -60,7 +60,8 @@ Vite 会把 API 与健康检查请求代理到 Fastify。
 ## 代码组织
 
 ```text
-src/server/app.ts                     应用组装与 Fastify 生命周期
+src/server/app.ts                     业务应用组装与后台运行器生命周期
+src/server/http-app.ts                HTTP 外壳、错误处理和静态资源
 src/server/config/                    环境变量解析
 src/server/infrastructure/            数据库、加密、日志、安全、存储
 src/server/modules/                   业务模块与 HTTP 路由
@@ -200,17 +201,22 @@ Remove-Item Env:TEST_DATABASE_URL
 ```
 
 集成测试从该连接创建临时数据库，执行迁移后验证认证、UID 验证、名单、礼物单、状态
-机、数据库触发器和就绪检查。测试完成后会删除自己的临时数据库。
+机和数据库约束。测试完成后会删除自己的临时数据库。
 
 `TEST_DATABASE_URL` 是强制门禁；缺少时命令会失败，不会跳过整个集成测试项目。
 
 测试按业务能力组织。每个普通测试文件通过 `tests/helpers/integration-database.ts` 获得
-独立数据库；用户、主播、礼物和名单等业务数据仍在对应测试中明确创建，不能藏入全局
-Seed。迁移测试需要独立控制空数据库和迁移记录不匹配场景，因此保留自己的生命周期。
+独立数据库。需要多个场景的套件按用例重建或清理业务状态，迁移测试使用同一助手提供的
+空库入口。账号、主播和已接受名单等前置状态由小型 Fixture 直接创建；验证注册、发布或
+采集本身的场景仍调用相应真实入口。
 
-认证集成测试按用例创建独立数据库、应用、存储和时钟；每个场景通过正常注册入口建立
-自己需要的账号，外部 B站消息使用显式替身。账号创建、密码修改和审计前置操作不得依赖
-其他测试执行。认证套件须能单独选择任意用例运行，也能按随机顺序运行。
+认证集成测试按用例创建独立数据库、应用、存储和时钟。登录、找回和会话撤销从已有账号
+开始，注册与审计测试保留实际证明消费过程。`buildTestApp` 明确替换 B站外部边界；需要
+真实读取账号服务的场景直接组装 `buildApp`。可以随机排列集成场景以检查相互依赖：
+
+```powershell
+pnpm test:integration --sequence.shuffle --sequence.seed=913
+```
 
 测试地址对应的账号必须具备创建和删除临时数据库的权限。套件只把该 URL 用作管理
 入口，不会清空 URL 中指定的数据库。
@@ -229,16 +235,12 @@ pnpm browser:install
 pnpm test:browser
 ```
 
-该命令先执行生产构建，再启动测试服务并运行 Playwright。浏览器测试使用真实生产 React
-Shell 和按共享契约构造的 Mock API，覆盖注册反馈、手机仪表盘、默认地址领取、主播当前
-内容发布、800px 管理编辑器以及全局主题预览和应用。它验证导航、响应式布局、表单值、
-焦点、弹窗、主题继承和请求意图，不验证后端事务或数据库状态，也不替代真实 PostgreSQL
-集成测试。
+该命令先执行生产构建，再启动测试服务并运行 Playwright。测试服务复用生产 HTTP 外壳，
+不组装数据库和业务服务。浏览器运行真实 React 界面，按场景提供 API 响应，用于验证跨账号
+缓存隔离、编辑版本保持、时间边界刷新、确认弹窗、验证码复制和主题预览等交互。
 
-浏览器数据构造器复用 `src/shared/contracts/` 类型，并以固定时钟生成稳定日期。每个场景
-只配置自己使用的 API；不要增加通用假后端或 Page Object 层。
-
-对领取、主播发货、管理员流程或全局主题运行时进行界面修改时，应增加相应的浏览器场景。
+这些测试不在 Mock API 中重新实现发布、领取和发货服务。主要成功流程由下面的真实业务
+闭环承担；API 数据构造器仍使用共享契约类型。
 
 ### 完整业务闭环
 
@@ -249,11 +251,13 @@ pnpm test:e2e
 
 该命令构建生产 Web，使用真实 Fastify Cookie/Session、独立 PostgreSQL 新库及本地私有存储，
 从浏览器 UID 验证与注册、用户名登录开始验证主播注册、自动名单定稿、礼物发布、手机端领取、
-XLSX 下载、确认发货、更正与复制单号。测试只替换 B站的三个外部来源；后台使用实际调度循环。
+XLSX 下载、确认发货、更正与复制单号。测试替换 B站外部服务；采集通过应用持有的实际运行器 `app.runtimes.snapshot.tick()`
+推进，避免等待固定调度间隔。调度与重试规则由运行器单元测试验证。
 缺少测试数据库连接时必须失败。CI 同时执行界面测试和完整业务闭环。
 
-容量集成测试覆盖 30,000 人名单、90,000 条累计套餐分配、关闭、查询，以及 30,000 条
-待发货订单导出。它证明这些场景的正确性，不代表所有部署硬件的延迟或吞吐保证。
+`fulfillment-capacity.test.ts` 集中验证 30,000 人名单生成、90,000 条累计套餐分配、关闭和
+30,000 条待发货订单导出。领取规则、分页和 XLSX 字段格式分别使用小样本测试；这一个
+容量场景验证大集合处理，不代表所有部署硬件的延迟或吞吐保证。
 
 ### 公共测试助手
 
@@ -271,10 +275,13 @@ pnpm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 pnpm test:integration
 pnpm build
-pnpm test:browser
-pnpm test:e2e
+pnpm exec playwright test --project chromium
+pnpm exec playwright test --project e2e
 docker compose build app
 ```
+
+完整检查中的两个 Playwright 项目复用前面的构建；单独运行时仍可使用会自动构建的
+`pnpm test:browser` 和 `pnpm test:e2e`。
 
 提交前还应确认：
 
