@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
 
 import postgres from 'postgres';
 
@@ -33,7 +32,7 @@ function databaseName(prefix: string): string {
   return `club_${normalized.slice(0, 18)}_${randomUUID().replaceAll('-', '').slice(0, 24)}`;
 }
 
-export async function createIntegrationDatabase(prefix: string): Promise<IntegrationDatabase> {
+export async function createEmptyIntegrationDatabase(prefix: string): Promise<IntegrationDatabase> {
   const sourceUrl = integrationDatabaseUrl();
   const adminUrl = new URL(sourceUrl);
   adminUrl.pathname = '/postgres';
@@ -80,7 +79,6 @@ export async function createIntegrationDatabase(prefix: string): Promise<Integra
     const targetUrl = new URL(sourceUrl);
     targetUrl.pathname = `/${name}`;
     database = createDatabase(targetUrl.toString());
-    await migrateDatabase(database, resolve('migrations'));
     return {
       cleanup,
       database,
@@ -89,6 +87,17 @@ export async function createIntegrationDatabase(prefix: string): Promise<Integra
     };
   } catch (error) {
     await cleanup();
+    throw error;
+  }
+}
+
+export async function createIntegrationDatabase(prefix: string): Promise<IntegrationDatabase> {
+  const fixture = await createEmptyIntegrationDatabase(prefix);
+  try {
+    await migrateDatabase(fixture.database);
+    return fixture;
+  } catch (error) {
+    await fixture.cleanup();
     throw error;
   }
 }
