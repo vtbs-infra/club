@@ -64,14 +64,12 @@ describe('snapshot capture and acceptance', () => {
 
   async function setup() {
     const database = fixture.database;
-    const [user] = await database.orm
+    const [user, reviewer] = await database.orm
       .insert(users)
-      .values({
-        username: 'creator',
-        bilibiliUid: '910001',
-        name: 'Creator',
-        role: 'CREATOR',
-      })
+      .values([
+        { username: 'creator', bilibiliUid: '910001', name: 'Creator', role: 'CREATOR' },
+        { username: 'reviewer', name: 'Reviewer', role: 'PLATFORM_ADMIN' },
+      ])
       .returning();
     const creator = await insertTestCreator(database, {
       userId: user!.id,
@@ -83,7 +81,14 @@ describe('snapshot capture and acceptance', () => {
     const eligibility = new GiftEligibilityService();
     const service = new SnapshotService(database, storage.driver, source, clock, eligibility);
     services.push(service);
-    return { database, creator, source, service, eligibility, context: { actorUserId: user!.id } };
+    return {
+      database,
+      creator,
+      source,
+      service,
+      eligibility,
+      context: { actorUserId: reviewer!.id },
+    };
   }
 
   it('schedules months idempotently and captures only due work', async () => {

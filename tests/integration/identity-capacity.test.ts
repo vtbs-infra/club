@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { count, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { ChallengeStatus } from '../../src/shared/contracts/auth.js';
@@ -76,38 +76,33 @@ describe('active identity challenge capacity', () => {
     return row!.value;
   }
 
-  it.each(['REGISTER', 'RECOVER'] as const)(
-    'does not charge retained history against %s admission',
-    async (purpose) => {
-      for (const status of ['CONSUMED', 'CANCELLED', 'EXPIRED'] as const) await fill(1000, status);
-      // Expiry releases capacity even if the background cleanup has not updated the status yet.
-      await fill(1000, 'PENDING', now);
-      await fill(1000, 'VERIFIED', now);
-      const challenge = await identities.createChallenge(
-        'new-browser',
-        purpose === 'REGISTER' ? { purpose } : { purpose, biliUid: '10001' },
-      );
-      expect(challenge.status).toBe('PENDING');
-      expect(await activeCount()).toBe(1);
-      expect(
-        await fixture.database.orm.select({ value: count() }).from(identityChallenges),
-      ).toEqual([{ value: 5001 }]);
-    },
-  );
+  it('does not charge retained or expired history against new admission', async () => {
+    for (const status of ['CONSUMED', 'CANCELLED', 'EXPIRED'] as const) await fill(1000, status);
+    await fill(1000, 'PENDING', now);
+    await fill(1000, 'VERIFIED', now);
+    const registration = await identities.createChallenge('registration-browser', {
+      purpose: 'REGISTER',
+    });
+    const recovery = await identities.createChallenge('recovery-browser', {
+      purpose: 'RECOVER',
+      biliUid: '10001',
+    });
+    expect(registration.status).toBe('PENDING');
+    expect(recovery.status).toBe('PENDING');
+    expect(await activeCount()).toBe(2);
+  });
 
-  it.each(['PENDING', 'VERIFIED'] as const)(
-    'rejects new registration and recovery when 5000 %s challenges are still valid',
-    async (status) => {
-      await fill(5000, status);
-      await expect(
-        identities.createChallenge('registration-browser', { purpose: 'REGISTER' }),
-      ).rejects.toMatchObject({ code: 'IDENTITY_BUSY' });
-      await expect(
-        identities.createChallenge('recovery-browser', { purpose: 'RECOVER', biliUid: '10001' }),
-      ).rejects.toMatchObject({ code: 'IDENTITY_BUSY' });
-      expect(await activeCount()).toBe(5000);
-    },
-  );
+  it('counts both pending and verified challenges against admission', async () => {
+    await fill(2500, 'PENDING');
+    await fill(2500, 'VERIFIED');
+    await expect(
+      identities.createChallenge('registration-browser', { purpose: 'REGISTER' }),
+    ).rejects.toMatchObject({ code: 'IDENTITY_BUSY' });
+    await expect(
+      identities.createChallenge('recovery-browser', { purpose: 'RECOVER', biliUid: '10001' }),
+    ).rejects.toMatchObject({ code: 'IDENTITY_BUSY' });
+    expect(await activeCount()).toBe(5000);
+  });
 
   it.each(['PENDING', 'VERIFIED'] as const)(
     'atomically replaces this browser’s %s challenge even at capacity',

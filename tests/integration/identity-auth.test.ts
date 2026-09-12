@@ -1,7 +1,8 @@
 import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
+import { seedTestUser } from '../helpers/auth-session.js';
 import { randomUUID } from 'node:crypto';
 import { Signer } from '@fastify/cookie';
-import { and, count, eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import type { Session } from 'fastify';
 import { afterEach, beforeEach, expect, it, describe } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
@@ -12,7 +13,6 @@ import {
   resetPlatformAdminPassword,
 } from '../../src/server/modules/users/admin-bootstrap.js';
 import {
-  identityChallenges,
   auditLogs,
   passwordCredentials,
   sessions,
@@ -82,6 +82,14 @@ describe('username and verified UID authentication', () => {
     expect(result.statusCode, result.body).toBe(200);
     return cookie(result);
   }
+  const existingUser = (username: string, bilibiliUid: string) =>
+    seedTestUser({
+      database: fixture.database,
+      username,
+      name: username,
+      bilibiliUid,
+      password: PASSWORD,
+    });
   async function register(username: string, uid: string) {
     const proof = await start();
     await verify(proof.challenge, uid);
@@ -217,7 +225,7 @@ describe('username and verified UID authentication', () => {
   });
 
   it('rejects existing UID and lets an owner retry a username collision without consuming proof', async () => {
-    await register('alice', '10001');
+    await existingUser('alice', '10001');
     const existing = await start();
     await verify(existing.challenge, '10001');
     expect(
@@ -277,7 +285,7 @@ describe('username and verified UID authentication', () => {
   });
 
   it('logs in case-insensitively, rotates sessions and protects writes against CSRF', async () => {
-    await register('alice', '10001');
+    await existingUser('alice', '10001');
     const first = await login('ALICE');
     expect((await get('/api/v1/me', first)).json()).toMatchObject({
       user: { username: 'alice', bilibiliUid: '10001' },
@@ -309,7 +317,7 @@ describe('username and verified UID authentication', () => {
   });
 
   it('allows display-name changes while preserving username and UID', async () => {
-    await register('bob', '10002');
+    await existingUser('bob', '10002');
     const browser = await login('bob');
     const saved = await app.inject({
       method: 'PATCH',
@@ -336,7 +344,7 @@ describe('username and verified UID authentication', () => {
   });
 
   it('requires the expected UID for recovery and reveals username only after verification', async () => {
-    await register('alice', '10001');
+    await existingUser('alice', '10001');
     const proof = await start('RECOVER', '10001');
     expect(proof.challenge).toMatchObject({ username: null, biliUid: null });
     await verify(proof.challenge, '10002');
@@ -350,7 +358,7 @@ describe('username and verified UID authentication', () => {
   });
 
   it('revokes all sessions and outstanding recovery proofs after a password reset', async () => {
-    await register('alice', '10001');
+    await existingUser('alice', '10001');
     const firstSession = await login('alice');
     const secondSession = await login('alice');
     const first = await start('RECOVER', '10001');
@@ -437,7 +445,7 @@ describe('username and verified UID authentication', () => {
   });
 
   it('prevents late session saves from resurrecting sessions revoked by change-password', async () => {
-    await register('bob', '10002');
+    await existingUser('bob', '10002');
     const browser = await login('bob');
     const raw = decodeURIComponent(browser.split('=', 2)[1]!);
     const id = new Signer(createTestConfig().authSecret).unsign(raw).value!;
@@ -526,7 +534,7 @@ describe('username and verified UID authentication', () => {
   });
 
   it('creates and resets administrators atomically without changing ordinary accounts', async () => {
-    await register('alice', '10001');
+    await existingUser('alice', '10001');
     const ordinarySession = await login('alice');
     const [credentialBefore] = await fixture.database.orm.select().from(passwordCredentials);
     await bootstrapPlatformAdmin({
@@ -570,21 +578,10 @@ describe('username and verified UID authentication', () => {
       .where(eq(passwordCredentials.userId, ordinary!.id));
     expect(credentialAfter).toEqual(credentialBefore);
     expect((await get('/api/v1/me', ordinarySession)).statusCode).toBe(200);
-    expect(
-      await fixture.database.orm
-        .select({ value: count() })
-        .from(identityChallenges)
-        .where(
-          and(
-            eq(identityChallenges.purpose, 'REGISTER'),
-            eq(identityChallenges.status, 'CONSUMED'),
-          ),
-        ),
-    ).toEqual([{ value: 1 }]);
   });
 
   it('expires sessions after fourteen days without extending their lifetime on access', async () => {
-    await register('alice', '10001');
+    await existingUser('alice', '10001');
     const originalNow = now;
     const browser = await login('alice');
     const first = (await get('/api/v1/auth/session', browser)).json<SessionState>();

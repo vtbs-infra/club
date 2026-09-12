@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildApp } from '../helpers/test-app.js';
+import { buildTestApp } from '../helpers/test-app.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import type { ReadinessResponse } from '../../src/shared/contracts/health.js';
 import { runtimeStub, fakeDatabase, runtimeStatus } from '../helpers/app-stubs.js';
@@ -14,7 +14,7 @@ describe('application runtime lifecycle', () => {
     const giftMediaClose = vi.fn();
     const databaseClose = vi.fn(() => Promise.resolve());
     const database = fakeDatabase();
-    const app = await buildApp({
+    const app = await buildTestApp({
       identityRuntime: runtimeStub({ close: identityClose }),
       config: createTestConfig(),
       database: { ...database, close: databaseClose },
@@ -37,7 +37,7 @@ describe('application runtime lifecycle', () => {
     const identityStart = vi.fn(() => Promise.reject(new Error('identity startup failed')));
     const snapshotStart = vi.fn(() => Promise.resolve());
     const giftMediaStart = vi.fn(() => Promise.resolve());
-    const app = await buildApp({
+    const app = await buildTestApp({
       identityRuntime: runtimeStub({
         getStatus: () => runtimeStatus('DEGRADED'),
         start: identityStart,

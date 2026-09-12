@@ -1,8 +1,8 @@
 import { Writable } from 'node:stream';
-import { eq } from 'drizzle-orm';
-import { describe as integration, afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { eq, sql } from 'drizzle-orm';
+import { describe as integration, afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
-import { buildApp } from '../helpers/test-app.js';
+import { buildTestApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { creators, users } from '../../src/server/infrastructure/db/schema/index.js';
 import {
@@ -11,14 +11,13 @@ import {
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth } from '../../src/server/modules/auth/auth.js';
 import { CreatorProfileSourceError } from '../../src/server/modules/bilibili/creator-profile-source.js';
-import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import type { Identity } from '../../src/shared/contracts/creators.js';
 import {
   promoteTestCreator,
   seedTestUser,
   signInTestUser,
   TEST_ORIGIN,
-  TEST_PASSWORD,
 } from '../helpers/auth-session.js';
 import { createReleaseDraft } from '../helpers/gift-release.js';
 import { FakeCreatorProfileSource } from '../helpers/fake-creator-profile-source.js';
@@ -29,7 +28,7 @@ import {
 import { createTestConfig } from '../helpers/test-config.js';
 
 integration('exclusive platform roles and creator ownership', () => {
-  let app: Awaited<ReturnType<typeof buildApp>>;
+  let app: Awaited<ReturnType<typeof buildTestApp>>;
   let database: DatabaseService;
   let integrationDatabase: IntegrationDatabase;
   let storage: TemporaryStorage;
@@ -45,13 +44,7 @@ integration('exclusive platform roles and creator ownership', () => {
       logLevel: 'error',
     });
     const auth = createAuth({ config, database });
-    await bootstrapPlatformAdmin({
-      database,
-      username: 'admin',
-      name: 'Platform Admin',
-      password: TEST_PASSWORD,
-    });
-    app = await buildApp({
+    app = await buildTestApp({
       auth,
       config,
       database,
@@ -64,6 +57,17 @@ integration('exclusive platform roles and creator ownership', () => {
       }),
       startBackground: false,
       storage: storage.driver,
+    });
+  });
+
+  beforeEach(async () => {
+    await database.orm.execute(sql`truncate users cascade`);
+    logs = '';
+    await seedTestUser({
+      database,
+      username: 'admin',
+      name: 'Platform Admin',
+      role: 'PLATFORM_ADMIN',
     });
   });
 
@@ -113,10 +117,20 @@ integration('exclusive platform roles and creator ownership', () => {
     ).toEqual([]);
     const creator = await promoteTestCreator({ adminCookie, app, userId });
     expect(creator).toMatchObject({ bilibiliUid: '91003', roomId: '91003' });
+    expect(
+      await database.orm.select({ role: users.role }).from(users).where(eq(users.id, userId)),
+    ).toEqual([{ role: 'CREATOR' }]);
+    const duplicate = await app.inject({
+      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
+      method: 'POST',
+      payload: { timezone: 'Asia/Shanghai', userId },
+      url: '/api/v1/admin/creators',
+    });
+    expect(duplicate.statusCode).toBe(409);
   });
 
-  it('promotes one creator profile and scopes creator APIs to its session', async () => {
-    const recipientId = await seedTestUser({
+  it('enforces exclusive roles and scopes release reads to the signed-in creator', async () => {
+    await seedTestUser({
       database,
       username: 'recipient',
       name: 'Recipient',
@@ -126,12 +140,14 @@ integration('exclusive platform roles and creator ownership', () => {
       username: 'creator_one',
       bilibiliUid: '91001',
       name: 'Creator Account One',
+      role: 'CREATOR',
     });
     const creatorTwoUserId = await seedTestUser({
       database,
       username: 'creator_two',
       bilibiliUid: '91002',
       name: 'Creator Account Two',
+      role: 'CREATOR',
     });
     const recipientCookie = await signInTestUser({ app, username: 'recipient' });
     const adminCookie = await signInTestUser({ app, username: 'admin' });
@@ -164,46 +180,18 @@ integration('exclusive platform roles and creator ownership', () => {
       ).statusCode,
     ).toBe(403);
 
-    const creatorOne = await promoteTestCreator({
-      adminCookie,
-      app,
+    const creatorOne = await insertTestCreator(database, {
       userId: creatorOneUserId,
+      bilibiliUid: '91001',
+      roomId: '91001',
+      displayName: 'Creator 91001',
     });
-    await promoteTestCreator({
-      adminCookie,
-      app,
+    await insertTestCreator(database, {
       userId: creatorTwoUserId,
+      bilibiliUid: '91002',
+      roomId: '91002',
+      displayName: 'Creator 91002',
     });
-    const [recipient] = await database.orm
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, recipientId));
-    const [promoted] = await database.orm
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, creatorOneUserId));
-    expect(recipient?.role).toBe('USER');
-    expect(promoted?.role).toBe('CREATOR');
-    expect(
-      (
-        await database.orm
-          .select({ id: creators.id })
-          .from(creators)
-          .where(eq(creators.userId, creatorOneUserId))
-      ).map((row) => row.id),
-    ).toEqual([creatorOne.id]);
-
-    const duplicatePromotion = await app.inject({
-      headers: { cookie: adminCookie, origin: TEST_ORIGIN },
-      method: 'POST',
-      payload: {
-        timezone: 'Asia/Shanghai',
-        userId: creatorOneUserId,
-      },
-      url: '/api/v1/admin/creators',
-    });
-    expect(duplicatePromotion.statusCode).toBe(409);
-
     const creatorOneCookie = await signInTestUser({ app, username: 'creator_one' });
     const creatorTwoCookie = await signInTestUser({ app, username: 'creator_two' });
     const creatorIdentity = await app.inject({

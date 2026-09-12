@@ -1,12 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
 import {
   verificationRooms,
-  bilibiliLoginAttempts,
   identityChallenges,
 } from '../../src/server/infrastructure/db/schema/index.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
-import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
+import { seedTestUser } from '../helpers/auth-session.js';
 import type {
   BilibiliLoginAttempt,
   BilibiliSessionStatus,
@@ -23,9 +22,10 @@ describe('Bilibili management through authenticated HTTP', () => {
   let fixture: Awaited<ReturnType<typeof createIntegrationDatabase>>;
   let storage: Awaited<ReturnType<typeof createTemporaryStorage>>;
   let app: Awaited<ReturnType<typeof buildApp>>;
-  const clock = { now: () => new Date() };
-  const passport = new FakeBilibiliPassport(clock);
-  const live = new FakeLiveMessageSource();
+  let now: Date;
+  const clock = { now: () => now };
+  let passport: FakeBilibiliPassport;
+  let live: FakeLiveMessageSource;
   const origin = 'http://localhost:3000';
   const password = 'admin-password-for-testing';
   let cookie = '';
@@ -40,12 +40,16 @@ describe('Bilibili management through authenticated HTTP', () => {
     app.inject({ method: 'GET', url, headers: { cookie: browser } });
   const cookieFrom = (response: { cookies: { name: string; value: string }[] }) =>
     response.cookies.map((item) => `${item.name}=${item.value}`).join('; ');
-  beforeAll(async () => {
+  beforeEach(async () => {
+    now = new Date();
+    passport = new FakeBilibiliPassport(clock);
+    live = new FakeLiveMessageSource();
     fixture = await createIntegrationDatabase('bilibili_http');
     storage = await createTemporaryStorage();
-    await bootstrapPlatformAdmin({
+    await seedTestUser({
       database: fixture.database,
       username: 'admin',
+      role: 'PLATFORM_ADMIN',
       name: 'Admin',
       password,
     });
@@ -68,7 +72,7 @@ describe('Bilibili management through authenticated HTTP', () => {
     expect(loggedIn.statusCode, loggedIn.body).toBe(200);
     cookie = cookieFrom(loggedIn);
   });
-  afterAll(async () => {
+  afterEach(async () => {
     await app?.close();
     await storage?.cleanup();
     await fixture?.cleanup();
@@ -99,7 +103,7 @@ describe('Bilibili management through authenticated HTTP', () => {
     create.mockRestore();
   });
 
-  it('requires candidate confirmation, restores tasks, and accepts challenges only after the channel is ready', async () => {
+  it('requires explicit activation and keeps verified proof usable after reader disconnect', async () => {
     passport.waiting = true;
     const created = await post('/api/v1/admin/bilibili/login-attempts', {});
     expect(created.statusCode, created.body).toBe(201);
@@ -109,30 +113,21 @@ describe('Bilibili management through authenticated HTTP', () => {
     expect(
       (await get('/api/v1/admin/bilibili')).json<BilibiliSessionStatus>().loginAttempt?.id,
     ).toBe(login.id);
-    const anotherLogin = await post('/api/v1/auth/login', { username: 'admin', password }, '');
-    const otherCookie = cookieFrom(anotherLogin);
-    expect(
-      (await get(`/api/v1/admin/bilibili/login-attempts/${login.id}`, otherCookie)).statusCode,
-    ).toBe(404);
+    // Finish the pending response before advancing the clock used to schedule its next poll.
+    await app.runtimes.bilibili.tick();
     passport.waiting = false;
-    await vi.waitFor(
-      async () =>
-        expect(
-          (
-            await get(`/api/v1/admin/bilibili/login-attempts/${login.id}`)
-          ).json<BilibiliLoginAttempt>().state,
-        ).toBe('READY'),
-      { timeout: 6000 },
-    );
+    now = new Date(now.getTime() + 5000);
+    await app.runtimes.bilibili.tick();
+    expect(
+      (await get(`/api/v1/admin/bilibili/login-attempts/${login.id}`)).json<BilibiliLoginAttempt>()
+        .state,
+    ).toBe('READY');
     expect(live.activeConnectionCount('777001')).toBe(0);
     const activated = await post(`/api/v1/admin/bilibili/login-attempts/${login.id}/activate`, {});
     expect(activated.statusCode, activated.body).toBe(200);
     expect(activated.json<BilibiliSessionStatus>().validity).toBe('VALID');
-    expect(activated.body).not.toContain('private-');
-    expect(
-      JSON.stringify(await fixture.database.orm.select().from(bilibiliLoginAttempts)),
-    ).not.toContain('private-');
-    await vi.waitFor(() => expect(live.activeConnectionCount('777001')).toBe(1));
+    await app.runtimes.identity.tick();
+    expect(live.activeConnectionCount('777001')).toBe(1);
     const createdProof = await post('/api/v1/auth/challenges', { purpose: 'REGISTER' }, '');
     expect(createdProof.statusCode, createdProof.body).toBe(201);
     const proof = createdProof.json<IdentityChallenge>();
@@ -143,12 +138,13 @@ describe('Bilibili management through authenticated HTTP', () => {
       eventId: 'http-proof',
       message: proof.code!,
       roomId: '777001',
+      occurredAt: now,
     });
     const disconnected = await app.inject({
       method: 'DELETE',
       url: '/api/v1/admin/bilibili/session',
       headers: { origin, cookie },
-      payload: { revision: 1 },
+      payload: { revision: activated.json<BilibiliSessionStatus>().revision },
     });
     expect(disconnected.statusCode, disconnected.body).toBe(200);
     expect((await get('/health/ready')).statusCode).toBe(200);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { LightMyRequestResponse } from 'fastify';
 
-import type { buildApp } from './test-app.js';
+import type { buildTestApp } from './test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { passwordCredentials, users } from '../../src/server/infrastructure/db/schema/index.js';
 import type { CreatorRecord } from '../../src/shared/contracts/creators.js';
@@ -10,7 +10,7 @@ import { hashPassword } from '../../src/server/modules/auth/password.js';
 export const TEST_ORIGIN = 'http://localhost:3000';
 export const TEST_PASSWORD = 'correct-horse-battery-staple';
 
-type InjectableApp = Pick<Awaited<ReturnType<typeof buildApp>>, 'inject'>;
+type InjectableApp = Pick<Awaited<ReturnType<typeof buildTestApp>>, 'inject'>;
 
 export function sessionCookie(response: LightMyRequestResponse): string {
   const header = response.headers['set-cookie'];
@@ -29,6 +29,7 @@ export async function seedTestUser(input: {
   readonly username: string;
   readonly name: string;
   readonly bilibiliUid?: string;
+  readonly role?: 'USER' | 'CREATOR' | 'PLATFORM_ADMIN';
   readonly password?: string;
 }): Promise<string> {
   const bilibiliUid =
@@ -40,7 +41,12 @@ export async function seedTestUser(input: {
   return input.database.orm.transaction(async (transaction) => {
     const [user] = await transaction
       .insert(users)
-      .values({ username: input.username, name: input.name, bilibiliUid })
+      .values({
+        username: input.username,
+        name: input.name,
+        bilibiliUid,
+        role: input.role ?? 'USER',
+      })
       .returning();
     if (!user) throw new Error('User fixture insert returned no row.');
     await transaction.insert(passwordCredentials).values({ userId: user.id, passwordHash });

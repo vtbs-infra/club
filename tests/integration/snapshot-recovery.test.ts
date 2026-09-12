@@ -29,6 +29,7 @@ describe('snapshot execution ownership and reviewed evidence', () => {
   let fixture: IntegrationDatabase;
   let storage: TemporaryStorage;
   let sequence = 0;
+  let reviewerId: string;
   const services: SnapshotService[] = [];
   const clock = { now: () => new Date('2026-08-01T00:00:00.000Z') };
 
@@ -39,6 +40,10 @@ describe('snapshot execution ownership and reviewed evidence', () => {
   beforeEach(async () => {
     await fixture.database.orm.execute(sql`truncate users cascade`);
     sequence = 0;
+    reviewerId = randomUUID();
+    await fixture.database.orm
+      .insert(users)
+      .values({ id: reviewerId, username: 'reviewer', name: 'Reviewer', role: 'PLATFORM_ADMIN' });
   });
   afterEach(async () => {
     for (const service of services) service.beginShutdown();
@@ -55,10 +60,10 @@ describe('snapshot execution ownership and reviewed evidence', () => {
     sequence += 1;
     await fixture.database.orm.insert(users).values({
       id: userId,
-      username: `reviewer_${sequence}`,
+      username: `creator_${sequence}`,
       bilibiliUid: String(50000 + sequence),
-      name: 'Reviewer',
-      role: 'PLATFORM_ADMIN',
+      name: 'Creator',
+      role: 'CREATOR',
     });
     const creator = await insertTestCreator(fixture.database, {
       userId,
@@ -77,7 +82,7 @@ describe('snapshot execution ownership and reviewed evidence', () => {
       maxDurationMs,
     );
     services.push(service);
-    return { context: { actorUserId: userId }, run, source, service };
+    return { context: { actorUserId: reviewerId }, run, source, service };
   }
 
   it('recovers an abandoned attempt without trying the source again', async () => {

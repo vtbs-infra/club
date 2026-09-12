@@ -40,17 +40,20 @@ export async function insertReadySnapshot(
   },
 ) {
   return database.orm.transaction(async (transaction) => {
-    const now = new Date();
+    const [creator] = await transaction
+      .select()
+      .from(creators)
+      .where(eq(creators.id, input.creatorId));
+    if (!creator) throw new Error('Snapshot fixture requires a creator.');
+    const cutoff = calculateMonthlyCutoff(input.periodStart, creator.timezone);
+    const now = cutoff.scheduledCutoffAt;
     const [run] = await transaction
       .insert(snapshotRuns)
       .values({
         creatorId: input.creatorId,
-        creatorBilibiliUid: '910001',
-        creatorRoomId: '810001',
-        periodStart: input.periodStart,
-        cutoffTimezone: 'Asia/Shanghai',
-        scheduledCutoffAt: now,
-        onTimeWindowEndAt: new Date(now.getTime() + 600_000),
+        creatorBilibiliUid: creator.bilibiliUid,
+        creatorRoomId: creator.roomId,
+        ...cutoff,
         status: 'READY',
       })
       .returning();

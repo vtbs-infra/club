@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { describe as integration, afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 
-import { buildApp } from '../helpers/test-app.js';
+import { buildTestApp } from '../helpers/test-app.js';
 import type { DatabaseService } from '../../src/server/infrastructure/db/database.js';
 import { auditLogs, platformAppearance } from '../../src/server/infrastructure/db/schema/index.js';
 import {
@@ -9,15 +9,9 @@ import {
   type TemporaryStorage,
 } from '../../src/server/infrastructure/storage/temporary-storage.js';
 import { createAuth, type AppAuth } from '../../src/server/modules/auth/auth.js';
-import { bootstrapPlatformAdmin } from '../../src/server/modules/users/admin-bootstrap.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import type { Appearance } from '../../src/shared/contracts/appearance.js';
-import {
-  promoteTestCreator,
-  seedTestUser,
-  signInTestUser,
-  TEST_ORIGIN,
-  TEST_PASSWORD,
-} from '../helpers/auth-session.js';
+import { seedTestUser, signInTestUser, TEST_ORIGIN } from '../helpers/auth-session.js';
 import {
   createIntegrationDatabase,
   type IntegrationDatabase,
@@ -27,7 +21,7 @@ import { createTestConfig } from '../helpers/test-config.js';
 integration('platform appearance', () => {
   let adminCookie: string;
   let adminId: string;
-  let app: Awaited<ReturnType<typeof buildApp>>;
+  let app: Awaited<ReturnType<typeof buildTestApp>>;
   let auth: AppAuth;
   let creatorCookie: string;
   let database: DatabaseService;
@@ -41,14 +35,13 @@ integration('platform appearance', () => {
     storage = await createTemporaryStorage();
     const config = createTestConfig({ databaseUrl: integrationDatabase.databaseUrl });
     auth = createAuth({ config, database });
-    const admin = await bootstrapPlatformAdmin({
+    adminId = await seedTestUser({
       database,
       username: 'admin',
       name: 'Platform Admin',
-      password: TEST_PASSWORD,
+      role: 'PLATFORM_ADMIN',
     });
-    adminId = admin.id;
-    app = await buildApp({
+    app = await buildTestApp({
       auth,
       config,
       database,
@@ -65,12 +58,15 @@ integration('platform appearance', () => {
       database,
       username: 'creator',
       name: 'Creator',
+      bilibiliUid: '90001',
+      role: 'CREATOR',
     });
     adminCookie = await signInTestUser({ app, username: 'admin' });
-    await promoteTestCreator({
-      adminCookie,
-      app,
+    await insertTestCreator(database, {
       userId: creatorUserId,
+      bilibiliUid: '90001',
+      roomId: '80001',
+      displayName: 'Creator',
     });
     userCookie = await signInTestUser({ app, username: 'recipient' });
     creatorCookie = await signInTestUser({ app, username: 'creator' });
@@ -143,7 +139,7 @@ integration('platform appearance', () => {
     ]);
 
     await app.close();
-    app = await buildApp({
+    app = await buildTestApp({
       config: createTestConfig({ databaseUrl: integrationDatabase.databaseUrl }),
       database,
       startBackground: false,
