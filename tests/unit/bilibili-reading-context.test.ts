@@ -1,31 +1,28 @@
-import { BilibiliApiClient } from 'bilibili-live-danmaku';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bilibiliDeviceResponse } from '../helpers/bilibili-device-response.js';
+import { describe, expect, it, vi } from 'vitest';
 import { PublicWebClient } from '../../src/server/modules/bilibili/public-web-client.js';
 import { PublicWebGuardRosterSource } from '../../src/server/modules/bilibili/public-web-guard-roster-source.js';
 import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
 
+function withDeviceRequests(fetch: typeof globalThis.fetch): typeof globalThis.fetch {
+  return (input, init) =>
+    Promise.resolve(
+      bilibiliDeviceResponse(new URL(input instanceof Request ? input.url : input.toString())) ??
+        fetch(input, init),
+    );
+}
+
 describe('immutable Bilibili reading contexts', () => {
-  beforeEach(() => {
-    vi.spyOn(BilibiliApiClient.prototype, 'initCookie').mockImplementation(function (
-      this: BilibiliApiClient,
-    ) {
-      this.cookies.set('buvid3', 'device');
-      this.cookies.set('SESSDATA', 'anonymous-initialization');
-      return Promise.resolve();
-    });
-  });
-  afterEach(() => vi.restoreAllMocks());
   it('applies verified login cookies after device initialization and restricts their destinations', async () => {
     const session = new FakeBilibiliReadingSession();
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({ code: 0 }));
-    const client = await new PublicWebClient(session, fetch).forOperation(
+    const client = await new PublicWebClient(session, withDeviceRequests(fetch)).forOperation(
       new AbortController().signal,
     );
     await client.request('https://api.bilibili.com/x/web-interface/nav');
     const headers = new Headers(fetch.mock.calls[0]![1]!.headers);
     expect(headers.get('cookie')).toContain('SESSDATA=test-session-1');
-    expect(headers.get('cookie')).toContain('buvid3=device');
-    expect(headers.get('cookie')).not.toContain('anonymous-initialization');
+    expect(headers.get('cookie')).toContain('buvid3=fixture-buvid');
     expect(fetch.mock.calls[0]![1]?.redirect).toBe('error');
     await expect(client.request('https://other.example/')).rejects.toMatchObject({
       code: 'BILIBILI_INVALID_RESPONSE',
@@ -37,7 +34,9 @@ describe('immutable Bilibili reading contexts', () => {
     session.available = false;
     const fetch = vi.fn<typeof globalThis.fetch>();
     await expect(
-      new PublicWebClient(session, fetch).forOperation(new AbortController().signal),
+      new PublicWebClient(session, withDeviceRequests(fetch)).forOperation(
+        new AbortController().signal,
+      ),
     ).rejects.toMatchObject({ code: 'BILIBILI_AUTH_REQUIRED' });
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -51,7 +50,7 @@ describe('immutable Bilibili reading contexts', () => {
         }),
       ),
     );
-    const source = new PublicWebGuardRosterSource(session, fetch);
+    const source = new PublicWebGuardRosterSource(session, withDeviceRequests(fetch));
     const signal = new AbortController().signal;
     const capture = await source.openCapture(signal);
     const input = { creatorUid: '100', roomId: '200', pageSize: 30, pageNumber: 1, signal };

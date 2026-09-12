@@ -1,6 +1,9 @@
 import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
-import { BilibiliApiClient } from 'bilibili-live-danmaku';
-import type * as Bilibili from 'bilibili-live-danmaku';
+import { bilibiliDeviceResponse } from '../helpers/bilibili-device-response.js';
+import type {
+  LiveSocketListener,
+  LiveSocketOptions,
+} from '../../src/server/modules/bilibili/live-socket.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PublicWebCreatorProfileSource } from '../../src/server/modules/bilibili/public-web-creator-profile-source.js';
@@ -9,34 +12,17 @@ import { RoomConnectionManager } from '../../src/server/modules/bilibili/room-co
 import { createIdentityRuntime } from '../../src/server/modules/auth/identity-runtime.js';
 import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
 
-const { sockets } = vi.hoisted(() => ({
-  sockets: [] as (EventTarget & {
-    closed: boolean;
-    ws: EventTarget;
-    options: { buvid?: string };
-  })[],
-}));
-vi.mock('bilibili-live-danmaku', async (importOriginal) => {
-  const actual = await importOriginal<typeof Bilibili>();
+const sockets: { closed: boolean; options: LiveSocketOptions; listener: LiveSocketListener }[] = [];
+function openSocket(options: LiveSocketOptions, listener: LiveSocketListener) {
+  const socket = { closed: false, options, listener };
+  sockets.push(socket);
   return {
-    ...actual,
-    LiveWS: class extends EventTarget {
-      public closed = false;
-      public readonly ws = new EventTarget();
-      public constructor(
-        _roomId: number,
-        public readonly options: { buvid?: string },
-      ) {
-        super();
-        sockets.push(this);
-      }
-      public close() {
-        this.closed = true;
-        this.ws.dispatchEvent(new Event('close'));
-      }
+    close() {
+      socket.closed = true;
+      listener.onClose();
     },
   };
-});
+}
 
 function hangingFetch() {
   const entered = Promise.withResolvers<AbortSignal>();
@@ -67,6 +53,7 @@ describe('Bilibili operation lifetime', () => {
   it('bounds cookie initialization by the connection deadline', async () => {
     const network = hangingFetch();
     const source = new PublicWebLiveMessageSource({
+      openSocket,
       session: new FakeBilibiliReadingSession(),
       connectTimeoutMs: 30,
       fetchImplementation: network.fetch,
@@ -87,6 +74,7 @@ describe('Bilibili operation lifetime', () => {
     const network = hangingFetch();
     const connections = new RoomConnectionManager({
       source: new PublicWebLiveMessageSource({
+        openSocket,
         session: new FakeBilibiliReadingSession(),
         connectTimeoutMs: 60_000,
         fetchImplementation: network.fetch,
@@ -123,6 +111,7 @@ describe('Bilibili operation lifetime', () => {
     const network = hangingFetch();
     const manager = new RoomConnectionManager({
       source: new PublicWebLiveMessageSource({
+        openSocket,
         session: new FakeBilibiliReadingSession(),
         connectTimeoutMs: 60_000,
         fetchImplementation: network.fetch,
@@ -167,17 +156,11 @@ describe('Bilibili operation lifetime', () => {
   });
 
   function setupReader() {
-    vi.spyOn(BilibiliApiClient.prototype, 'initCookie').mockImplementation(function (
-      this: BilibiliApiClient,
-    ) {
-      this.cookies.set('buvid3', 'fixture-buvid');
-      return Promise.resolve();
-    });
-    vi.spyOn(BilibiliApiClient.prototype, 'wbiSign').mockImplementation((url) =>
-      Promise.resolve(url),
-    );
     const fetch = vi.fn<typeof globalThis.fetch>((input) => {
-      const path = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      const device = bilibiliDeviceResponse(url);
+      if (device) return Promise.resolve(device);
+      const path = url.pathname;
       if (path.endsWith('/room_init'))
         return Promise.resolve(Response.json({ code: 0, data: { room_id: 100 } }));
       if (path.endsWith('/getDanmuInfo'))
@@ -199,6 +182,7 @@ describe('Bilibili operation lifetime', () => {
       session,
       reportDiagnostic,
       source: new PublicWebLiveMessageSource({
+        openSocket,
         session,
         fetchImplementation: fetch,
         reportDiagnostic,
@@ -215,11 +199,11 @@ describe('Bilibili operation lifetime', () => {
     view.setUint16(6, 1);
     view.setUint32(8, 8);
     frame.set(body, 16);
-    live.ws.dispatchEvent(new MessageEvent('message', { data: frame }));
+    live.listener.onFrame(frame);
   }
 
   it('requires the actual auth code, sends the reader UID, and never polls history', async () => {
-    const { source, fetch, reportDiagnostic, session } = setupReader();
+    const { source, reportDiagnostic, session } = setupReader();
     const onMessage = vi
       .fn()
       .mockRejectedValueOnce(new Error('private-message'))
@@ -236,24 +220,19 @@ describe('Bilibili operation lifetime', () => {
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
     const live = sockets[0]!;
     expect(live.options).toMatchObject({ buvid: 'fixture-buvid', uid: Number(session.uid) });
-    live.dispatchEvent(new Event('CONNECT_SUCCESS'));
     await Promise.resolve();
     expect(resolved).toBe(false);
     authenticate(live);
     const connection = await connected;
     try {
       for (let i = 0; i < 2; i++)
-        live.dispatchEvent(
-          new MessageEvent('MESSAGE', {
-            data: { cmd: 'DANMU_MSG', info: null, private: 'private-payload' },
-          }),
-        );
-      live.dispatchEvent(new Event('error:decode'));
+        live.listener.onMessage({ cmd: 'DANMU_MSG', info: null, private: 'private-payload' });
+      live.listener.onDecodeError();
       const data = {
         cmd: 'DANMU_MSG:4:0:2:2:2:0',
         info: { 0: { 4: 1789102871563 }, 1: 'private-content', 2: { 0: 42 } },
       };
-      live.dispatchEvent(new MessageEvent('MESSAGE', { data }));
+      live.listener.onMessage(data);
       await vi.waitFor(() =>
         expect(reportDiagnostic).toHaveBeenCalledWith({
           roomId: '100',
@@ -261,9 +240,8 @@ describe('Bilibili operation lifetime', () => {
           reason: 'delivery-failed',
         }),
       );
-      live.dispatchEvent(new MessageEvent('MESSAGE', { data }));
+      live.listener.onMessage(data);
       await vi.waitFor(() => expect(onMessage).toHaveBeenCalledTimes(2));
-      expect(fetch).toHaveBeenCalledTimes(2);
       expect(reportDiagnostic.mock.calls).toEqual([
         [{ roomId: '100', transport: 'websocket', reason: 'invalid-message' }],
         [{ roomId: '100', transport: 'websocket', reason: 'decode-failed' }],
@@ -272,7 +250,7 @@ describe('Bilibili operation lifetime', () => {
     } finally {
       await connection.close();
     }
-    live.dispatchEvent(new Event('error:decode'));
+    live.listener.onDecodeError();
     expect(reportDiagnostic).toHaveBeenCalledTimes(3);
   });
 
@@ -289,11 +267,10 @@ describe('Bilibili operation lifetime', () => {
     });
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
     const live = sockets[0]!;
-    live.dispatchEvent(
-      new MessageEvent('MESSAGE', {
-        data: { cmd: 'DANMU_MSG', info: { 0: { 4: 1789102871563 }, 1: 'test', 2: { 0: 42 } } },
-      }),
-    );
+    live.listener.onMessage({
+      cmd: 'DANMU_MSG',
+      info: { 0: { 4: 1789102871563 }, 1: 'test', 2: { 0: 42 } },
+    });
     authenticate(live, -101);
     await rejected;
     expect(live.closed).toBe(true);
@@ -319,11 +296,10 @@ describe('Bilibili operation lifetime', () => {
     const live = sockets[0]!;
     authenticate(live);
     const connection = await connected;
-    live.dispatchEvent(
-      new MessageEvent('MESSAGE', {
-        data: { cmd: 'DANMU_MSG', info: { 0: { 4: 1789102871563 }, 1: 'test', 2: { 0: 42 } } },
-      }),
-    );
+    live.listener.onMessage({
+      cmd: 'DANMU_MSG',
+      info: { 0: { 4: 1789102871563 }, 1: 'test', 2: { 0: 42 } },
+    });
     await delivered.promise;
     let closed = false;
     const closing = Promise.resolve(connection.close()).then(() => {

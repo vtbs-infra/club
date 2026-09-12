@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
-import { LiveWS, parseLiveConfig, type DataXliveGetDanmuInfo } from 'bilibili-live-danmaku';
+import { parseLiveConfig, type DataXliveGetDanmuInfo } from 'bilibili-live-danmaku';
+import { openLiveSocket, type OpenLiveSocket } from './live-socket.js';
 import { PublicWebClient } from './public-web-client.js';
 import { BilibiliProviderError } from './passport-client.js';
 import type { BilibiliReadingSession } from './reading-session.js';
@@ -23,6 +24,7 @@ export interface LiveMessageDiagnostic {
 }
 
 interface PublicWebLiveMessageSourceOptions {
+  readonly openSocket?: OpenLiveSocket;
   readonly connectTimeoutMs?: number;
   readonly session: BilibiliReadingSession;
   readonly fetchImplementation?: typeof fetch;
@@ -112,6 +114,7 @@ export function normalizePublicWebDanmaku(
 }
 
 export class PublicWebLiveMessageSource implements LiveMessageSource {
+  private readonly openSocket: OpenLiveSocket;
   private readonly client: PublicWebClient;
   private readonly connectTimeoutMs: number;
   private readonly reportDiagnostic: (diagnostic: LiveMessageDiagnostic) => void;
@@ -119,10 +122,12 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
 
   public constructor({
     session,
+    openSocket = openLiveSocket,
     connectTimeoutMs = 15_000,
     fetchImplementation = globalThis.fetch,
     reportDiagnostic = () => undefined,
   }: PublicWebLiveMessageSourceOptions) {
+    this.openSocket = openSocket;
     this.session = session;
     this.connectTimeoutMs = connectTimeoutMs;
     this.reportDiagnostic = reportDiagnostic;
@@ -187,19 +192,11 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
         lastReported.set(reason, now);
         this.reportDiagnostic({ roomId, transport: 'websocket', reason });
       };
-      const live = new LiveWS(canonicalRoomId, {
-        address: liveConfig.address,
-        buvid: client.cookies.get('buvid3'),
-        key: liveConfig.key,
-        uid,
-        protover: 3,
-      });
       const close = (): Promise<void> => {
         if (closing) return closing;
         closed = true;
         setup.removeEventListener('abort', onAbort);
         lifetime.removeEventListener('abort', onAbort);
-        live.ws.removeEventListener('message', onAuth);
         closing = Promise.resolve().then(async () => {
           await Promise.allSettled([...deliveries]);
         });
@@ -231,10 +228,9 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
             : new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE'),
         );
       };
-      const authenticate = async (event: MessageEvent) => {
+      const authenticate = async (data: unknown) => {
         if (settled || closed) return;
         let bytes: Uint8Array;
-        const data: unknown = event.data;
         if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
         else if (ArrayBuffer.isView(data))
           bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
@@ -247,21 +243,16 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
         settled = true;
         connected = true;
         setup.removeEventListener('abort', onAbort);
-        live.ws.removeEventListener('message', onAuth);
         resolve({ close });
       };
-      const onAuth = (event: MessageEvent) => {
-        void authenticate(event).catch(() =>
+      const onAuth = (data: unknown) => {
+        if (settled || closed) return;
+        void authenticate(data).catch(() =>
           disconnect(new BilibiliProviderError('BILIBILI_UPSTREAM_REJECTED')),
         );
       };
-      setup.addEventListener('abort', onAbort, { once: true });
-      lifetime.addEventListener('abort', onAbort, { once: true });
-      live.ws.addEventListener('message', onAuth);
-      // CONNECT_SUCCESS alone is not authentication evidence in this dependency version.
-      live.addEventListener('MESSAGE', (event) => {
+      const onMessage = (message: unknown) => {
         if (closed || !connected) return;
-        const message: unknown = event.data;
         if (
           !isRecord(message) ||
           typeof message.cmd !== 'string' ||
@@ -284,12 +275,25 @@ export class PublicWebLiveMessageSource implements LiveMessageSource {
             report('delivery-failed');
           },
         );
-      });
-      live.addEventListener('error:decode', () => report('decode-failed'));
-      live.ws.addEventListener('close', () => disconnect(null));
-      live.ws.addEventListener('error', () =>
-        disconnect(new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE')),
+      };
+      const live = this.openSocket(
+        {
+          roomId: canonicalRoomId,
+          address: liveConfig.address,
+          buvid: client.cookies.get('buvid3'),
+          key: liveConfig.key,
+          uid,
+        },
+        {
+          onFrame: onAuth,
+          onMessage,
+          onDecodeError: () => report('decode-failed'),
+          onClose: () => disconnect(null),
+          onError: () => disconnect(new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE')),
+        },
       );
+      setup.addEventListener('abort', onAbort, { once: true });
+      lifetime.addEventListener('abort', onAbort, { once: true });
       if (setup.aborted) onAbort();
     });
   }

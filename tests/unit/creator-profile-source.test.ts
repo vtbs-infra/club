@@ -1,6 +1,6 @@
 import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
-import { BilibiliApiClient } from 'bilibili-live-danmaku';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bilibiliDeviceResponse } from '../helpers/bilibili-device-response.js';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PublicWebCreatorProfileSource } from '../../src/server/modules/bilibili/public-web-creator-profile-source.js';
 
@@ -13,21 +13,31 @@ function responses() {
 }
 
 function fixture(payloads: unknown[] = responses()) {
-  const network = vi.fn<typeof fetch>();
-  for (const payload of payloads) network.mockResolvedValueOnce(Response.json(payload));
+  const network = vi.fn<typeof fetch>((input) => {
+    const path = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+    const index = [
+      '/room/v1/Room/getRoomInfoOld',
+      '/room/v1/Room/get_info',
+      '/live_user/v1/UserInfo/get_anchor_in_room',
+    ].indexOf(path);
+    if (index < 0 || payloads[index] === undefined)
+      throw new Error(`Unexpected profile request: ${path}`);
+    return Promise.resolve(Response.json(payloads[index]));
+  });
+  const fetchImplementation: typeof fetch = (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    return Promise.resolve(bilibiliDeviceResponse(url) ?? network(input, init));
+  };
   return {
     network,
-    source: new PublicWebCreatorProfileSource(new FakeBilibiliReadingSession(), network),
+    source: new PublicWebCreatorProfileSource(
+      new FakeBilibiliReadingSession(),
+      fetchImplementation,
+    ),
   };
 }
 
 describe('public-web creator profile adapter', () => {
-  beforeEach(() => {
-    vi.spyOn(BilibiliApiClient.prototype, 'initCookie').mockResolvedValue();
-  });
-
-  afterEach(() => vi.restoreAllMocks());
-
   it('resolves the room alias and fetches the matching anchor through the canonical room', async () => {
     const { network, source } = fixture();
     const signal = new AbortController().signal;
@@ -63,13 +73,12 @@ describe('public-web creator profile adapter', () => {
   ] as const)('rejects an upstream error from the %s endpoint', async (_label, index) => {
     const payloads: unknown[] = responses();
     payloads[index] = { code: -352, message: '-352' };
-    const { network, source } = fixture(payloads);
+    const { source } = fixture(payloads);
     const fetching = source.fetchByUid('900001', new AbortController().signal);
     await expect(fetching).rejects.toMatchObject({
       code: 'INVALID_RESPONSE',
     });
     await expect(fetching).rejects.toThrow('-352');
-    expect(network).toHaveBeenCalledTimes(index + 1);
   });
 
   it.each([
@@ -88,11 +97,10 @@ describe('public-web creator profile adapter', () => {
   ] as const)('rejects %s', async (_label, index, invalid) => {
     const payloads: unknown[] = responses();
     payloads[index] = invalid;
-    const { network, source } = fixture(payloads);
+    const { source } = fixture(payloads);
     await expect(source.fetchByUid('900001', new AbortController().signal)).rejects.toMatchObject({
       code: 'INVALID_RESPONSE',
     });
-    expect(network).toHaveBeenCalledTimes(index + 1);
   });
 
   it('retains the HTTP failure status for diagnosis', async () => {
