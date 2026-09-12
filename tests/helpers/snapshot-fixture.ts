@@ -5,9 +5,30 @@ import {
   snapshotAttemptMembers,
   snapshotAttempts,
   snapshotRuns,
+  creators,
   type GuardTier,
 } from '../../src/server/infrastructure/db/schema/index.js';
 import { databaseWriteBatches } from '../../src/server/infrastructure/db/write-batches.js';
+import { calculateMonthlyCutoff } from '../../src/server/modules/snapshots/month-end.js';
+
+export async function insertScheduledSnapshot(
+  database: DatabaseService,
+  creatorId: string,
+  periodStart = '2026-07-01',
+) {
+  const [creator] = await database.orm.select().from(creators).where(eq(creators.id, creatorId));
+  if (!creator) throw new Error('Snapshot fixture requires a creator.');
+  const [run] = await database.orm
+    .insert(snapshotRuns)
+    .values({
+      creatorId,
+      creatorBilibiliUid: creator.bilibiliUid,
+      creatorRoomId: creator.roomId,
+      ...calculateMonthlyCutoff(periodStart, creator.timezone),
+    })
+    .returning();
+  return run!;
+}
 
 // Supplies already captured evidence; source parsing/capture is tested separately.
 export async function insertReadySnapshot(

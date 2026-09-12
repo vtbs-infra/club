@@ -1,3 +1,5 @@
+import { CaptureFailure } from './roster-consistency.js';
+import { collectRoster } from './roster-capture.js';
 import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
@@ -19,12 +21,7 @@ import {
 import type { StorageDriver } from '../../infrastructure/storage/storage-driver.js';
 import { AuditService } from '../audit/audit-service.js';
 import type { RequestAuditContext } from '../audit/audit-service.js';
-import {
-  GUARD_ROSTER_PAGE_BYTE_LIMIT,
-  type GuardRosterMember,
-  type GuardRosterPage,
-  type GuardRosterSource,
-} from '../bilibili/guard-roster-source.js';
+import { type GuardRosterPage, type GuardRosterSource } from '../bilibili/guard-roster-source.js';
 import {
   calculateMonthlyCutoff,
   classifyPunctuality,
@@ -35,19 +32,7 @@ import { lockEligibilityPeriod } from '../gifts/eligibility-lock.js';
 import { SnapshotQueryService } from './snapshot-query-service.js';
 
 const gzipAsync = promisify(gzip);
-const PAGE_SIZE = 30;
-const MAX_PAGES = 1_000;
-const MAX_MEMBERS = MAX_PAGES * PAGE_SIZE;
-const MAX_ATTEMPT_RESPONSE_BYTES = 64 * 1024 * 1024;
 const SCHEDULER_CONCURRENCY = 4;
-class CaptureFailure extends Error {
-  public constructor(
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 interface CaptureRun {
   readonly creatorBilibiliUid: string;
@@ -61,25 +46,6 @@ interface CaptureRun {
 interface AttemptRequest {
   readonly context?: RequestAuditContext;
   readonly initiatedBy: 'ADMIN' | 'SCHEDULER';
-}
-
-type CapturedRosterPage = Omit<GuardRosterPage, 'rawBytes'>;
-type CapturedRosterMember = GuardRosterMember & { readonly sourcePage: number };
-
-function retainNormalizedPage(page: GuardRosterPage): CapturedRosterPage {
-  return {
-    declaredPageCount: page.declaredPageCount,
-    declaredTotal: page.declaredTotal,
-    fetchedAt: page.fetchedAt,
-    members: page.members,
-    pageNumber: page.pageNumber,
-  };
-}
-
-function fingerprint(page: Pick<GuardRosterPage, 'members'>): string {
-  return page.members
-    .map((member) => `${member.biliUid}:${member.rawTier}:${member.sourcePosition}`)
-    .join('|');
 }
 
 function failure(error: unknown): CaptureFailure {
@@ -346,82 +312,6 @@ export class SnapshotService {
     }
   }
 
-  private validatePages(
-    pages: readonly CapturedRosterPage[],
-    recheck: CapturedRosterPage,
-  ): readonly (CapturedRosterMember & {
-    readonly tier: NonNullable<GuardRosterMember['tier']>;
-  })[] {
-    const first = pages[0];
-    if (!first) throw new CaptureFailure('MISSING_PAGE', 'The first roster page is missing.');
-    if (first.declaredPageCount > MAX_PAGES) {
-      throw new CaptureFailure('PAGE_LIMIT_EXCEEDED', 'The provider declared too many pages.');
-    }
-    for (let index = 0; index < pages.length; index += 1) {
-      const page = pages[index]!;
-      if (page.pageNumber !== index + 1) {
-        throw new CaptureFailure('MISSING_PAGE', 'A roster page was missing or out of order.');
-      }
-      if (
-        page.declaredPageCount !== first.declaredPageCount ||
-        page.declaredTotal !== first.declaredTotal
-      ) {
-        throw new CaptureFailure('COUNT_DRIFT', 'Roster totals changed during pagination.');
-      }
-    }
-    if (
-      recheck.declaredPageCount !== first.declaredPageCount ||
-      recheck.declaredTotal !== first.declaredTotal ||
-      fingerprint(recheck) !== fingerprint(first)
-    ) {
-      throw new CaptureFailure('FIRST_PAGE_DRIFT', 'The first roster page changed during capture.');
-    }
-    const members = pages
-      .flatMap((page) => page.members.map((member) => ({ ...member, sourcePage: page.pageNumber })))
-      .map((member) => {
-        if (member.tier === null) {
-          throw new CaptureFailure('UNKNOWN_TIER', 'The provider returned an unknown guard tier.');
-        }
-        return { ...member, tier: member.tier };
-      });
-    if (new Set(members.map((member) => member.biliUid)).size !== members.length) {
-      throw new CaptureFailure('DUPLICATE_UID', 'The roster contained a duplicate UID.');
-    }
-    if (members.length !== first.declaredTotal) {
-      throw new CaptureFailure('COUNT_MISMATCH', 'The normalized roster did not match its total.');
-    }
-    return members;
-  }
-
-  private addResponseBytes(current: number, pages: readonly GuardRosterPage[]): number {
-    let next = current;
-    for (const page of pages) {
-      if (page.rawBytes.length > GUARD_ROSTER_PAGE_BYTE_LIMIT) {
-        throw new CaptureFailure('PAGE_SIZE_EXCEEDED', 'The provider response was too large.');
-      }
-      next += page.rawBytes.length;
-    }
-    if (next > MAX_ATTEMPT_RESPONSE_BYTES) {
-      throw new CaptureFailure(
-        'ATTEMPT_SIZE_EXCEEDED',
-        'The roster capture exceeded its total response-size limit.',
-      );
-    }
-    return next;
-  }
-
-  private validateFirstPage(first: GuardRosterPage): void {
-    if (first.pageNumber !== 1 || first.declaredPageCount < 1) {
-      throw new CaptureFailure('INVALID_FIRST_PAGE', 'The provider returned invalid pagination.');
-    }
-    if (first.declaredPageCount > MAX_PAGES) {
-      throw new CaptureFailure('PAGE_LIMIT_EXCEEDED', 'The provider declared too many pages.');
-    }
-    if (first.declaredTotal > MAX_MEMBERS) {
-      throw new CaptureFailure('MEMBER_LIMIT_EXCEEDED', 'The provider declared too many members.');
-    }
-  }
-
   private async executeCapture(
     attemptId: string,
     run: CaptureRun,
@@ -433,69 +323,20 @@ export class SnapshotService {
       run.scheduledCutoffAt,
       run.onTimeWindowEndAt,
     );
-    const captureController = new AbortController();
-    const signal = AbortSignal.any([
-      shutdownSignal,
-      AbortSignal.timeout(this.maxDurationMs),
-      captureController.signal,
-    ]);
+    const signal = AbortSignal.any([shutdownSignal, AbortSignal.timeout(this.maxDurationMs)]);
     try {
       signal.throwIfAborted();
       await this.database.orm
         .update(snapshotAttempts)
         .set({ captureStartedAt, punctuality })
         .where(eq(snapshotAttempts.id, attemptId));
-      const capture = await this.source.openCapture(signal);
-      const fetch = (pageNumber: number) =>
-        capture.fetchPage({
-          creatorUid: run.creatorBilibiliUid,
-          pageNumber,
-          pageSize: PAGE_SIZE,
-          roomId: run.creatorRoomId,
-          signal,
-        });
-      let firstResponse: GuardRosterPage | null = await fetch(1);
-      let responseBytes = this.addResponseBytes(0, [firstResponse]);
-      this.validateFirstPage(firstResponse);
-      signal.throwIfAborted();
-      await this.persistPage(run.id, attemptId, firstResponse, 'PAGE');
-      const first = retainNormalizedPage(firstResponse);
-      firstResponse = null;
-      const pages: CapturedRosterPage[] = [first];
-      for (let start = 2; start <= first.declaredPageCount; start += 4) {
-        const numbers = Array.from(
-          { length: Math.min(4, first.declaredPageCount - start + 1) },
-          (_, offset) => start + offset,
-        );
-        // Cancel siblings on the first failure and drain them before sealing the attempt.
-        const results = await Promise.allSettled(
-          numbers.map(async (number) => {
-            try {
-              return await fetch(number);
-            } catch (error) {
-              captureController.abort(error);
-              throw error;
-            }
-          }),
-        );
-        signal.throwIfAborted();
-        const chunk = results.map((result) => {
-          if (result.status === 'rejected') throw result.reason;
-          return result.value;
-        });
-        responseBytes = this.addResponseBytes(responseBytes, chunk);
-        for (const page of chunk) {
-          await this.persistPage(run.id, attemptId, page, 'PAGE');
-        }
-        pages.push(...chunk.map(retainNormalizedPage));
-      }
-      let recheckResponse: GuardRosterPage | null = await fetch(1);
-      signal.throwIfAborted();
-      this.addResponseBytes(responseBytes, [recheckResponse]);
-      await this.persistPage(run.id, attemptId, recheckResponse, 'RECHECK');
-      const recheck = retainNormalizedPage(recheckResponse);
-      recheckResponse = null;
-      const members = this.validatePages(pages, recheck);
+      const { declaredTotal, members } = await collectRoster({
+        source: this.source,
+        creatorUid: run.creatorBilibiliUid,
+        roomId: run.creatorRoomId,
+        signal,
+        persistPage: (page, kind) => this.persistPage(run.id, attemptId, page, kind),
+      });
       signal.throwIfAborted();
       const completedAt = this.clock.now();
       await this.database.orm.transaction(async (transaction) => {
@@ -518,7 +359,7 @@ export class SnapshotService {
           .set({
             captureCompletedAt: completedAt,
             consistencyStatus: 'CONSISTENT',
-            declaredTotal: first.declaredTotal,
+            declaredTotal,
             normalizedTotal: members.length,
           })
           .where(eq(snapshotAttempts.id, attemptId));
