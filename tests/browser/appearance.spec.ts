@@ -1,4 +1,4 @@
-import { fulfillJson, mockApi, requestJsonObject, requestPath } from './support/api.js';
+import { fulfillJson, mockApi, mockJson, requestJsonObject } from './support/api.js';
 import { adminIdentity, systemStatus } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test } from './support/test.js';
 
@@ -11,17 +11,13 @@ test('previews locally and restores the applied theme on cancel or navigation', 
   page,
 }) => {
   let updateCount = 0;
-  await page.route('**/api/v1/admin/appearance', async (route) => {
+  await mockApi(page, 'PUT', '/api/v1/admin/appearance', async (route) => {
     updateCount += 1;
     await fulfillJson(route, { themePreset: 'pixel' });
   });
-  await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return adminIdentity();
-    if (pathname === '/api/v1/admin/system') return systemStatus();
-    if (pathname === '/api/v1/admin/audit-logs') return { items: [], nextCursor: null };
-    return undefined;
-  });
+  await mockJson(page, 'GET', '/api/v1/me', adminIdentity());
+  await mockJson(page, 'GET', '/api/v1/admin/system', systemStatus());
+  await mockJson(page, 'GET', '/api/v1/admin/audit-logs', { items: [], nextCursor: null });
 
   await page.goto(`${appUrl}/admin/appearance`);
   await expect(page.getByRole('heading', { name: '主题与外观' })).toBeVisible();
@@ -48,10 +44,10 @@ test('applies only explicit saves and keeps a failed candidate in preview', asyn
   let appliedTheme = 'moe';
   let failNext = false;
   const requests: Record<string, unknown>[] = [];
-  await page.route('**/api/v1/appearance', (route) =>
+  await mockApi(page, 'GET', '/api/v1/appearance', (route) =>
     fulfillJson(route, { themePreset: appliedTheme }),
   );
-  await page.route('**/api/v1/admin/appearance', async (route) => {
+  await mockApi(page, 'PUT', '/api/v1/admin/appearance', async (route) => {
     const input = requestJsonObject(route.request());
     requests.push(input);
     if (failNext) {
@@ -70,10 +66,7 @@ test('applies only explicit saves and keeps a failed candidate in preview', asyn
     appliedTheme = String(input.themePreset);
     await fulfillJson(route, { themePreset: appliedTheme });
   });
-  await mockApi(page, (request) => {
-    if (requestPath(request) === '/api/v1/me') return adminIdentity();
-    return undefined;
-  });
+  await mockJson(page, 'GET', '/api/v1/me', adminIdentity());
 
   await page.goto(`${appUrl}/admin/appearance`);
   await page.locator('input[value="archive"]').check();

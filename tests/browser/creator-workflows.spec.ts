@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { fulfillJson, mockApi, requestJsonObject, requestPath } from './support/api.js';
+import { fulfillJson, mockApi, mockJson, requestJsonObject } from './support/api.js';
 import { creatorIdentity, giftOrder, giftRelease, testId, testTime } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test } from './support/test.js';
 
@@ -10,15 +10,11 @@ test.beforeEach(async ({ page }) => {
 test('cancelling publication preserves edits and restores focus', async ({ appUrl, page }) => {
   const draft = giftRelease();
   let published = false;
-  await mockApi(page, (request) => {
-    const path = requestPath(request);
-    if (path === '/api/v1/me') return creatorIdentity();
-    if (path === `/api/v1/creator/releases/${draft.id}`) return draft;
-    if (path === `/api/v1/creator/releases/${draft.id}/publish`) {
-      published = true;
-      return draft;
-    }
-    return undefined;
+  await mockJson(page, 'GET', '/api/v1/me', creatorIdentity());
+  await mockJson(page, 'GET', `/api/v1/creator/releases/${draft.id}`, draft);
+  await mockApi(page, 'POST', `/api/v1/creator/releases/${draft.id}/publish`, (route) => {
+    published = true;
+    return fulfillJson(route, draft);
   });
   await page.goto(`${appUrl}/creator/releases/${draft.id}`);
   await page.getByLabel('礼物名称').fill('当前页面的新标题');
@@ -52,46 +48,31 @@ test('exports submitted orders by release without changing the active list filte
     release: { id: releaseId },
   });
 
-  await page.route('**/api/v1/**', async (route) => {
-    const request = route.request();
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') {
-      await fulfillJson(route, creatorIdentity());
-      return;
-    }
-    if (pathname === '/api/v1/creator/orders/fulfillment-export') {
-      exportInput = requestJsonObject(request);
-      await route.fulfill({
-        body: 'workbook',
-        headers: {
-          'content-disposition': 'attachment; filename="fulfillment.xlsx"',
-          'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'x-export-row-count': '1',
-        },
-        status: 200,
-      });
-      return;
-    }
-    if (pathname === '/api/v1/creator/orders') {
-      await fulfillJson(route, { items: [order], nextCursor: null });
-      return;
-    }
-    if (pathname === '/api/v1/creator/orders/fulfillment-releases') {
-      await fulfillJson(route, {
-        items: [
-          {
-            claimDeadlineAt: release.claimDeadlineAt,
-            eligibilityMonth: release.eligibilityMonth,
-            id: release.id,
-            submittedCount: 1,
-            title: release.title,
-          },
-        ],
-        nextCursor: null,
-      });
-      return;
-    }
-    await route.fallback();
+  await mockJson(page, 'GET', '/api/v1/me', creatorIdentity());
+  await mockApi(page, 'POST', '/api/v1/creator/orders/fulfillment-export', async (route) => {
+    exportInput = requestJsonObject(route.request());
+    await route.fulfill({
+      body: 'workbook',
+      headers: {
+        'content-disposition': 'attachment; filename="fulfillment.xlsx"',
+        'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'x-export-row-count': '1',
+      },
+      status: 200,
+    });
+  });
+  await mockJson(page, 'GET', '/api/v1/creator/orders', { items: [order], nextCursor: null });
+  await mockJson(page, 'GET', '/api/v1/creator/orders/fulfillment-releases', {
+    items: [
+      {
+        claimDeadlineAt: release.claimDeadlineAt,
+        eligibilityMonth: release.eligibilityMonth,
+        id: release.id,
+        submittedCount: 1,
+        title: release.title,
+      },
+    ],
+    nextCursor: null,
   });
 
   await page.goto(`${appUrl}/creator/orders?status=SHIPPED`);
@@ -118,25 +99,21 @@ test('retains the form version across cover refresh and renders its preview unde
   await freezeBrowserTime(page);
   let serverRelease = giftRelease({ description: '原始说明', version: 3 });
   let save: Record<string, unknown> | null = null;
-  await page.route('**/api/v1/**', async (route) => {
-    const request = route.request();
-    const path = requestPath(request);
-    if (path === '/api/v1/me') return fulfillJson(route, creatorIdentity());
-    if (path === `/api/v1/creator/releases/${serverRelease.id}/cover`)
-      return fulfillJson(route, { coverImageUrl: null });
-    if (path === `/api/v1/creator/releases/${serverRelease.id}`) {
-      if (request.method() === 'PUT') {
-        save = requestJsonObject(request);
-        return fulfillJson(
-          route,
-          { error: { code: 'GIFT_RELEASE_VERSION_CONFLICT', message: 'Version conflict' } },
-          409,
-        );
-      }
-      return fulfillJson(route, serverRelease);
-    }
-    return route.fallback();
+  await mockJson(page, 'GET', '/api/v1/me', creatorIdentity());
+  await mockJson(page, 'POST', `/api/v1/creator/releases/${serverRelease.id}/cover`, {
+    coverImageUrl: null,
   });
+  await mockApi(page, 'PUT', `/api/v1/creator/releases/${serverRelease.id}`, (route) => {
+    save = requestJsonObject(route.request());
+    return fulfillJson(
+      route,
+      { error: { code: 'GIFT_RELEASE_VERSION_CONFLICT', message: 'Version conflict' } },
+      409,
+    );
+  });
+  await mockApi(page, 'GET', `/api/v1/creator/releases/${serverRelease.id}`, (route) =>
+    fulfillJson(route, serverRelease),
+  );
   await page.goto(`${appUrl}/creator/releases/${serverRelease.id}`);
   await page.getByLabel('礼物名称').fill('我的未保存修改');
   serverRelease = { ...serverRelease, description: '其他编辑者的新说明', version: 4 };

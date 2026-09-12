@@ -6,25 +6,24 @@ export async function fulfillJson(route: Route, body: unknown, status = 200): Pr
 
 export async function mockJson(
   page: Page,
-  url: string,
+  method: string,
+  pathname: string,
   body: unknown,
   status = 200,
 ): Promise<void> {
-  await page.route(url, (route) => fulfillJson(route, body, status));
+  await mockApi(page, method, pathname, (route) => fulfillJson(route, body, status));
 }
 
 export async function mockApi(
   page: Page,
-  resolveBody: (request: Request) => unknown,
+  method: string,
+  pathname: string,
+  handle: (route: Route) => void | Promise<void>,
 ): Promise<void> {
-  await page.route('**/api/v1/**', async (route) => {
-    const body = await resolveBody(route.request());
-    if (body === undefined) {
-      await route.fallback();
-      return;
-    }
-    await fulfillJson(route, body);
-  });
+  await page.route(
+    (url) => url.pathname === pathname,
+    (route) => (route.request().method() === method ? handle(route) : route.fallback()),
+  );
 }
 
 export function requestPath(request: Request): string {

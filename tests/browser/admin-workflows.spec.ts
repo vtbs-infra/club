@@ -5,7 +5,7 @@ import type {
   SnapshotDetail,
 } from '../../src/shared/contracts/snapshots.js';
 
-import { mockApi, requestJsonObject, requestPath } from './support/api.js';
+import { fulfillJson, mockApi, mockJson, requestJsonObject } from './support/api.js';
 import { adminIdentity, testId, testTime, userRecord } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test } from './support/test.js';
 
@@ -81,20 +81,19 @@ test('shows the exact late-attempt members before approval', async ({ appUrl, pa
     ],
     nextCursor: null,
   } satisfies SnapshotAttemptMemberPage;
-  await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return adminIdentity();
-    if (pathname === '/api/v1/admin/rosters') return rosterPage;
-    if (pathname === `/api/v1/admin/rosters/${runId}`) return detail;
-    if (pathname === `/api/v1/admin/rosters/${runId}/approve-late`) {
-      approvalInput = requestJsonObject(request);
-      return {};
-    }
-    if (pathname === `/api/v1/admin/rosters/${runId}/attempts/${attemptId}/members`) {
-      return candidates;
-    }
-    return undefined;
+  await mockJson(page, 'GET', '/api/v1/me', adminIdentity());
+  await mockJson(page, 'GET', '/api/v1/admin/rosters', rosterPage);
+  await mockJson(page, 'GET', `/api/v1/admin/rosters/${runId}`, detail);
+  await mockApi(page, 'POST', `/api/v1/admin/rosters/${runId}/approve-late`, (route) => {
+    approvalInput = requestJsonObject(route.request());
+    return fulfillJson(route, {});
   });
+  await mockJson(
+    page,
+    'GET',
+    `/api/v1/admin/rosters/${runId}/attempts/${attemptId}/members`,
+    candidates,
+  );
 
   await page.goto(`${appUrl}/admin/rosters`);
   await page.getByRole('button', { name: /候选主播/ }).click();
@@ -135,22 +134,20 @@ test('registers a creator from verified identity without editable Bilibili field
   let createPayload: Record<string, unknown> | null = null;
   let profileRefreshes = 0;
 
-  await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return adminIdentity();
-    if (pathname === '/api/v1/admin/users') return [candidate];
-    if (pathname === '/api/v1/admin/creators' && request.method() === 'POST') {
-      createPayload = requestJsonObject(request);
-      creators = [creator];
-      return creator;
-    }
-    if (pathname === '/api/v1/admin/creators') return { items: creators, nextCursor: null };
-    if (pathname === `/api/v1/admin/creators/${creator.id}/refresh-profile`) {
-      profileRefreshes += 1;
-      creators = [refreshedCreator];
-      return refreshedCreator;
-    }
-    return undefined;
+  await mockJson(page, 'GET', '/api/v1/me', adminIdentity());
+  await mockJson(page, 'GET', '/api/v1/admin/users', [candidate]);
+  await mockApi(page, 'POST', '/api/v1/admin/creators', (route) => {
+    createPayload = requestJsonObject(route.request());
+    creators = [creator];
+    return fulfillJson(route, creator);
+  });
+  await mockApi(page, 'GET', '/api/v1/admin/creators', (route) =>
+    fulfillJson(route, { items: creators, nextCursor: null }),
+  );
+  await mockApi(page, 'POST', `/api/v1/admin/creators/${creator.id}/refresh-profile`, (route) => {
+    profileRefreshes += 1;
+    creators = [refreshedCreator];
+    return fulfillJson(route, refreshedCreator);
   });
 
   await page.goto(`${appUrl}/admin/creators`);
@@ -185,13 +182,9 @@ test('shows and recovers from a failed creator candidate search', async ({ appUr
   const retryMayFinish = new Promise<void>((resolve) => {
     finishRetry = () => resolve();
   });
-  await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return adminIdentity();
-    if (pathname === '/api/v1/admin/creators') return { items: [], nextCursor: null };
-    return undefined;
-  });
-  await page.route('**/api/v1/admin/users?*', async (route) => {
+  await mockJson(page, 'GET', '/api/v1/me', adminIdentity());
+  await mockJson(page, 'GET', '/api/v1/admin/creators', { items: [], nextCursor: null });
+  await mockApi(page, 'GET', '/api/v1/admin/users', async (route) => {
     if (unavailable) {
       await route.fulfill({
         json: {

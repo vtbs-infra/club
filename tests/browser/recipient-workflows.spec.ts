@@ -1,4 +1,4 @@
-import { fulfillJson, mockApi, requestJsonObject, requestPath } from './support/api.js';
+import { fulfillJson, mockApi, mockJson, requestJsonObject } from './support/api.js';
 import {
   addressRecord,
   announcement,
@@ -18,19 +18,15 @@ test('edits a display name and changes password while keeping account identity i
 }) => {
   let identity = recipientIdentity();
   let submittedPassword: Record<string, unknown> | null = null;
-  await mockApi(page, (request) => {
-    const path = requestPath(request);
-    if (path === '/api/v1/me') return identity;
-    if (path === '/api/v1/me/profile') {
-      const input = requestJsonObject(request);
-      identity = recipientIdentity({ name: String(input.name) });
-      return identity.user;
-    }
-    if (path === '/api/v1/auth/password') {
-      submittedPassword = requestJsonObject(request);
-      return null;
-    }
-    return undefined;
+  await mockApi(page, 'GET', '/api/v1/me', (route) => fulfillJson(route, identity));
+  await mockApi(page, 'PATCH', '/api/v1/me/profile', (route) => {
+    const input = requestJsonObject(route.request());
+    identity = recipientIdentity({ name: String(input.name) });
+    return fulfillJson(route, identity.user);
+  });
+  await mockApi(page, 'POST', '/api/v1/auth/password', (route) => {
+    submittedPassword = requestJsonObject(route.request());
+    return route.fulfill({ status: 204 });
   });
   await page.goto(`${appUrl}/account`);
   await expect(page.getByLabel('用户名', { exact: true })).toHaveAttribute('readonly', '');
@@ -57,10 +53,7 @@ test('supports keyboard navigation and restores focus in the account menu', asyn
   appUrl,
   page,
 }) => {
-  await mockApi(page, (request) => {
-    if (requestPath(request) === '/api/v1/me') return recipientIdentity();
-    return undefined;
-  });
+  await mockJson(page, 'GET', '/api/v1/me', recipientIdentity());
   await page.goto(`${appUrl}/account`);
   const trigger = page.getByRole('button', { name: '测试用户的账号菜单' });
   await trigger.focus();
@@ -78,17 +71,12 @@ test('preselects the default address even when it is not first in the list', asy
   page,
 }) => {
   const order = giftOrder();
-  await mockApi(page, (request) => {
-    const path = requestPath(request);
-    if (path === '/api/v1/me') return recipientIdentity();
-    if (path === '/api/v1/me/addresses')
-      return [
-        addressRecord({ isDefault: false, label: '办公室' }),
-        addressRecord({ id: testId(26), isDefault: true, label: '家' }),
-      ];
-    if (path === `/api/v1/me/gifts/${order.id}`) return order;
-    return undefined;
-  });
+  await mockJson(page, 'GET', '/api/v1/me', recipientIdentity());
+  await mockJson(page, 'GET', '/api/v1/me/addresses', [
+    addressRecord({ isDefault: false, label: '办公室' }),
+    addressRecord({ id: testId(26), isDefault: true, label: '家' }),
+  ]);
+  await mockJson(page, 'GET', `/api/v1/me/gifts/${order.id}`, order);
   await page.goto(`${appUrl}/gifts/${order.id}`);
   await expect(page.getByRole('radio', { name: /家/ })).toBeChecked();
   await expect(page.getByRole('radio', { name: /^办公室/ })).not.toBeChecked();
@@ -106,18 +94,11 @@ test('refreshes effective gift status at both claim window boundaries', async ({
     status: 'UPCOMING',
     release: { claimStartAt: start, claimDeadlineAt: deadline },
   });
-  await page.route('**/api/v1/**', async (route) => {
-    const path = requestPath(route.request());
-    if (path === '/api/v1/me') return fulfillJson(route, recipientIdentity());
-    if (path === '/api/v1/me/addresses') return fulfillJson(route, []);
-    if (path === `/api/v1/me/gifts/${order.id}`) {
-      return fulfillJson(route, {
-        ...order,
-        status,
-      });
-    }
-    return route.fallback();
-  });
+  await mockJson(page, 'GET', '/api/v1/me', recipientIdentity());
+  await mockJson(page, 'GET', '/api/v1/me/addresses', []);
+  await mockApi(page, 'GET', `/api/v1/me/gifts/${order.id}`, (route) =>
+    fulfillJson(route, { ...order, status }),
+  );
   await page.goto(`${appUrl}/gifts/${order.id}`);
   await expect(page.getByText('领取将在', { exact: false })).toBeVisible();
   status = 'CLAIMABLE';
@@ -138,30 +119,26 @@ test('acknowledges only the displayed announcement body version after it loads',
   const releaseBody = Promise.withResolvers<void>();
   let detailRequested = false;
   const acknowledgments: Record<string, unknown>[] = [];
-  await page.route('**/api/v1/**', async (route) => {
-    const request = route.request();
-    const path = requestPath(request);
-    if (path === '/api/v1/me') return fulfillJson(route, recipientIdentity());
-    if (path === '/api/v1/me/announcements')
-      return fulfillJson(route, {
-        items: [{ ...summary, read: acknowledgments.length > 0 }],
-        nextCursor: null,
-      });
-    if (path === `/api/v1/me/announcements/${summary.id}/read`) {
-      acknowledgments.push(requestJsonObject(request));
-      return fulfillJson(route, {});
-    }
-    if (path === `/api/v1/me/announcements/${summary.id}`) {
-      detailRequested = true;
-      await releaseBody.promise;
-      return fulfillJson(route, {
-        ...summary,
-        body: '第二版正文',
-        version: 2,
-        read: acknowledgments.length > 0,
-      });
-    }
-    return route.fallback();
+  await mockJson(page, 'GET', '/api/v1/me', recipientIdentity());
+  await mockApi(page, 'GET', '/api/v1/me/announcements', (route) =>
+    fulfillJson(route, {
+      items: [{ ...summary, read: acknowledgments.length > 0 }],
+      nextCursor: null,
+    }),
+  );
+  await mockApi(page, 'POST', `/api/v1/me/announcements/${summary.id}/read`, (route) => {
+    acknowledgments.push(requestJsonObject(route.request()));
+    return fulfillJson(route, {});
+  });
+  await mockApi(page, 'GET', `/api/v1/me/announcements/${summary.id}`, async (route) => {
+    detailRequested = true;
+    await releaseBody.promise;
+    return fulfillJson(route, {
+      ...summary,
+      body: '第二版正文',
+      version: 2,
+      read: acknowledgments.length > 0,
+    });
   });
   try {
     await page.goto(`${appUrl}/announcements`);

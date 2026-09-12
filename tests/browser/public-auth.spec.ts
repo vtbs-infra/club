@@ -1,4 +1,4 @@
-import { fulfillJson, mockApi, mockJson, requestPath } from './support/api.js';
+import { fulfillJson, mockApi, mockJson } from './support/api.js';
 import { addressRecord, portalHome, recipientIdentity, testId } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test, TEST_NOW } from './support/test.js';
 
@@ -10,8 +10,8 @@ test('keeps signed-in visitors on the public home until they choose the workspac
   appUrl,
   page,
 }) => {
-  await mockJson(page, '**/api/v1/portal/home', portalHome());
-  await mockJson(page, '**/api/v1/me', recipientIdentity({ id: testId(11) }));
+  await mockJson(page, 'GET', '/api/v1/portal/home', portalHome());
+  await mockJson(page, 'GET', '/api/v1/me', recipientIdentity({ id: testId(11) }));
 
   await page.goto(appUrl);
 
@@ -39,8 +39,8 @@ test('reveals username after recovery verification and resets the password', asy
     username: null,
   };
   let verified = false;
-  await mockJson(page, '**/api/v1/auth/challenges', challenge, 201);
-  await page.route('**/api/v1/auth/challenges/' + challenge.id, (route) =>
+  await mockJson(page, 'POST', '/api/v1/auth/challenges', challenge, 201);
+  await mockApi(page, 'GET', '/api/v1/auth/challenges/' + challenge.id, (route) =>
     fulfillJson(
       route,
       verified
@@ -48,7 +48,7 @@ test('reveals username after recovery verification and resets the password', asy
         : challenge,
     ),
   );
-  await page.route('**/api/v1/auth/recover', (route) => route.fulfill({ status: 204 }));
+  await mockApi(page, 'POST', '/api/v1/auth/recover', (route) => route.fulfill({ status: 204 }));
   await page.goto(`${appUrl}/login`);
   await page.getByRole('link', { name: '忘记用户名或密码？' }).click();
   await page.getByLabel('B站 UID').fill('10001');
@@ -84,8 +84,8 @@ test('recovers initial polling failures, waits for room readiness and stops poll
   };
   let queries = 0;
   let verified = false;
-  await mockJson(page, '**/api/v1/auth/challenges', challenge, 201);
-  await page.route('**/api/v1/auth/challenges/' + challenge.id, async (route) => {
+  await mockJson(page, 'POST', '/api/v1/auth/challenges', challenge, 201);
+  await mockApi(page, 'GET', '/api/v1/auth/challenges/' + challenge.id, async (route) => {
     queries++;
     if (queries <= 2) {
       await fulfillJson(route, { error: { code: 'TEMPORARY', message: 'Temporary failure' } }, 503);
@@ -132,15 +132,16 @@ test('copies the current challenge after regeneration', async ({ appUrl, page, c
   };
   let requests = 0;
   let current = challenge;
-  await page.route('**/api/v1/auth/challenges', async (route) => {
+  await mockApi(page, 'POST', '/api/v1/auth/challenges', async (route) => {
     requests++;
     current =
       requests === 1 ? challenge : { ...challenge, id: testId(31), code: 'CLUB-JKLMNPQR45' };
+    await mockJson(page, 'GET', '/api/v1/auth/challenges/' + current.id, {
+      ...current,
+      code: undefined,
+    });
     await fulfillJson(route, current, 201);
   });
-  await page.route('**/api/v1/auth/challenges/*', (route) =>
-    fulfillJson(route, { ...current, code: undefined }),
-  );
   await page.goto(`${appUrl}/register`);
   await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
   const code = page.getByRole('textbox', { name: '验证码', exact: true });
@@ -183,16 +184,16 @@ test('supports manual copying, expires old actions and keeps the recovery target
     biliUid: null,
     username: null,
   };
-  await page.route('**/api/v1/auth/challenges', async (route) => {
+  await mockApi(page, 'POST', '/api/v1/auth/challenges', async (route) => {
     targets.push((route.request().postDataJSON() as { biliUid: string }).biliUid);
     current = {
       ...current,
       id: testId(32 + targets.length),
       expiresAt: new Date(TEST_NOW.getTime() + targets.length * 60_000).toISOString(),
     };
+    await mockJson(page, 'GET', '/api/v1/auth/challenges/' + current.id, current);
     await fulfillJson(route, current, 201);
   });
-  await page.route('**/api/v1/auth/challenges/*', (route) => fulfillJson(route, current));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${appUrl}/recover`);
   await page.getByLabel('B站 UID', { exact: true }).fill('3493095194757549');
@@ -217,22 +218,16 @@ test('supports manual copying, expires old actions and keeps the recovery target
 });
 
 test('clears the credential form when the user signs out', async ({ appUrl, page }) => {
-  await page.route('**/api/v1/auth/login', (route) => fulfillJson(route, {}));
-  await page.route('**/api/v1/auth/logout', (route) => fulfillJson(route, {}));
-  await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return recipientIdentity({ id: testId(11) });
-    if (pathname === '/api/v1/me/gifts/overview')
-      return {
-        counts: { claimable: 0, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
-        urgent: null,
-      };
-    if (pathname === '/api/v1/me/gifts' || pathname === '/api/v1/me/announcements') {
-      return { items: [], nextCursor: null };
-    }
-    if (pathname === '/api/v1/me/addresses') return [];
-    return undefined;
+  await mockJson(page, 'POST', '/api/v1/auth/login', {});
+  await mockJson(page, 'POST', '/api/v1/auth/logout', {});
+  await mockJson(page, 'GET', '/api/v1/me', recipientIdentity({ id: testId(11) }));
+  await mockJson(page, 'GET', '/api/v1/me/gifts/overview', {
+    counts: { claimable: 0, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
+    urgent: null,
   });
+  await mockJson(page, 'GET', '/api/v1/me/gifts', { items: [], nextCursor: null });
+  await mockJson(page, 'GET', '/api/v1/me/announcements', { items: [], nextCursor: null });
+  await mockJson(page, 'GET', '/api/v1/me/addresses', []);
 
   await page.goto(`${appUrl}/login`);
   await page.getByLabel('用户名').fill('viewer');
@@ -263,40 +258,35 @@ test('drops all private cached data when an expired session signs into another a
       detailedAddress: 'A_PRIVATE_STREET',
     },
   });
-  await page.route('**/api/**', async (route) => {
-    const path = requestPath(route.request());
-    if (path === '/api/v1/auth/login') {
-      account = 'B';
-      return fulfillJson(route, {});
-    }
-    if (path === '/api/v1/me') {
-      if (account === 'EXPIRED')
-        return fulfillJson(
-          route,
-          { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Expired' } },
-          401,
-        );
+  await mockApi(page, 'POST', '/api/v1/auth/login', (route) => {
+    account = 'B';
+    return fulfillJson(route, {});
+  });
+  await mockApi(page, 'GET', '/api/v1/me', (route) => {
+    if (account === 'EXPIRED')
       return fulfillJson(
         route,
-        recipientIdentity({ id: testId(account === 'A' ? 101 : 102), name: `Account ${account}` }),
+        { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Expired' } },
+        401,
       );
-    }
-    if (path === '/api/v1/me/addresses') {
-      if (account === 'A') return fulfillJson(route, [privateAddress]);
-      requestedB = true;
-      await releaseAddresses.promise;
-      return fulfillJson(route, []);
-    }
-    if (path === '/api/v1/portal/home') return fulfillJson(route, portalHome());
-    if (path === '/api/v1/me/gifts/overview')
-      return fulfillJson(route, {
-        urgent: null,
-        counts: { claimable: 0, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
-      });
-    if (path === '/api/v1/me/gifts' || path === '/api/v1/me/announcements')
-      return fulfillJson(route, { items: [], nextCursor: null });
-    return route.fallback();
+    return fulfillJson(
+      route,
+      recipientIdentity({ id: testId(account === 'A' ? 101 : 102), name: `Account ${account}` }),
+    );
   });
+  await mockApi(page, 'GET', '/api/v1/me/addresses', async (route) => {
+    if (account === 'A') return fulfillJson(route, [privateAddress]);
+    requestedB = true;
+    await releaseAddresses.promise;
+    return fulfillJson(route, []);
+  });
+  await mockJson(page, 'GET', '/api/v1/portal/home', portalHome());
+  await mockJson(page, 'GET', '/api/v1/me/gifts/overview', {
+    urgent: null,
+    counts: { claimable: 0, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
+  });
+  await mockJson(page, 'GET', '/api/v1/me/gifts', { items: [], nextCursor: null });
+  await mockJson(page, 'GET', '/api/v1/me/announcements', { items: [], nextCursor: null });
   try {
     await page.goto(`${appUrl}/account/addresses`);
     await expect(page.getByText('A_PRIVATE_RECIPIENT')).toBeVisible();
