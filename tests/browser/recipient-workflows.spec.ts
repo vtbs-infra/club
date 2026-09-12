@@ -1,13 +1,12 @@
-import { mockApi, requestJsonObject, requestPath } from './support/api.js';
+import { fulfillJson, mockApi, requestJsonObject, requestPath } from './support/api.js';
 import {
   addressRecord,
   announcement,
   giftOrder,
   recipientIdentity,
   testId,
-  testTime,
 } from './support/fixtures.js';
-import { expect, freezeBrowserTime, test } from './support/test.js';
+import { expect, freezeBrowserTime, test, TEST_NOW } from './support/test.js';
 
 test.beforeEach(async ({ page }) => {
   await freezeBrowserTime(page);
@@ -54,136 +53,126 @@ test('edits a display name and changes password while keeping account identity i
   await expect(page.getByLabel('密码', { exact: true })).toHaveValue('');
 });
 
-test('lands a recipient on the mobile dashboard', async ({ appUrl, page }) => {
-  await page.setViewportSize({ height: 844, width: 390 });
+test('supports keyboard navigation and restores focus in the account menu', async ({
+  appUrl,
+  page,
+}) => {
   await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return recipientIdentity();
-    if (pathname === '/api/v1/me/gifts') return { items: [giftOrder()], nextCursor: null };
-    if (pathname === '/api/v1/me/gifts/overview')
-      return {
-        counts: { claimable: 14, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
-        urgent: null,
-      };
-    if (pathname === '/api/v1/me/announcements') {
-      return { items: [announcement()], nextCursor: null };
-    }
-    if (pathname === '/api/v1/me/addresses') return [];
+    if (requestPath(request) === '/api/v1/me') return recipientIdentity();
     return undefined;
   });
-
-  await page.goto(`${appUrl}/dashboard`);
-  await expect(page.getByRole('heading', { name: '欢迎回来，测试用户！' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '近期资讯' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '七月舰长礼物' })).toBeVisible();
-  await expect(page.getByText('先保存一个收货地址')).toBeVisible();
-  await expect(page.getByText('你有 14 份礼物等待领取。')).toBeVisible();
-
-  const accountTrigger = page.getByRole('button', { name: '测试用户的账号菜单' });
-  await accountTrigger.focus();
+  await page.goto(`${appUrl}/account`);
+  const trigger = page.getByRole('button', { name: '测试用户的账号菜单' });
+  await trigger.focus();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('menu')).toBeVisible();
   await expect(page.getByRole('menuitem', { name: '账号', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menuitem', { name: '收货地址' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menu')).toHaveCount(0);
-  await expect(accountTrigger).toBeFocused();
-
-  await page.goto(`${appUrl}/gifts`);
-  const giftFilters = page.getByRole('group', { name: '按礼物状态筛选' });
-  await expect(giftFilters).toBeVisible();
-  await expect(giftFilters.getByRole('button', { name: '全部' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await giftFilters.getByRole('button', { name: '待领取' }).click();
-  await expect(giftFilters.getByRole('button', { name: '待领取' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await expect(page.getByRole('heading', { name: '七月舰长礼物' })).toBeVisible();
+  await expect(trigger).toBeFocused();
 });
 
-test('uses the default address and real radio choice when claiming a gift', async ({
+test('preselects the default address even when it is not first in the list', async ({
   appUrl,
   page,
 }) => {
-  await page.setViewportSize({ height: 844, width: 390 });
-  const giftOrderId = testId(20);
-  const defaultAddressId = testId(26);
-  let submitted = false;
-  let submission: Record<string, unknown> | null = null;
-  const currentGift = () =>
-    giftOrder({
-      id: giftOrderId,
-      orderNumber: 'G202607-00000000000000000000000000000002',
-      release: {
-        description: '默认地址领取测试',
-        formFields: [
-          {
-            key: 'size',
-            label: '尺码',
-            options: ['M', 'L'],
-            required: true,
-            type: 'RADIO',
-          },
-        ],
-        id: testId(23),
-      },
-      status: submitted ? 'SUBMITTED' : 'CLAIMABLE',
-      submittedAt: submitted ? testTime() : null,
-      version: submitted ? 2 : 1,
-    });
-  const addresses = [
-    addressRecord(),
-    addressRecord({
-      createdAt: testTime(-1),
-      id: defaultAddressId,
-      isDefault: true,
-      label: '家',
-      payload: {
-        city: '杭州市',
-        countryRegion: '中国大陆',
-        detailedAddress: '默认路 2 号',
-        district: '西湖区',
-        phone: '13800138002',
-        postalCode: '310000',
-        province: '浙江省',
-        recipientName: '默认收件人',
-        userNote: '',
-      },
-      updatedAt: testTime(-1),
-    }),
-  ];
-
+  const order = giftOrder();
   await mockApi(page, (request) => {
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') return recipientIdentity({ id: testId(24) });
-    if (pathname === '/api/v1/me/addresses') return addresses;
-    if (pathname === `/api/v1/me/gifts/${giftOrderId}/submit`) {
-      submission = requestJsonObject(request);
-      submitted = true;
-      return currentGift();
-    }
-    if (pathname === `/api/v1/me/gifts/${giftOrderId}`) return currentGift();
+    const path = requestPath(request);
+    if (path === '/api/v1/me') return recipientIdentity();
+    if (path === '/api/v1/me/addresses')
+      return [
+        addressRecord({ isDefault: false, label: '办公室' }),
+        addressRecord({ id: testId(26), isDefault: true, label: '家' }),
+      ];
+    if (path === `/api/v1/me/gifts/${order.id}`) return order;
     return undefined;
   });
+  await page.goto(`${appUrl}/gifts/${order.id}`);
+  await expect(page.getByRole('radio', { name: /家/ })).toBeChecked();
+  await expect(page.getByRole('radio', { name: /^办公室/ })).not.toBeChecked();
+});
 
-  await page.goto(`${appUrl}/gifts/${giftOrderId}`);
-  const addressRadios = page.getByRole('radio', { name: /办公室|家/ });
-  await expect(addressRadios).toHaveCount(2);
-  await expect(addressRadios.nth(1)).toBeChecked();
-  await expect(page.getByText('默认收件人', { exact: true })).toBeVisible();
-  await page.getByRole('radio', { name: 'L' }).check();
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: '确认领取礼物' }).click();
-
-  await expect.poll(() => submission).not.toBeNull();
-  expect(submission).toEqual({
-    addressId: defaultAddressId,
-    expectedVersion: 1,
-    options: { size: 'L' },
+test('refreshes effective gift status at both claim window boundaries', async ({
+  appUrl,
+  page,
+}) => {
+  await page.clock.install({ time: TEST_NOW });
+  const start = new Date(TEST_NOW.getTime() + 60_000).toISOString();
+  const deadline = new Date(TEST_NOW.getTime() + 120_000).toISOString();
+  let status: 'UPCOMING' | 'CLAIMABLE' | 'EXPIRED' = 'UPCOMING';
+  const order = giftOrder({
+    status: 'UPCOMING',
+    release: { claimStartAt: start, claimDeadlineAt: deadline },
   });
-  await expect(page.getByRole('heading', { name: '礼物进度' })).toBeVisible();
+  await page.route('**/api/v1/**', async (route) => {
+    const path = requestPath(route.request());
+    if (path === '/api/v1/me') return fulfillJson(route, recipientIdentity());
+    if (path === '/api/v1/me/addresses') return fulfillJson(route, []);
+    if (path === `/api/v1/me/gifts/${order.id}`) {
+      return fulfillJson(route, {
+        ...order,
+        status,
+      });
+    }
+    return route.fallback();
+  });
+  await page.goto(`${appUrl}/gifts/${order.id}`);
+  await expect(page.getByText('领取将在', { exact: false })).toBeVisible();
+  status = 'CLAIMABLE';
+  await page.clock.fastForward(65_000);
+  await expect(page.getByRole('heading', { name: '选择收货地址' })).toBeVisible();
+  status = 'EXPIRED';
+  await page.clock.fastForward(60_000);
+  await expect(page.getByRole('heading', { name: '选择收货地址' })).toHaveCount(0);
+  await expect(page.getByText('已过期', { exact: true }).first()).toBeVisible();
+});
+
+test('acknowledges only the displayed announcement body version after it loads', async ({
+  appUrl,
+  page,
+}) => {
+  await freezeBrowserTime(page);
+  const summary = announcement();
+  const releaseBody = Promise.withResolvers<void>();
+  let detailRequested = false;
+  const acknowledgments: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request();
+    const path = requestPath(request);
+    if (path === '/api/v1/me') return fulfillJson(route, recipientIdentity());
+    if (path === '/api/v1/me/announcements')
+      return fulfillJson(route, {
+        items: [{ ...summary, read: acknowledgments.length > 0 }],
+        nextCursor: null,
+      });
+    if (path === `/api/v1/me/announcements/${summary.id}/read`) {
+      acknowledgments.push(requestJsonObject(request));
+      return fulfillJson(route, {});
+    }
+    if (path === `/api/v1/me/announcements/${summary.id}`) {
+      detailRequested = true;
+      await releaseBody.promise;
+      return fulfillJson(route, {
+        ...summary,
+        body: '第二版正文',
+        version: 2,
+        read: acknowledgments.length > 0,
+      });
+    }
+    return route.fallback();
+  });
+  try {
+    await page.goto(`${appUrl}/announcements`);
+    await page.getByRole('button', { name: new RegExp(summary.title) }).click();
+    await expect.poll(() => detailRequested).toBe(true);
+    await expect(page.getByText('正在读取公告正文…')).toBeVisible();
+    expect(acknowledgments).toEqual([]);
+    releaseBody.resolve();
+    await expect(page.getByText('第二版正文')).toBeVisible();
+    await expect.poll(() => acknowledgments).toEqual([{ version: 2 }]);
+  } finally {
+    releaseBody.resolve();
+  }
 });

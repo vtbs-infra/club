@@ -172,19 +172,12 @@ test('registers, verifies, publishes, claims, exports, ships and corrects using 
     await creator.getByRole('dialog').getByRole('button', { name: '发布并生成礼物单' }).click();
     await expect(creator.getByText('已发布', { exact: true })).toBeVisible();
 
-    // The real 30-second scheduler creates, captures and finalizes the current monthly run.
-    let orders: GiftOrderSummaryPage = { items: [], nextCursor: null };
-    await expect
-      .poll(
-        async () => {
-          orders = await json<GiftOrderSummaryPage>(
-            await recipient.request.get(`${appUrl}/api/v1/me/gifts`),
-          );
-          return orders.items.length;
-        },
-        { timeout: 45_000, intervals: [1000] },
-      )
-      .toBe(1);
+    // Exercise the application's actual capture runtime without waiting for its interval.
+    await app.runtimes.snapshot.tick();
+    const orders = await json<GiftOrderSummaryPage>(
+      await recipient.request.get(`${appUrl}/api/v1/me/gifts`),
+    );
+    expect(orders.items).toHaveLength(1);
     const order = orders.items[0]!;
     expect(order.status).toBe('CLAIMABLE');
     const runs = await json<AdminSnapshotPage>(

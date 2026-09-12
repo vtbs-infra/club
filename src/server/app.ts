@@ -215,15 +215,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
       storage,
     });
 
+  // The same runtime instances own startup, operations, readiness and shutdown.
+  const runtimes = {
+    bilibili: bilibiliRuntime,
+    identity: identityRuntime,
+    snapshot: snapshotRuntime,
+    giftMedia: giftMediaRuntime,
+  };
   app.addHook('onClose', async () => {
-    const closeRuntimes = [
-      () => bilibiliRuntime.close(),
-      () => identityRuntime.close(),
-      () => snapshotRuntime.close(),
-      () => giftMediaRuntime.close(),
-    ];
     const results = await Promise.allSettled(
-      closeRuntimes.map(async (closeRuntime) => closeRuntime()),
+      Object.values(runtimes).map(async (runtime) => runtime.close()),
     );
     const failures: unknown[] = [];
     for (const result of results) {
@@ -237,17 +238,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const backgroundRequired = options.startBackground ?? config.nodeEnv !== 'test';
   if (backgroundRequired) {
     app.addHook('onReady', async () => {
-      const runtimes = [
-        ['bilibili', bilibiliRuntime.start()],
-        ['identity', identityRuntime.start()],
-        ['snapshot', snapshotRuntime.start()],
-        ['gift-media', giftMediaRuntime.start()],
-      ] as const;
-      const results = await Promise.allSettled(runtimes.map(([, start]) => start));
+      const entries = Object.entries(runtimes);
+      const results = await Promise.allSettled(entries.map(async ([, runtime]) => runtime.start()));
       for (const [index, result] of results.entries()) {
         if (result.status === 'rejected') {
           app.log.error(
-            { err: result.reason, runtime: runtimes[index]![0] },
+            { err: result.reason, runtime: entries[index]![0] },
             'background runtime startup failed',
           );
         }
@@ -289,7 +285,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     database,
     storage,
     backgroundRequired,
-    runtimes: [bilibiliRuntime, identityRuntime, snapshotRuntime, giftMediaRuntime],
+    runtimes: Object.values(runtimes),
   });
 
   await app.register(systemStatusRoutes, {
@@ -305,5 +301,5 @@ export async function buildApp(options: BuildAppOptions = {}) {
     version: APPLICATION_VERSION,
   });
 
-  return app;
+  return Object.assign(app, { runtimes });
 }

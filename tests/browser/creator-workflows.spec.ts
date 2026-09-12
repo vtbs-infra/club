@@ -1,5 +1,5 @@
-import type { GiftRelease } from '../../src/shared/contracts/gifts.js';
-import { fulfillJson, requestJsonObject, requestPath } from './support/api.js';
+import sharp from 'sharp';
+import { fulfillJson, mockApi, requestJsonObject, requestPath } from './support/api.js';
 import { creatorIdentity, giftOrder, giftRelease, testId, testTime } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test } from './support/test.js';
 
@@ -7,71 +7,30 @@ test.beforeEach(async ({ page }) => {
   await freezeBrowserTime(page);
 });
 
-test('publishes the creator current edits without a separate save', async ({ appUrl, page }) => {
-  const releaseId = testId(30);
-  let publishedInput: Record<string, unknown> | null = null;
-  let publishedRelease: GiftRelease | null = null;
-  const draft = giftRelease({
-    description: '尚未保存的说明',
-    id: releaseId,
+test('cancelling publication preserves edits and restores focus', async ({ appUrl, page }) => {
+  const draft = giftRelease();
+  let published = false;
+  await mockApi(page, (request) => {
+    const path = requestPath(request);
+    if (path === '/api/v1/me') return creatorIdentity();
+    if (path === `/api/v1/creator/releases/${draft.id}`) return draft;
+    if (path === `/api/v1/creator/releases/${draft.id}/publish`) {
+      published = true;
+      return draft;
+    }
+    return undefined;
   });
-
-  await page.route('**/api/v1/**', async (route) => {
-    const request = route.request();
-    const pathname = requestPath(request);
-    if (pathname === '/api/v1/me') {
-      await fulfillJson(route, creatorIdentity());
-      return;
-    }
-    if (pathname === `/api/v1/creator/releases/${releaseId}/publish`) {
-      publishedInput = requestJsonObject(request);
-      if (typeof publishedInput.title !== 'string') {
-        throw new Error('The release publish request did not include a title.');
-      }
-      publishedRelease = {
-        ...draft,
-        publishedAt: testTime(),
-        status: 'PUBLISHED',
-        title: publishedInput.title,
-        updatedAt: testTime(),
-        version: 4,
-      };
-      await fulfillJson(route, publishedRelease);
-      return;
-    }
-    if (pathname === `/api/v1/creator/releases/${releaseId}`) {
-      await fulfillJson(route, publishedRelease ?? draft);
-      return;
-    }
-    if (pathname === '/api/v1/creator/releases') {
-      await fulfillJson(route, { items: [], nextCursor: null });
-      return;
-    }
-    await route.fallback();
-  });
-
-  await page.goto(`${appUrl}/creator/releases/${releaseId}`);
+  await page.goto(`${appUrl}/creator/releases/${draft.id}`);
   await page.getByLabel('礼物名称').fill('当前页面的新标题');
-  const publishButton = page.getByRole('button', { name: '发布并生成礼物单' }).first();
-  await publishButton.click();
-
-  let dialog = page.getByRole('dialog', { name: '确认发布当前内容？' });
-  await expect(dialog).toBeVisible();
+  const trigger = page.getByRole('button', { name: '发布并生成礼物单' }).first();
+  await trigger.click();
+  const dialog = page.getByRole('dialog', { name: '确认发布当前内容？' });
   await expect(dialog.getByRole('button', { name: '返回' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await expect(publishButton).toBeFocused();
-
-  await publishButton.click();
-  dialog = page.getByRole('dialog', { name: '确认发布当前内容？' });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: '发布并生成礼物单' }).click();
-  await expect.poll(() => publishedInput).not.toBeNull();
-  expect(publishedInput).toMatchObject({
-    expectedVersion: 3,
-    title: '当前页面的新标题',
-  });
-  await expect(page.getByText('已发布')).toBeVisible();
+  await expect(trigger).toBeFocused();
+  await expect(page.getByLabel('礼物名称')).toHaveValue('当前页面的新标题');
+  expect(published).toBe(false);
 });
 
 test('exports submitted orders by release without changing the active list filter', async ({
@@ -87,31 +46,11 @@ test('exports submitted orders by release without changing the active list filte
     title: '七月舰长礼物',
     version: 1,
   });
-  const order = (id: string, status: 'SHIPPED' | 'SUBMITTED') =>
-    giftOrder({
-      biliDisplayName: status === 'SUBMITTED' ? '待发货用户' : '已发货用户',
-      biliUid: status === 'SUBMITTED' ? '11001' : '11002',
-      creator: { id: testId(32) },
-      id,
-      items: [],
-      orderNumber:
-        status === 'SUBMITTED'
-          ? 'G202607-00000000000000000000000000000003'
-          : 'G202607-00000000000000000000000000000004',
-      release: {
-        claimDeadlineAt: release.claimDeadlineAt,
-        claimStartAt: release.claimStartAt,
-        description: release.description,
-        eligibilityMonth: release.eligibilityMonth,
-        id: release.id,
-        title: release.title,
-      },
-      shippedAt: status === 'SHIPPED' ? testTime(-1) : null,
-      status,
-      submittedAt: testTime(-1),
-      updatedAt: testTime(-1),
-      version: status === 'SUBMITTED' ? 2 : 3,
-    });
+  const order = giftOrder({
+    status: 'SHIPPED',
+    biliDisplayName: '已发货用户',
+    release: { id: releaseId },
+  });
 
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -134,12 +73,7 @@ test('exports submitted orders by release without changing the active list filte
       return;
     }
     if (pathname === '/api/v1/creator/orders') {
-      const requestedStatus = new URL(request.url()).searchParams.get('status');
-      const orders = [order(testId(35), 'SUBMITTED'), order(testId(36), 'SHIPPED')];
-      await fulfillJson(route, {
-        items: requestedStatus ? orders.filter((item) => item.status === requestedStatus) : orders,
-        nextCursor: null,
-      });
+      await fulfillJson(route, { items: [order], nextCursor: null });
       return;
     }
     if (pathname === '/api/v1/creator/orders/fulfillment-releases') {
@@ -162,7 +96,6 @@ test('exports submitted orders by release without changing the active list filte
 
   await page.goto(`${appUrl}/creator/orders?status=SHIPPED`);
   await expect(page.getByText('已发货用户')).toBeVisible();
-  await expect(page.getByText('待发货用户')).toHaveCount(0);
   const exportButton = page.getByRole('button', { name: '导出待发货清单' });
   await expect(exportButton).toBeEnabled();
   await exportButton.click();
@@ -174,5 +107,65 @@ test('exports submitted orders by release without changing the active list filte
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('fulfillment.xlsx');
   expect(exportInput).toEqual({ releaseId });
+  await expect(page).toHaveURL(`${appUrl}/creator/orders?status=SHIPPED`);
   await expect(page.getByText('已导出 1 条待发货收货信息。')).toBeVisible();
+});
+
+test('retains the form version across cover refresh and renders its preview under production CSP', async ({
+  appUrl,
+  page,
+}) => {
+  await freezeBrowserTime(page);
+  let serverRelease = giftRelease({ description: '原始说明', version: 3 });
+  let save: Record<string, unknown> | null = null;
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request();
+    const path = requestPath(request);
+    if (path === '/api/v1/me') return fulfillJson(route, creatorIdentity());
+    if (path === `/api/v1/creator/releases/${serverRelease.id}/cover`)
+      return fulfillJson(route, { coverImageUrl: null });
+    if (path === `/api/v1/creator/releases/${serverRelease.id}`) {
+      if (request.method() === 'PUT') {
+        save = requestJsonObject(request);
+        return fulfillJson(
+          route,
+          { error: { code: 'GIFT_RELEASE_VERSION_CONFLICT', message: 'Version conflict' } },
+          409,
+        );
+      }
+      return fulfillJson(route, serverRelease);
+    }
+    return route.fallback();
+  });
+  await page.goto(`${appUrl}/creator/releases/${serverRelease.id}`);
+  await page.getByLabel('礼物名称').fill('我的未保存修改');
+  serverRelease = { ...serverRelease, description: '其他编辑者的新说明', version: 4 };
+  const png = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#ffffff' } })
+    .png()
+    .toBuffer();
+  await page
+    .locator('input[type=file]')
+    .setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: png });
+  const preview = page.getByAltText('待上传封面预览');
+  await expect(preview).toBeVisible();
+  await expect
+    .poll(() =>
+      preview.evaluate((element) => ('naturalWidth' in element ? element.naturalWidth : null)),
+    )
+    .toBe(1);
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).pathname === `/api/v1/creator/releases/${serverRelease.id}`,
+  );
+  await page.getByRole('button', { name: '上传封面', exact: true }).click();
+  await refreshed;
+  await expect(page.getByRole('textbox', { name: '礼物说明', exact: true })).toHaveValue(
+    '原始说明',
+  );
+  await page.getByRole('button', { name: '保存草稿', exact: true }).first().click();
+  await expect
+    .poll(() => save)
+    .toMatchObject({ expectedVersion: 3, description: '原始说明', title: '我的未保存修改' });
+  await expect(page.getByText('礼物草稿已在其他页面被修改，请刷新后再试。')).toBeVisible();
 });

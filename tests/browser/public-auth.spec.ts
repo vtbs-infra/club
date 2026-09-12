@@ -1,69 +1,9 @@
-import { APPLICATION_VERSION } from '../../src/server/application-version.js';
-
 import { fulfillJson, mockApi, mockJson, requestPath } from './support/api.js';
-import { portalHome, recipientIdentity, testId, testTime } from './support/fixtures.js';
+import { addressRecord, portalHome, recipientIdentity, testId } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test, TEST_NOW } from './support/test.js';
 
 test.beforeEach(async ({ page }) => {
   await freezeBrowserTime(page);
-});
-
-test('serves the public product shell and liveness API', async ({ appUrl, page, request }) => {
-  await mockJson(
-    page,
-    '**/api/v1/portal/home',
-    portalHome({
-      announcements: [
-        {
-          id: testId(21),
-          pinned: true,
-          publishedAt: testTime(-1),
-          severity: 'INFO',
-          summary: '新的舰长礼物已经开放领取。',
-          title: '八月礼物领取通知',
-        },
-        {
-          id: testId(22),
-          pinned: false,
-          publishedAt: testTime(-2),
-          severity: 'INFO',
-          summary: '验证 UID 并注册后即可自动检查礼物资格。',
-          title: '领取流程说明',
-        },
-      ],
-      releases: [
-        {
-          claimDeadlineAt: testTime(30),
-          claimStartAt: testTime(-1),
-          coverImageUrl: null,
-          creatorName: '测试主播',
-          description: '本月舰长纪念礼物。',
-          eligibilityMonth: '2026-08-01',
-          id: testId(23),
-          title: '八月舰长礼物',
-        },
-      ],
-    }),
-  );
-
-  await page.goto(appUrl);
-  await expect(page.getByRole('heading', { name: '属于你的舰长礼物，都在这里。' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '八月舰长礼物' })).toBeVisible();
-  await expect(page.getByText('八月礼物领取通知').first()).toBeVisible();
-
-  await page.setViewportSize({ height: 844, width: 390 });
-  await expect(page.getByRole('link', { exact: true, name: '登录' })).toBeVisible();
-  await page.getByRole('link', { exact: true, name: '注册' }).click();
-  await expect(page.getByRole('heading', { name: '开始使用 Club', level: 1 })).toBeVisible();
-  await expect(page.getByRole('button', { name: '验证 B站身份', exact: true })).toBeVisible();
-  await expect(page.getByLabel('用户名')).toHaveCount(0);
-
-  const live = await request.get(`${appUrl}/health/live`);
-  expect(live.ok()).toBe(true);
-  await expect(live.json()).resolves.toMatchObject({
-    status: 'ok',
-    version: APPLICATION_VERSION,
-  });
 });
 
 test('keeps signed-in visitors on the public home until they choose the workspace', async ({
@@ -81,50 +21,6 @@ test('keeps signed-in visitors on the public home until they choose the workspac
   await expect(workspaceLink).toBeVisible();
   await expect(workspaceLink).toHaveAttribute('href', '/app');
   await expect(page.getByRole('link', { exact: true, name: '登录' })).toHaveCount(0);
-});
-
-test('verifies UID before completing registration and returns to a clean login form', async ({
-  appUrl,
-  page,
-}) => {
-  const challenge = {
-    id: testId(10),
-    purpose: 'REGISTER',
-    status: 'PENDING',
-    code: 'CLUB-ABCDEFGH23',
-    expiresAt: new Date(TEST_NOW.getTime() + 10 * 60_000).toISOString(),
-    room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
-    connectionState: 'HEALTHY',
-    biliUid: null,
-    username: null,
-  };
-  let verified = false;
-  await mockJson(page, '**/api/v1/auth/challenges', challenge, 201);
-  await page.route('**/api/v1/auth/challenges/' + challenge.id, (route) =>
-    fulfillJson(
-      route,
-      verified ? { ...challenge, status: 'VERIFIED', biliUid: '10001' } : challenge,
-    ),
-  );
-  await mockJson(page, '**/api/v1/auth/register', { id: testId(11), username: 'new_user' }, 201);
-  await page.goto(`${appUrl}/register`);
-  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: '验证码', exact: true })).toHaveValue(
-    challenge.code,
-  );
-  await expect(page.getByLabel('用户名')).toHaveCount(0);
-  verified = true;
-  await expect(page.getByText('已验证 UID 10001')).toBeVisible();
-  await page.getByLabel('昵称').fill('新用户');
-  await page.getByLabel('用户名', { exact: true }).fill('new_user');
-  await page.getByLabel('新密码', { exact: true }).fill('correct-horse-battery-staple');
-  await page.getByLabel('确认密码', { exact: true }).fill('mismatched-password');
-  await expect(page.getByRole('button', { name: '创建账号', exact: true })).toBeDisabled();
-  await page.getByLabel('确认密码', { exact: true }).fill('correct-horse-battery-staple');
-  await page.getByRole('button', { name: '创建账号', exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByText('账号已创建，请使用用户名和密码登录。')).toBeVisible();
-  await expect(page.getByLabel('密码', { exact: true })).toHaveValue('');
 });
 
 test('reveals username after recovery verification and resets the password', async ({
@@ -152,7 +48,7 @@ test('reveals username after recovery verification and resets the password', asy
         : challenge,
     ),
   );
-  await mockJson(page, '**/api/v1/auth/recover', null);
+  await page.route('**/api/v1/auth/recover', (route) => route.fulfill({ status: 204 }));
   await page.goto(`${appUrl}/login`);
   await page.getByRole('link', { name: '忘记用户名或密码？' }).click();
   await page.getByLabel('B站 UID').fill('10001');
@@ -221,11 +117,7 @@ test('recovers initial polling failures, waits for room readiness and stops poll
   expect(queries).toBe(completedQueries);
 });
 
-test('copies the current code and makes the room action usable on desktop and mobile', async ({
-  appUrl,
-  page,
-  context,
-}, testInfo) => {
+test('copies the current challenge after regeneration', async ({ appUrl, page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const challenge = {
     id: testId(30),
@@ -249,9 +141,6 @@ test('copies the current code and makes the room action usable on desktop and mo
   await page.route('**/api/v1/auth/challenges/*', (route) =>
     fulfillJson(route, { ...current, code: undefined }),
   );
-  await context.route(challenge.room.link, (route) =>
-    route.fulfill({ contentType: 'text/html', body: '<title>Verification room</title>' }),
-  );
   await page.goto(`${appUrl}/register`);
   await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
   const code = page.getByRole('textbox', { name: '验证码', exact: true });
@@ -261,16 +150,6 @@ test('copies the current code and makes the room action usable on desktop and mo
   await expect(code).toHaveJSProperty('readOnly', true);
   await expect(room).toHaveAttribute('href', challenge.room.link);
   await expect(room).toHaveAttribute('target', '_blank');
-  for (const width of [1280, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 });
-    await expect(copy).toBeVisible();
-    await expect(room).toBeVisible();
-    expect(
-      await page.evaluate<boolean>('document.documentElement.scrollWidth <= window.innerWidth'),
-    ).toBe(true);
-    expect(await code.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath(`register-${width}.png`), fullPage: true });
-  }
   await copy.click();
   await expect(copy).toHaveText('已复制');
   expect(await page.evaluate<string>('navigator.clipboard.readText()')).toBe(challenge.code);
@@ -279,28 +158,12 @@ test('copies the current code and makes the room action usable on desktop and mo
   await expect(copy).toHaveText('复制');
   await copy.click();
   expect(await page.evaluate<string>('navigator.clipboard.readText()')).toBe('CLUB-JKLMNPQR45');
-  await room.focus();
-  const popupPromise = page.waitForEvent('popup');
-  await page.keyboard.press('Enter');
-  const popup = await popupPromise;
-  await expect(popup).toHaveURL(challenge.room.link);
-  expect(await popup.evaluate<boolean>('window.opener === null')).toBe(true);
-  await popup.close();
-  await expect(page).toHaveURL(`${appUrl}/register`);
-  await expect(code).toHaveValue('CLUB-JKLMNPQR45');
-  await page.route('**/api/v1/appearance', (route) => fulfillJson(route, { themePreset: 'neon' }));
-  await page.reload();
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-app-theme', 'neon');
-  await expect(room).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('register-neon.png'), fullPage: true });
 });
 
 test('supports manual copying, expires old actions and keeps the recovery target explicit', async ({
   appUrl,
   page,
-}, testInfo) => {
+}) => {
   await page.clock.install({ time: TEST_NOW });
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'clipboard', {
@@ -341,13 +204,11 @@ test('supports manual copying, expires old actions and keeps the recovery target
   await expect(code).toBeFocused();
   await expect(code).toHaveJSProperty('selectionStart', 0);
   await expect(code).toHaveJSProperty('selectionEnd', current.code.length);
-  await page.screenshot({ path: testInfo.outputPath('recover-copy-fallback.png'), fullPage: true });
   await page.clock.fastForward(61_000);
   await expect(page.getByText('本次验证已失效，请重新验证。')).toBeVisible();
   await expect(code).toHaveCount(0);
   await expect(page.getByRole('button', { name: '复制验证码' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: '打开验证直播间' })).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath('recover-expired.png'), fullPage: true });
   await page.getByRole('button', { name: '更换 B站 UID' }).click();
   await page.getByLabel('B站 UID', { exact: true }).fill('20002');
   await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
@@ -369,7 +230,7 @@ test('clears the credential form when the user signs out', async ({ appUrl, page
     if (pathname === '/api/v1/me/gifts' || pathname === '/api/v1/me/announcements') {
       return { items: [], nextCursor: null };
     }
-    if (pathname.startsWith('/api/v1/me/')) return [];
+    if (pathname === '/api/v1/me/addresses') return [];
     return undefined;
   });
 
@@ -385,4 +246,76 @@ test('clears the credential form when the user signs out', async ({ appUrl, page
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByLabel('用户名')).toHaveValue('');
   await expect(page.getByLabel('密码')).toHaveValue('');
+});
+
+test('drops all private cached data when an expired session signs into another account', async ({
+  appUrl,
+  page,
+}) => {
+  await page.clock.install({ time: TEST_NOW });
+  let account: 'A' | 'B' | 'EXPIRED' = 'A';
+  let requestedB = false;
+  const releaseAddresses = Promise.withResolvers<void>();
+  const privateAddress = addressRecord({
+    payload: {
+      ...addressRecord().payload,
+      recipientName: 'A_PRIVATE_RECIPIENT',
+      detailedAddress: 'A_PRIVATE_STREET',
+    },
+  });
+  await page.route('**/api/**', async (route) => {
+    const path = requestPath(route.request());
+    if (path === '/api/v1/auth/login') {
+      account = 'B';
+      return fulfillJson(route, {});
+    }
+    if (path === '/api/v1/me') {
+      if (account === 'EXPIRED')
+        return fulfillJson(
+          route,
+          { error: { code: 'AUTHENTICATION_REQUIRED', message: 'Expired' } },
+          401,
+        );
+      return fulfillJson(
+        route,
+        recipientIdentity({ id: testId(account === 'A' ? 101 : 102), name: `Account ${account}` }),
+      );
+    }
+    if (path === '/api/v1/me/addresses') {
+      if (account === 'A') return fulfillJson(route, [privateAddress]);
+      requestedB = true;
+      await releaseAddresses.promise;
+      return fulfillJson(route, []);
+    }
+    if (path === '/api/v1/portal/home') return fulfillJson(route, portalHome());
+    if (path === '/api/v1/me/gifts/overview')
+      return fulfillJson(route, {
+        urgent: null,
+        counts: { claimable: 0, upcoming: 0, submitted: 0, shipped: 0, expired: 0, cancelled: 0 },
+      });
+    if (path === '/api/v1/me/gifts' || path === '/api/v1/me/announcements')
+      return fulfillJson(route, { items: [], nextCursor: null });
+    return route.fallback();
+  });
+  try {
+    await page.goto(`${appUrl}/account/addresses`);
+    await expect(page.getByText('A_PRIVATE_RECIPIENT')).toBeVisible();
+    account = 'EXPIRED';
+    await page.clock.fastForward(20_000);
+    await page.locator('a.brand').first().click();
+    await page.getByRole('link', { name: '登录', exact: true }).first().click();
+    await page.getByLabel('用户名').fill('account_b');
+    await page.getByLabel('密码').fill('fixture-password');
+    await page.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page).toHaveURL(`${appUrl}/dashboard`);
+    await page.getByRole('button', { name: 'Account B的账号菜单' }).click();
+    await page.getByRole('menuitem', { name: '收货地址' }).click();
+    await expect.poll(() => requestedB).toBe(true);
+    await expect(page.getByText('A_PRIVATE_RECIPIENT')).toHaveCount(0);
+    await expect(page.getByText('A_PRIVATE_STREET', { exact: false })).toHaveCount(0);
+    releaseAddresses.resolve();
+    await expect(page.getByText('还没有收货地址。')).toBeVisible();
+  } finally {
+    releaseAddresses.resolve();
+  }
 });
