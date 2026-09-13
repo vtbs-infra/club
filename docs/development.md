@@ -19,8 +19,15 @@ Copy-Item .env.example .env
 
 `npm ci` 按提交的 `package-lock.json` 重建依赖目录，适用于首次安装、切换分支和 CI。
 添加或更新依赖时使用 `npm install` / `npm update`，并提交对应的锁文件变化。
-依赖安装脚本许可由 `package.json` 的 `allowScripts` 声明，`.npmrc` 启用严格检查；
-间接依赖的版本覆盖也统一放在 `package.json` 的 `overrides` 中。
+依赖安装脚本许可由 `package.json` 的 `allowScripts` 声明，`.npmrc` 启用严格检查。
+
+`dependencies` 只包含编译后的 Node.js 服务端和 CLI 运行时需要的包；React、UI 组件等
+纯前端包与构建、测试工具放在 `devDependencies`。前端代码已打包到 `dist/web`，生产镜像
+在构建完成后通过 `npm prune --omit=dev` 移除这些包。
+
+`npm run audit` 检查全部依赖，并在出现 high / critical 公告时失败，确保前端和开发工具
+也纳入 CI 审计。当前剩余 moderate 条目来自 Drizzle Kit 的旧 esbuild 链；该公告涉及
+esbuild 开发服务器，我们仅使用 Kit 生成迁移，待稳定上游更新后处理，不强制替换内部工具。
 
 配置 `.env` 后启动 PostgreSQL：
 
@@ -86,6 +93,7 @@ Promise 误用。是否处理拒绝、是否需要等待任务完成，仍须结
 | `npm run dev:server`       | 启动 Fastify Watch              |
 | `npm run dev:web`          | 启动 Vite                       |
 | `npm run check`            | 文档链接、格式、Lint 和类型检查 |
+| `npm run audit`            | 检查全部依赖的安全公告          |
 | `npm test`                 | 单元测试                        |
 | `npm run test:integration` | PostgreSQL 集成测试             |
 | `npm run test:browser`     | 生产构建和浏览器工作流测试      |
