@@ -5,7 +5,7 @@
 
 ## 开发环境
 
-- Node.js `>=24 <25`
+- Node.js `>=24.2 <25`（维护工具使用 `import.meta.main`，需要 24.2 或更新版本）
 - npm `>=11.19 <12`（使用当前 Node.js 24 发行版附带的 npm）
 - Docker Engine
 - Docker Compose v2

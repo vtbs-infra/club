@@ -18,8 +18,9 @@ Club 使用语义化版本，Git Tag 格式为 `vMAJOR.MINOR.PATCH`。`package.j
 当前流水线只发布经过验证的 `linux/amd64` 镜像。增加其他架构前，必须在对应架构上执行
 启动、迁移和核心流程验收。
 
-精确版本 Tag 是部署和回滚记录的依据。`latest` 只在精确版本镜像完成发布后更新，不能
-替代备份记录中的版本或 Digest。
+精确版本 Tag 是部署和回滚记录的依据，发布流程不会覆盖已有版本。`latest` 指向最高
+稳定版本，`MAJOR.MINOR` 指向该系列最高稳定版本；补发旧版本不会使别名倒退。两者都
+不能替代备份记录中的精确版本或 Digest。
 
 GHCR Package 必须设置为 Public，并关联 `vtbs-infra/club` 仓库。首次创建 Package 后需要
 在 GitHub Package 设置中确认公开可见性，并在未登录状态执行一次 `docker pull`；发布
@@ -113,6 +114,34 @@ git push origin "v$releaseVersion"
 
 Tag 流水线必须在同一 Revision 上重新执行质量门，成功后才推送版本化镜像并创建 GitHub
 Release。不要对已经发布的 Tag、迁移或容器版本覆盖写入。
+
+## 流水线与失败恢复
+
+`.github/workflows/ci.yml` 负责 PR、`master` 和发布调用的验证。源码 job 执行检查与现有
+测试；镜像 job 用 Buildx 构建 `linux/amd64` OCI 制品，保留 SBOM 和 provenance，从中
+加载运行镜像并核对 config digest，再执行 `tests/container/smoke.mjs`。只有发布调用才
+上传镜像制品，保留 7 天；浏览器失败产物也保留 7 天。
+
+`.github/workflows/release.yml` 先检查 Tag 与版本元数据，再调用同一提交中的 CI。两路
+验证都成功后，发布 job 按 artifact ID 下载 OCI 制品，用 `regctl` 复制到 GHCR 并核对
+完整镜像 digest，不再次构建。只有该 job 拥有仓库和包写权限。Action 固定到已核对版本的
+提交 SHA，升级时同步旁边的版本注释。
+
+普通 CI 取消同分支的过时运行；发布 workflow 使用独立并发组和 `queue: max` 排队，
+串行执行发布。所有版本、来源、已有镜像和 Release 身份检查都在发布脚本第一次写入前
+完成。随后依次发布精确版本镜像、创建 GitHub Release、更新符合版本顺序的镜像别名，
+最后设置 GitHub 的 Latest 标记。
+
+GHCR 和 GitHub Release 没有跨服务事务。失败后在 Actions 中重跑失败 job：
+
+- 镜像已推送但 Release 创建失败：核对原镜像的版本、来源和 Revision 后补建 Release；
+- Release 已创建但别名更新失败：保留 Release 和精确版本，继续完成别名；
+- 整体重跑产生了不同 digest：同一版本、来源和 Revision 继续使用第一次发布的镜像；
+- 同一版本对应其他提交、来源不明，或 Release 与镜像不符：停止，不覆盖或自动修补身份；
+- 制品已过期：重跑整个 workflow，重新验证。已有精确版本仍遵循上述不可覆盖约束。
+
+Release 正文末尾的 Container digest 和 Revision 用于核对发布身份，编辑发布说明时保留
+这两项。手动重建或覆盖精确版本、删除 Tag、修改上述记录不属于自动恢复范围。
 
 ## 发布后检查
 
