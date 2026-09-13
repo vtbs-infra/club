@@ -349,7 +349,7 @@ docker compose build --pull app
 
 如果宿主机没有 Chromium 动态库，可以用与项目依赖版本一致的
 [Playwright 官方容器](https://playwright.dev/docs/docker)执行浏览器测试。当前版本为
-`mcr.microsoft.com/playwright:v1.61.1-noble`；先在源码目录安装依赖并构建，容器读取源码、
+`mcr.microsoft.com/playwright:v1.63.0-noble`；先在源码目录安装依赖并构建，容器读取源码、
 `node_modules` 和 `dist`，直接运行 `node node_modules/@playwright/test/cli.js test`。
 将临时目录和测试结果目录挂载到磁盘；完整 E2E 还须提供独立测试库的 `TEST_DATABASE_URL`。
 更新 Playwright 依赖后，也应同步测试容器版本。
