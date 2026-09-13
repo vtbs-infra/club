@@ -123,6 +123,7 @@ tests/unit/                            纯逻辑与基础设施测试
 tests/integration/                     真实 PostgreSQL 测试
 tests/browser/                         Playwright 界面与请求意图测试
 tests/e2e/                             浏览器、真实服务端与 PostgreSQL 业务闭环
+tests/container/                       最终生产镜像的迁移、启动与 Web 交付验收
 tests/helpers/                         显式、跨场景复用的测试基础设施
 scripts/                               构建、迁移检查与版本发布的可重复维护工具
 ```
@@ -221,6 +222,21 @@ npm run db:migrate
 ## 测试
 
 测试按它实际证明的边界组织，而不是按生产代码目录逐层镜像。
+
+### 生产镜像
+
+```powershell
+docker build --pull -t club-candidate .
+npm run test:container -- --image club-candidate
+```
+
+该入口也可直接运行 `node tests/container/smoke.mjs --image club-candidate`，不要求宿主机
+安装 npm 依赖。使用 Podman 时加 `--engine podman`。
+
+验收使用独立网络、空 PostgreSQL 和存储卷，运行镜像内编译后的迁移入口，以非 root
+用户启动，检查 readiness、应用版本、首页及其引用的静态资源。readiness 实际检查存储
+读写能力。失败时输出容器日志，结束后清理本次创建的容器、网络和卷。此验收不复制
+业务测试；镜像必须预先构建或加载，入口不会偷偷重新构建。
 
 ### 单元测试
 

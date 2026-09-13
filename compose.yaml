@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
     environment: *app-environment
     ports:
-      - '${CLUB_PORT:-3000}:3000'
+      - '${CLUB_BIND_ADDRESS:-127.0.0.1}:${CLUB_PORT:-3000}:3000'
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 15s

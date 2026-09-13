@@ -25,6 +25,7 @@
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:container": "node tests/container/smoke.mjs",
     "test:browser": "npm run build && playwright test --project chromium",
     "audit": "npm audit --audit-level=high",
     "release:check": "tsx scripts/release-check.ts",

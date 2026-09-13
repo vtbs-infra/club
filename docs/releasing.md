@@ -56,7 +56,8 @@ $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
 npm run test:integration
 npm run test:browser
 npm run test:e2e
-docker compose build --pull --no-cache app
+docker build --pull -t club-candidate .
+npm run test:container -- --image club-candidate
 ```
 
 必须确认：

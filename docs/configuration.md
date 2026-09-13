@@ -13,20 +13,25 @@ Copy-Item .env.example .env
 
 ## 应用
 
-| 变量          | 示例                   | 说明                                    |
-| ------------- | ---------------------- | --------------------------------------- |
-| `NODE_ENV`    | `production`           | `development`、`test` 或 `production`   |
-| `APP_URL`     | `https://club.example` | 用户访问的公开根地址，只允许 HTTP/HTTPS |
-| `HOST`        | `0.0.0.0`              | HTTP 监听地址                           |
-| `PORT`        | `3000`                 | 容器内 HTTP 端口                        |
-| `CLUB_PORT`   | `3000`                 | Compose 映射到宿主机的端口              |
-| `LOG_LEVEL`   | `info`                 | Pino 日志级别                           |
-| `TRUST_PROXY` | `false`                | 位于可信反向代理后时设为 `true`         |
+| 变量                | 示例                   | 说明                                    |
+| ------------------- | ---------------------- | --------------------------------------- |
+| `NODE_ENV`          | `production`           | `development`、`test` 或 `production`   |
+| `APP_URL`           | `https://club.example` | 用户访问的公开根地址，只允许 HTTP/HTTPS |
+| `HOST`              | `0.0.0.0`              | HTTP 监听地址                           |
+| `PORT`              | `3000`                 | 容器内 HTTP 端口                        |
+| `CLUB_PORT`         | `3000`                 | Compose 映射到宿主机的端口              |
+| `CLUB_BIND_ADDRESS` | `127.0.0.1`            | Compose 端口绑定的宿主机地址            |
+| `LOG_LEVEL`         | `info`                 | Pino 日志级别                           |
+| `TRUST_PROXY`       | `false`                | 位于可信反向代理后时设为 `true`         |
 
 `APP_URL` 必须与浏览器实际 Origin 完全一致，包括协议、主机和非默认端口。配置不一致时
 应用会拒绝写请求并返回 `CSRF_VALIDATION_FAILED`。
 
 启用 `TRUST_PROXY` 前应确认应用只通过受控代理访问，否则客户端可伪造转发头。
+Compose 默认只在宿主机回环地址开放应用端口，适合同机反向代理。代理位于其他主机时，
+将 `CLUB_BIND_ADDRESS` 设为代理可达的宿主机地址，并限制该端口的访问来源；代理本身在
+容器中时，可接入应用的 Compose 网络并访问 `app:3000`。容器中的 `127.0.0.1` 指向容器
+自身，不是宿主机。可信代理应重建客户端转发头。
 
 ## PostgreSQL
 
@@ -137,6 +142,7 @@ Cookie 和 token 不通过环境变量导入，也不返回浏览器。应用固
 
 ```dotenv
 CLUB_IMAGE=ghcr.io/vtbs-infra/club:MAJOR.MINOR.PATCH
+CLUB_BIND_ADDRESS=127.0.0.1
 CLUB_PORT=3000
 POSTGRES_HOST_PORT=55432
 POSTGRES_PASSWORD=...

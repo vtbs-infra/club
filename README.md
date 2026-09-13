@@ -73,6 +73,9 @@ The administrator command creates a new account and rejects an existing username
 
 For browser login, configure an HTTPS reverse proxy, set `APP_URL` to its public URL and
 `TRUST_PROXY=true`, then open that URL to configure verification rooms and creators.
+Compose binds the application port to host loopback by default. A proxy on the same host can use
+`127.0.0.1:3000`; other proxy topologies require an explicit network configuration described in
+[Configuration](docs/configuration.md).
 The local HTTP port can be used for health checks; production authentication requires HTTPS.
 
 The complete setup procedure is in [Getting started](docs/getting-started.md).

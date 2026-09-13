@@ -109,7 +109,9 @@ Invoke-RestMethod http://localhost:3000/health/ready
 
 Compose 固定使用生产模式，认证 Cookie 要求 HTTPS。使用浏览器登录前，配置 HTTPS
 反向代理，将 `APP_URL` 改为浏览器访问的 HTTPS 地址，并设置 `TRUST_PROXY=true`；
-应用端口应只允许可信代理访问。重新创建 app 容器后，通过该 HTTPS 地址登录。
+Compose 默认绑定宿主机 `127.0.0.1:3000`，同机代理可连接该地址；其他代理拓扑见
+[配置参考](configuration.md#应用)。应用端口应只允许可信代理访问。
+重新创建 app 容器后，通过该 HTTPS 地址登录。
 上述本地 HTTP 地址可以继续用于健康检查。
 
 ## 6. 配置 B站读取账号与验证直播间

@@ -10,5 +10,5 @@
     "checkJs": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["*.config.ts", "scripts/**/*.mjs", "scripts/**/*.ts"]
+  "include": ["*.config.ts", "scripts/**/*.mjs", "scripts/**/*.ts", "tests/container/**/*.mjs"]
 }

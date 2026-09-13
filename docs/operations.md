@@ -120,8 +120,15 @@ docker compose stop app
 创建 PostgreSQL Dump：
 
 ```powershell
-docker compose exec -T postgres pg_dump -U club -d club -Fc > club.dump
+docker compose exec -T postgres pg_dump -U club -d club -Fc -f /tmp/club.dump
+docker compose cp postgres:/tmp/club.dump ./club.dump
+docker compose exec -T postgres pg_restore --list /tmp/club.dump
+docker compose exec -T postgres rm /tmp/club.dump
 ```
+
+每条命令成功后再执行下一条；导出或复制失败时保留容器内文件供重试。Dump 在容器内生成，
+通过 `compose cp` 按文件复制，不经过宿主 Shell 的二进制重定向。`pg_restore --list`
+确认归档可解析，完整恢复仍需下面的恢复演练。
 
 归档 `club-storage` 数据卷，然后重新启动应用：
 
