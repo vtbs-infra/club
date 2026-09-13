@@ -15,12 +15,12 @@
 ## 提交前检查
 
 ```powershell
-pnpm install --frozen-lockfile
-pnpm check
-pnpm test
+npm ci
+npm run check
+npm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
-pnpm test:integration
-pnpm test:browser
+npm run test:integration
+npm run test:browser
 ```
 
 数据库变更必须包含新的迁移和 PostgreSQL 集成测试。界面工作流变更应在足够低的测试层级

@@ -37,7 +37,7 @@ Token 不负责更改组织的 Package 可见性。
 运行发布元数据检查：
 
 ```powershell
-pnpm release:check
+npm run release:check
 ```
 
 该检查同时核对版本、Changelog、镜像 Tag，以及代码迁移清单、SQL 文件、Drizzle journal、
@@ -46,15 +46,15 @@ pnpm release:check
 ## 自动质量门
 
 ```powershell
-pnpm install --frozen-lockfile
-pnpm audit:prod
-pnpm check
-pnpm test
+npm ci
+npm run audit:prod
+npm run check
+npm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
-pnpm test:integration
-pnpm test:browser
-pnpm test:e2e
-docker compose build --no-cache app
+npm run test:integration
+npm run test:browser
+npm run test:e2e
+docker compose build --pull --no-cache app
 ```
 
 必须确认：
@@ -96,7 +96,7 @@ docker compose build --no-cache app
 
 ```powershell
 $releaseVersion = (Get-Content package.json | ConvertFrom-Json).version
-pnpm release:check -- --tag "v$releaseVersion"
+npm run release:check -- --tag "v$releaseVersion"
 git status --short
 git show --stat --oneline HEAD
 ```

@@ -6,29 +6,33 @@
 ## 开发环境
 
 - Node.js `>=24 <25`
-- pnpm `11.9.0`
+- npm `>=11.19 <12`（使用当前 Node.js 24 发行版附带的 npm）
 - Docker Engine
 - Docker Compose v2
 
 安装依赖：
 
 ```powershell
-corepack enable
-pnpm install
+npm ci
 Copy-Item .env.example .env
 ```
+
+`npm ci` 按提交的 `package-lock.json` 重建依赖目录，适用于首次安装、切换分支和 CI。
+添加或更新依赖时使用 `npm install` / `npm update`，并提交对应的锁文件变化。
+依赖安装脚本许可由 `package.json` 的 `allowScripts` 声明，`.npmrc` 启用严格检查；
+间接依赖的版本覆盖也统一放在 `package.json` 的 `overrides` 中。
 
 配置 `.env` 后启动 PostgreSQL：
 
 ```powershell
 docker compose up -d postgres
-pnpm db:migrate
+npm run db:migrate
 ```
 
 启动 Fastify 与 Vite：
 
 ```powershell
-pnpm dev
+npm run dev
 ```
 
 开发地址：
@@ -41,21 +45,21 @@ Vite 会把 API 与健康检查请求代理到 Fastify。
 
 ## 常用命令
 
-| 命令                    | 用途                            |
-| ----------------------- | ------------------------------- |
-| `pnpm dev`              | 同时启动服务端和 Web 开发服务器 |
-| `pnpm dev:server`       | 启动 Fastify Watch              |
-| `pnpm dev:web`          | 启动 Vite                       |
-| `pnpm check`            | 文档链接、格式、Lint 和类型检查 |
-| `pnpm test`             | 单元测试                        |
-| `pnpm test:integration` | PostgreSQL 集成测试             |
-| `pnpm test:browser`     | 生产构建和浏览器工作流测试      |
-| `pnpm build`            | 生成生产服务端和 Web 输出       |
-| `pnpm db:generate`      | 根据 Drizzle Schema 生成迁移    |
-| `pnpm db:migrate`       | 应用迁移                        |
-| `pnpm club`             | 运行开发版 Club CLI             |
-| `pnpm club:prod`        | 运行编译后的 Club CLI           |
-| `pnpm db:migrate:prod`  | 运行编译后的迁移入口            |
+| 命令                       | 用途                            |
+| -------------------------- | ------------------------------- |
+| `npm run dev`              | 同时启动服务端和 Web 开发服务器 |
+| `npm run dev:server`       | 启动 Fastify Watch              |
+| `npm run dev:web`          | 启动 Vite                       |
+| `npm run check`            | 文档链接、格式、Lint 和类型检查 |
+| `npm test`                 | 单元测试                        |
+| `npm run test:integration` | PostgreSQL 集成测试             |
+| `npm run test:browser`     | 生产构建和浏览器工作流测试      |
+| `npm run build`            | 生成生产服务端和 Web 输出       |
+| `npm run db:generate`      | 根据 Drizzle Schema 生成迁移    |
+| `npm run db:migrate`       | 应用迁移                        |
+| `npm run club`             | 运行开发版 Club CLI             |
+| `npm run club:prod`        | 运行编译后的 Club CLI           |
+| `npm run db:migrate:prod`  | 运行编译后的迁移入口            |
 
 ## 代码组织
 
@@ -143,18 +147,18 @@ src/server/infrastructure/db/schema/
 用户名与 UID 基线不支持导入旧认证模型的数据库；已经采用此基线的数据库支持追加迁移。
 基线包含定稿、不可变集合和业务状态等手写触发器，后续变更必须保留这些业务约束。每次
 追加迁移都须同步 `schema-version.ts` 的迁移清单、时间戳和 SHA-256，并执行
-`pnpm release:check` 检查 SQL 与元数据一致。
+`npm run release:check` 检查 SQL 与元数据一致。
 
 进入正式发布后的结构调整：
 
 ```powershell
-pnpm db:generate
+npm run db:generate
 ```
 
 审查生成的 SQL 和 `migrations/meta`，然后在本地数据库应用：
 
 ```powershell
-pnpm db:migrate
+npm run db:migrate
 ```
 
 需要 PostgreSQL 触发器、约束或数据迁移时，在生成的迁移 SQL 中加入明确的自定义语句，
@@ -173,7 +177,7 @@ pnpm db:migrate
 ### 单元测试
 
 ```powershell
-pnpm test
+npm test
 ```
 
 单元测试覆盖：
@@ -196,7 +200,7 @@ PostgreSQL 或 B站服务。应用健康检查、HTTP Shell 和后台运行时�
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
-pnpm test:integration
+npm run test:integration
 Remove-Item Env:TEST_DATABASE_URL
 ```
 
@@ -218,7 +222,7 @@ Remove-Item Env:TEST_DATABASE_URL
 真实读取账号服务的场景直接组装 `buildApp`。可以随机排列集成场景以检查相互依赖：
 
 ```powershell
-pnpm test:integration --sequence.shuffle --sequence.seed=913
+npm run test:integration -- --sequence.shuffle --sequence.seed=913
 ```
 
 测试地址对应的账号必须具备创建和删除临时数据库的权限。套件只把该 URL 用作管理
@@ -229,13 +233,13 @@ pnpm test:integration --sequence.shuffle --sequence.seed=913
 首次安装 Chromium：
 
 ```powershell
-pnpm browser:install
+npm run browser:install
 ```
 
 运行：
 
 ```powershell
-pnpm test:browser
+npm run test:browser
 ```
 
 该命令先执行生产构建，再启动测试服务并运行 Playwright。测试服务复用生产 HTTP 外壳，
@@ -254,7 +258,7 @@ API Mock 按请求方法和路径声明，场景可以覆盖共享默认响应�
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
-pnpm test:e2e
+npm run test:e2e
 ```
 
 该命令构建生产 Web，使用真实 Fastify Cookie/Session、独立 PostgreSQL 新库及本地私有存储，
@@ -277,19 +281,19 @@ XLSX 下载、确认发货、更正与复制单号。测试替换 B站外部服�
 ## 完整质量检查
 
 ```powershell
-pnpm install --frozen-lockfile
-pnpm check
-pnpm test
+npm ci
+npm run check
+npm test
 $env:TEST_DATABASE_URL = 'postgres://club:<password>@localhost:55432/postgres'
-pnpm test:integration
-pnpm build
-pnpm exec playwright test --project chromium
-pnpm exec playwright test --project e2e
-docker compose build app
+npm run test:integration
+npm run build
+npm exec -- playwright test --project chromium
+npm exec -- playwright test --project e2e
+docker compose build --pull app
 ```
 
 完整检查中的两个 Playwright 项目复用前面的构建；单独运行时仍可使用会自动构建的
-`pnpm test:browser` 和 `pnpm test:e2e`。
+`npm run test:browser` 和 `npm run test:e2e`。
 
 提交前还应确认：
 

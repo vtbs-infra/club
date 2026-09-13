@@ -8,6 +8,8 @@ All notable Club changes are documented here. The format follows
 
 ### Breaking changes
 
+- Use npm 11.19+ (11.x) and `package-lock.json` for development, CI and image builds;
+  install the source checkout with `npm ci`.
 - Replace email/Better Auth with username credentials and PostgreSQL-backed Fastify sessions.
 - Require Bilibili UID verification before creating ordinary accounts; recover usernames and reset passwords through the same UID proof.
 - Make username and UID immutable and unique. Remove separate binding, unbinding and conflict-management flows.

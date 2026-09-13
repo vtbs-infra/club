@@ -60,7 +60,7 @@ BILIBILI_CREDENTIAL_KEY_RING=1:<独立的 32 字节 base64 密钥>
 ## 2. 构建应用镜像并启动数据库
 
 ```powershell
-docker compose build app
+docker compose build --pull app
 docker compose up -d postgres
 docker compose ps
 ```

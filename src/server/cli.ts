@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   const [command, ...arguments_] = process.argv.slice(2);
   if (command !== 'admin:create' && command !== 'admin:reset-password') {
     throw new Error(
-      'Usage: pnpm club admin:create --username <username> --name <display-name> | admin:reset-password --username <username>',
+      'Usage: npm run club -- admin:create --username <username> --name <display-name> | admin:reset-password --username <username>',
     );
   }
   const { values } = parseArgs({

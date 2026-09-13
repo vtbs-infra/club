@@ -144,7 +144,7 @@ COMPOSE_DATABASE_URL=postgres://club:...@postgres:5432/club
 ```
 
 正式镜像的 `CLUB_IMAGE` 应使用精确版本 Tag 或 Digest。当前未发布源码的模板使用
-`CLUB_IMAGE=club-app`，通过 `docker compose build app` 构建，不使用旧 v0.2.0 镜像。
+`CLUB_IMAGE=club-app`，通过 `docker compose build --pull app` 构建，不使用旧 v0.2.0 镜像。
 
 应用容器固定使用 `NODE_ENV=production`、`HOST=0.0.0.0`、
 私有本地存储路径 `/data/club`。
@@ -181,9 +181,9 @@ PostgreSQL 集成测试与完整浏览器业务测试必须设置 `TEST_DATABASE
 
 ```powershell
 $env:TEST_DATABASE_URL = 'postgres://club:password@localhost:55432/postgres'
-pnpm test:integration
-pnpm test:e2e
+npm run test:integration
+npm run test:e2e
 ```
 
 该账号需要创建和删除临时数据库的权限。测试套件不会把业务数据库作为 Fixture 库。
-未设置该变量时，`pnpm test:integration` 会立即失败，不会把数据库测试标记为跳过。
+未设置该变量时，`npm run test:integration` 会立即失败，不会把数据库测试标记为跳过。

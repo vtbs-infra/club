@@ -84,8 +84,8 @@ B站账号的控制权是自助找回的依据：失去该账号或无法发送�
 完成数据库初始化后，在服务器运行：
 
 ```sh
-pnpm club admin:create --username admin --name Admin
-pnpm club admin:reset-password --username admin
+npm run club -- admin:create --username admin --name Admin
+npm run club -- admin:reset-password --username admin
 ```
 
 CLI 在交互终端隐藏输入并确认密码。自动化时可临时传入 `CLUB_ADMIN_PASSWORD`，不能通过

@@ -48,7 +48,7 @@ Requirements: Docker Engine and Docker Compose v2.
 
 ```powershell
 Copy-Item .env.example .env
-docker compose build app
+docker compose build --pull app
 docker compose up -d postgres
 docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
 docker compose up -d --no-build app
