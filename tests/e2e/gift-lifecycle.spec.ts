@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { expect, test, type APIResponse, type Page } from '@playwright/test';
 import { and, eq } from 'drizzle-orm';
-import ExcelJS from 'exceljs';
+import { readSheet } from 'read-excel-file/node';
 
 import { buildApp } from '../../src/server/app.js';
 import { auditLogs, giftOrders } from '../../src/server/infrastructure/db/schema/index.js';
@@ -218,13 +218,11 @@ test('registers, verifies, publishes, claims, exports, ships and corrects using 
     const downloadReady = creator.waitForEvent('download');
     await creator.getByRole('dialog').getByRole('button', { name: '导出 1 条' }).click();
     const download = await downloadReady;
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.readFile(await download.path());
-    const sheet = workbook.worksheets[0]!;
-    expect(sheet.rowCount).toBe(2);
-    expect(JSON.stringify(sheet.getRow(2).values)).toContain('测试路 1 号');
-    expect(JSON.stringify(sheet.getRow(2).values)).toContain('纪念卡');
-    expect(sheet.getRow(2).values).toContain('L');
+    const sheet = await readSheet(await download.path());
+    expect(sheet).toHaveLength(2);
+    expect(JSON.stringify(sheet[1])).toContain('测试路 1 号');
+    expect(JSON.stringify(sheet[1])).toContain('纪念卡');
+    expect(sheet[1]).toContain('L');
 
     await creator.goto(`${appUrl}/creator/orders/${order.id}`);
     await creator.getByLabel('快递公司', { exact: true }).fill('中通快递');

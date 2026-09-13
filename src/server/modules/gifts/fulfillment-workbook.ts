@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import writeExcelFile, { type Column } from 'write-excel-file/node';
 
 import type { AddressPayload } from '../addresses/address-domain.js';
 
@@ -27,36 +27,10 @@ export interface FulfillmentWorkbookRow {
 }
 
 export interface FulfillmentWorkbookInput {
-  readonly creatorDisplayName: string;
-  readonly eligibilityMonth: string;
   readonly fields: readonly FulfillmentWorkbookField[];
-  readonly generatedAt: Date;
-  readonly releaseTitle: string;
   readonly rows: readonly FulfillmentWorkbookRow[];
   readonly timezone: string;
 }
-
-const FIXED_HEADERS = [
-  '礼物单号',
-  '收件人',
-  '手机号',
-  '国家/地区',
-  '省',
-  '市',
-  '区/县',
-  '详细地址',
-  '完整地址',
-  '邮编',
-  '地址备注',
-  'B站 UID',
-  'B站昵称',
-  '大航海等级',
-  '礼包及礼物内容',
-  '提交时间',
-  '状态',
-] as const;
-
-const FIXED_WIDTHS = [24, 16, 18, 14, 14, 14, 14, 36, 52, 12, 24, 20, 24, 12, 44, 22, 12] as const;
 
 const TIER_LABELS: Readonly<Record<FulfillmentWorkbookRow['tier'], string>> = {
   ADMIRAL: '提督',
@@ -64,22 +38,17 @@ const TIER_LABELS: Readonly<Record<FulfillmentWorkbookRow['tier'], string>> = {
   GOVERNOR: '总督',
 };
 
-export function safeSpreadsheetText(value: string | null | undefined): string {
-  const cleaned = Array.from(value ?? '', (character) => {
-    const code = character.codePointAt(0) ?? 0;
-    return code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127
-      ? ' '
-      : character;
-  }).join('');
-  return /^[=+\-@]/.test(cleaned) ? `'${cleaned}` : cleaned;
-}
-
-function formatDate(value: Date, timezone: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-    timeZone: timezone,
-  }).format(value);
+function textColumn(
+  header: string,
+  width: number,
+  value: (row: FulfillmentWorkbookRow) => string,
+): Column<FulfillmentWorkbookRow> {
+  return {
+    header: { type: String, value: header, fontWeight: 'bold' },
+    width,
+    // Explicit text cells preserve identifiers and formula-like user content without prefixes.
+    cell: (row) => ({ type: String, value: value(row) }),
+  };
 }
 
 function fullAddress(address: AddressPayload): string {
@@ -99,102 +68,44 @@ function fullAddress(address: AddressPayload): string {
 function packageSummary(packages: readonly FulfillmentWorkbookPackage[]): string {
   return packages
     .map((package_) => {
-      const items = package_.items
-        .map((item) => `${safeSpreadsheetText(item.name)} × ${item.quantity}`)
-        .join('、');
-      return items
-        ? `${safeSpreadsheetText(package_.name)}：${items}`
-        : safeSpreadsheetText(package_.name);
+      const items = package_.items.map((item) => `${item.name} × ${item.quantity}`).join('、');
+      return items ? `${package_.name}：${items}` : package_.name;
     })
     .join('；');
 }
 
 function optionText(value: boolean | string | undefined): string {
   if (typeof value === 'boolean') return value ? '是' : '否';
-  return safeSpreadsheetText(value);
+  return value ?? '';
 }
 
 export async function buildFulfillmentWorkbook(input: FulfillmentWorkbookInput): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Club';
-  workbook.created = input.generatedAt;
-  workbook.modified = input.generatedAt;
-  workbook.subject = '待发货礼物单履约清单';
-  workbook.title = safeSpreadsheetText(
-    `${input.creatorDisplayName} ${input.releaseTitle} 待发货清单`,
-  );
-
-  const worksheet = workbook.addWorksheet('待发货清单', {
-    properties: { defaultRowHeight: 20 },
-    views: [{ state: 'frozen', ySplit: 1 }],
+  const dateFormat = new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+    timeZone: input.timezone,
   });
-  const headers = [...FIXED_HEADERS, ...input.fields.map((field) => field.label)];
-  const widths = [...FIXED_WIDTHS, ...input.fields.map(() => 24)];
-  worksheet.addRow(headers.map((header) => safeSpreadsheetText(header)));
-  const header = worksheet.getRow(1);
-  header.height = 26;
-  header.eachCell((cell) => {
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.fill = { fgColor: { argb: 'FFE8EEF8' }, pattern: 'solid', type: 'pattern' };
-    cell.font = { bold: true, color: { argb: 'FF24324A' } };
-  });
-
-  for (const item of input.rows) {
-    const address = item.address;
-    const row = worksheet.addRow([
-      safeSpreadsheetText(item.orderNumber),
-      safeSpreadsheetText(address.recipientName),
-      safeSpreadsheetText(address.phone),
-      safeSpreadsheetText(address.countryRegion),
-      safeSpreadsheetText(address.province),
-      safeSpreadsheetText(address.city),
-      safeSpreadsheetText(address.district),
-      safeSpreadsheetText(address.detailedAddress),
-      safeSpreadsheetText(fullAddress(address)),
-      safeSpreadsheetText(address.postalCode),
-      safeSpreadsheetText(address.userNote),
-      safeSpreadsheetText(item.biliUid),
-      safeSpreadsheetText(item.biliDisplayName),
-      TIER_LABELS[item.tier],
-      packageSummary(item.packages),
-      formatDate(item.submittedAt, input.timezone),
-      '待发货',
-      ...input.fields.map((field) => optionText(item.optionValues[field.key])),
-    ]);
-    row.alignment = { vertical: 'top', wrapText: true };
-    row.eachCell((cell) => {
-      cell.border = { bottom: { color: { argb: 'FFDDE3EC' }, style: 'hair' } };
-    });
-    for (const column of [1, 3, 10, 12]) row.getCell(column).numFmt = '@';
-  }
-
-  for (const [index, width] of widths.entries()) worksheet.getColumn(index + 1).width = width;
-  worksheet.autoFilter = {
-    from: { column: 1, row: 1 },
-    to: { column: headers.length, row: 1 },
-  };
-
-  const information = workbook.addWorksheet('导出说明');
-  information.columns = [{ width: 18 }, { width: 72 }];
-  const generatedAt = formatDate(input.generatedAt, input.timezone);
-  const details = [
-    ['主播', input.creatorDisplayName],
-    ['礼物发布', input.releaseTitle],
-    ['资格月份', input.eligibilityMonth.slice(0, 7)],
-    ['导出时间', generatedAt],
-    ['记录数', String(input.rows.length)],
-    ['包含状态', '待发货'],
-    [
-      '使用提示',
-      '本文件包含用户领取时冻结的敏感收货信息，仅用于本次礼物履约。导出不会改变礼物单状态。',
-    ],
+  const columns = [
+    textColumn('礼物单号', 24, (row) => row.orderNumber),
+    textColumn('收件人', 16, (row) => row.address.recipientName),
+    textColumn('手机号', 18, (row) => row.address.phone),
+    textColumn('国家/地区', 14, (row) => row.address.countryRegion),
+    textColumn('省', 14, (row) => row.address.province),
+    textColumn('市', 14, (row) => row.address.city),
+    textColumn('区/县', 14, (row) => row.address.district),
+    textColumn('详细地址', 36, (row) => row.address.detailedAddress),
+    textColumn('完整地址', 52, (row) => fullAddress(row.address)),
+    textColumn('邮编', 12, (row) => row.address.postalCode),
+    textColumn('地址备注', 24, (row) => row.address.userNote),
+    textColumn('B站 UID', 20, (row) => row.biliUid),
+    textColumn('B站昵称', 24, (row) => row.biliDisplayName),
+    textColumn('大航海等级', 12, (row) => TIER_LABELS[row.tier]),
+    textColumn('礼包及礼物内容', 44, (row) => packageSummary(row.packages)),
+    textColumn('提交时间', 22, (row) => dateFormat.format(row.submittedAt)),
+    textColumn('状态', 12, () => '待发货'),
+    ...input.fields.map((field) =>
+      textColumn(field.label, 24, (row) => optionText(row.optionValues[field.key])),
+    ),
   ];
-  for (const [label, value] of details) {
-    const row = information.addRow([safeSpreadsheetText(label), safeSpreadsheetText(value)]);
-    row.getCell(1).font = { bold: true };
-    row.alignment = { vertical: 'top', wrapText: true };
-  }
-
-  const content = await workbook.xlsx.writeBuffer();
-  return Buffer.from(content);
+  return writeExcelFile(Array.from(input.rows), { sheet: '待发货清单', columns }).toBuffer();
 }

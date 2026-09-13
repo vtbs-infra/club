@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { count, eq, sql } from 'drizzle-orm';
-import ExcelJS from 'exceljs';
+import { readSheet } from 'read-excel-file/node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -131,11 +131,8 @@ describe('fulfillment capacity', () => {
       clock,
     ).exportRelease(creator, release.id, context);
     expect(exported.rowCount).toBe(total);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(
-      exported.content as unknown as Parameters<typeof workbook.xlsx.load>[0],
-    );
-    expect(workbook.worksheets[0]?.rowCount).toBe(total + 1);
+    const sheet = await readSheet(exported.content);
+    expect(sheet).toHaveLength(total + 1);
     expect(
       await database
         .select({ value: count() })

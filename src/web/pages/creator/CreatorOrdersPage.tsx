@@ -242,6 +242,7 @@ export function CreatorOrdersPage() {
               </button>
             ) : null}
             <p>文件只包含该礼物发布当前处于“待发货”的礼物单，导出不会改变订单状态。</p>
+            <p>清单可用 Excel/WPS 打开，按需开启表头筛选。</p>
             {selectedRelease && new Date(selectedRelease.claimDeadlineAt).getTime() > now ? (
               <InlineNotice tone="warning">
                 领取仍在进行，之后提交的用户不会包含在本次文件中。

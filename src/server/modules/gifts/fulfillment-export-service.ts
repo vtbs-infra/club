@@ -187,14 +187,10 @@ export class GiftFulfillmentExportService {
     });
     const generatedAt = this.clock.now();
     const content = await buildFulfillmentWorkbook({
-      creatorDisplayName: creator.displayName,
-      eligibilityMonth: source.release.eligibilityMonth,
       fields: source.release.formSchema.map((field) => ({
         key: field.key,
         label: field.label,
       })),
-      generatedAt,
-      releaseTitle: source.release.title,
       rows,
       timezone: creator.timezone,
     });
