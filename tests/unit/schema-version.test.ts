@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { EXPECTED_SCHEMA_MIGRATIONS } from '../../src/server/infrastructure/db/schema-version.js';
 import { assertMigrationHistory } from '../../src/server/infrastructure/db/migration-history.js';
-import { assertCheckedInMigrationIdentity } from '../../scripts/migration-identity.js';
+import { assertCheckedInMigrationIdentity } from '../../scripts/check-migrations.js';
 
 const temporaryDirectories: string[] = [];
 

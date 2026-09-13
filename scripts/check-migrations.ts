@@ -87,3 +87,8 @@ export async function assertCheckedInMigrationIdentity(
     throw new Error('The application migration identity does not match the checked-in migrations.');
   }
 }
+
+if (import.meta.main) {
+  await assertCheckedInMigrationIdentity();
+  process.stdout.write('Checked-in migrations match the application schema identity.\n');
+}

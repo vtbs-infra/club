@@ -18,8 +18,7 @@
     "build": "npm run clean && npm run build:web && npm run build:server",
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
-    "check": "npm run docs:check && npm run format:check && npm run lint && npm run typecheck",
-    "docs:check": "tsx scripts/check-doc-links.ts",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run db:check",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "oxlint",
@@ -33,6 +32,7 @@
     "club": "tsx src/server/cli.ts",
     "club:prod": "node dist/server/server/cli.js",
     "db:generate": "drizzle-kit generate",
+    "db:check": "tsx scripts/check-migrations.ts",
     "db:migrate": "tsx src/server/infrastructure/db/migrate.ts",
     "db:migrate:prod": "node dist/server/server/infrastructure/db/migrate.js",
     "test:e2e": "npm run build && playwright test --project e2e"

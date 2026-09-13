@@ -37,11 +37,13 @@ Token 不负责更改组织的 Package 可见性。
 运行发布元数据检查：
 
 ```powershell
-npm run release:check
+$releaseVersion = (Get-Content package.json | ConvertFrom-Json).version
+npm run release:check -- --tag "v$releaseVersion"
 ```
 
-该检查同时核对版本、Changelog、镜像 Tag，以及代码迁移清单、SQL 文件、Drizzle journal、
-预期 metadata snapshot 文件集合、时间戳和内容哈希是否完全一致。
+该检查核对正式版本、Git Tag 和非空的带日期 Changelog 章节；必须明确传入目标 Tag。
+迁移清单、SQL、Drizzle journal、快照文件集合、时间戳和内容哈希由 `npm run db:check`
+核对，并随普通 `npm run check` 执行。日常开发可以保留 `Unreleased` 内容。
 
 ## 自动质量门
 
@@ -66,7 +68,7 @@ docker compose build --pull --no-cache app
 - 应用会拒绝迁移缺失或多出的不匹配数据库；
 - OpenAPI 包含当前正式路由且版本正确；
 - 生产镜像以非 root 用户运行，并包含生产依赖、`dist`、迁移和 `LICENSE`；
-- Markdown 本地链接、Fixture、日志和测试产物检查通过。
+- 审查文档链接，确认 Fixture、日志和测试产物没有混入发布内容。
 
 ## Release Candidate 验收
 
@@ -123,5 +125,5 @@ Release。不要对已经发布的 Tag、迁移或容器版本覆盖写入。
 恢复，不使用代码回退配合较新的 Schema 继续运行。
 
 未发布的认证重构基线使用 `CLUB_IMAGE=club-app` 构建源码。正式发布前须选定新版本，
-将模板镜像固定为该版本并补全对应 Changelog；带 `--tag` 的发布检查拒绝本地构建占位值。
+补全对应 Changelog；`.env.example` 保持源码构建示例，部署时另行选择精确版本镜像。
 旧 v0.2.0 Tag 与镜像继续对应原版本，不得覆盖。

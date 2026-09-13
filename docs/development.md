@@ -87,22 +87,23 @@ Promise 误用。是否处理拒绝、是否需要等待任务完成，仍须结
 
 ## 常用命令
 
-| 命令                       | 用途                            |
-| -------------------------- | ------------------------------- |
-| `npm run dev`              | 同时启动服务端和 Web 开发服务器 |
-| `npm run dev:server`       | 启动 Fastify Watch              |
-| `npm run dev:web`          | 启动 Vite                       |
-| `npm run check`            | 文档链接、格式、Lint 和类型检查 |
-| `npm run audit`            | 检查全部依赖的安全公告          |
-| `npm test`                 | 单元测试                        |
-| `npm run test:integration` | PostgreSQL 集成测试             |
-| `npm run test:browser`     | 生产构建和浏览器工作流测试      |
-| `npm run build`            | 生成生产服务端和 Web 输出       |
-| `npm run db:generate`      | 根据 Drizzle Schema 生成迁移    |
-| `npm run db:migrate`       | 应用迁移                        |
-| `npm run club`             | 运行开发版 Club CLI             |
-| `npm run club:prod`        | 运行编译后的 Club CLI           |
-| `npm run db:migrate:prod`  | 运行编译后的迁移入口            |
+| 命令                       | 用途                               |
+| -------------------------- | ---------------------------------- |
+| `npm run dev`              | 同时启动服务端和 Web 开发服务器    |
+| `npm run dev:server`       | 启动 Fastify Watch                 |
+| `npm run dev:web`          | 启动 Vite                          |
+| `npm run check`            | 格式、Lint、类型和迁移一致性检查   |
+| `npm run audit`            | 检查全部依赖的安全公告             |
+| `npm test`                 | 单元测试                           |
+| `npm run test:integration` | PostgreSQL 集成测试                |
+| `npm run test:browser`     | 生产构建和浏览器工作流测试         |
+| `npm run build`            | 生成生产服务端和 Web 输出          |
+| `npm run db:generate`      | 根据 Drizzle Schema 生成迁移       |
+| `npm run db:check`         | 检查 SQL、元数据与应用迁移清单一致 |
+| `npm run db:migrate`       | 应用迁移                           |
+| `npm run club`             | 运行开发版 Club CLI                |
+| `npm run club:prod`        | 运行编译后的 Club CLI              |
+| `npm run db:migrate:prod`  | 运行编译后的迁移入口               |
 
 ## 代码组织
 
@@ -123,7 +124,11 @@ tests/integration/                     真实 PostgreSQL 测试
 tests/browser/                         Playwright 界面与请求意图测试
 tests/e2e/                             浏览器、真实服务端与 PostgreSQL 业务闭环
 tests/helpers/                         显式、跨场景复用的测试基础设施
+scripts/                               构建、迁移检查与版本发布的可重复维护工具
 ```
+
+`scripts/` 保留从干净 checkout 维护和交付项目所需的入口。临时探针、诊断、依赖评估和
+一次性操作放在被忽略的 `data/development/`，正式构建、测试和运维不引用其中的文件。
 
 ## 服务端开发
 
@@ -190,7 +195,7 @@ src/server/infrastructure/db/schema/
 用户名与 UID 基线不支持导入旧认证模型的数据库；已经采用此基线的数据库支持追加迁移。
 基线包含定稿、不可变集合和业务状态等手写触发器，后续变更必须保留这些业务约束。每次
 追加迁移都须同步 `schema-version.ts` 的迁移清单、时间戳和 SHA-256，并执行
-`npm run release:check` 检查 SQL 与元数据一致。
+`npm run db:check` 检查 SQL 与元数据一致；该检查也包含在 `npm run check` 中。
 
 进入正式发布后的结构调整：
 

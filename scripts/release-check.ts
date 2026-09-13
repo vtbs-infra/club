@@ -1,63 +1,67 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseArgs } from 'node:util';
 
-import { assertCheckedInMigrationIdentity } from './migration-identity.js';
-
-const STABLE_SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-
-interface PackageMetadata {
-  readonly version?: unknown;
+export function isStableVersion(value: string): boolean {
+  return /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value);
 }
 
-function optionValue(name: string): string | undefined {
-  const index = process.argv.indexOf(name);
-  if (index === -1) return undefined;
-  const value = process.argv[index + 1];
-  if (!value || value === '--') throw new Error(`${name} requires a value.`);
-  return value;
+export function stableVersion(value: string): readonly bigint[] {
+  if (!isStableVersion(value)) {
+    throw new Error(`Expected a stable semantic version, got ${value}.`);
+  }
+  return value.split('.').map(BigInt);
 }
 
-const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as PackageMetadata;
-const version = packageJson.version;
-if (typeof version !== 'string' || !STABLE_SEMVER_PATTERN.test(version)) {
-  throw new Error('package.json must contain a stable semantic version.');
+export function compareVersions(left: string, right: string): number {
+  const a = stableVersion(left);
+  const b = stableVersion(right);
+  for (let index = 0; index < a.length; index++) {
+    if (a[index]! > b[index]!) return 1;
+    if (a[index]! < b[index]!) return -1;
+  }
+  return 0;
 }
 
-await assertCheckedInMigrationIdentity();
+export function releaseMetadata(tag: string, root = resolve('.')) {
+  const packageJson: unknown = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+  if (!packageJson || typeof packageJson !== 'object' || !('version' in packageJson)) {
+    throw new Error('package.json must contain a version.');
+  }
+  const version = packageJson.version;
+  if (typeof version !== 'string') throw new Error('package.json version must be a string.');
+  stableVersion(version);
+  if (tag !== `v${version}`) {
+    throw new Error(`Tag ${tag} does not match package version ${version}.`);
+  }
 
-const expectedTag = `v${version}`;
-const requestedTag = optionValue('--tag');
-if (requestedTag && requestedTag !== expectedTag) {
-  throw new Error(`Tag ${requestedTag} does not match package version ${version}.`);
+  const changelog = readFileSync(resolve(root, 'CHANGELOG.md'), 'utf8');
+  const escapedVersion = version.replaceAll('.', '\\.');
+  const headingPattern = new RegExp(
+    `^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}\\r?$`,
+    'gm',
+  );
+  const headings = [...changelog.matchAll(headingPattern)];
+  const heading = headings[0];
+  if (headings.length !== 1 || !heading) {
+    throw new Error(`CHANGELOG.md must contain exactly one dated [${version}] release section.`);
+  }
+  const remaining = changelog.slice(heading.index + heading[0].length);
+  const nextSection = remaining.search(/^## /m);
+  const notes = (nextSection === -1 ? remaining : remaining.slice(0, nextSection)).trim();
+  if (!notes) throw new Error(`CHANGELOG.md release section [${version}] is empty.`);
+  return { tag, version, notes };
 }
 
-const envExample = readFileSync(resolve('.env.example'), 'utf8');
-const expectedImage = `CLUB_IMAGE=ghcr.io/vtbs-infra/club:${version}`;
-const sourceBuild = envExample.split(/\r?\n/).includes('CLUB_IMAGE=club-app');
-if (!envExample.split(/\r?\n/).includes(expectedImage) && (requestedTag || !sourceBuild)) {
-  throw new Error(`.env.example must pin the release image as ${expectedImage}.`);
+if (import.meta.main) {
+  const { values } = parseArgs({
+    options: { tag: { type: 'string' }, 'notes-file': { type: 'string' } },
+  });
+  if (!values.tag) throw new Error('--tag is required.');
+  const release = releaseMetadata(values.tag);
+  if (values['notes-file'] !== undefined) {
+    if (!values['notes-file']) throw new Error('--notes-file requires a path.');
+    writeFileSync(values['notes-file'], `${release.notes}\n`);
+  }
+  process.stdout.write(`Release metadata is ready for ${release.tag}.\n`);
 }
-
-const changelog = readFileSync(resolve('CHANGELOG.md'), 'utf8');
-const escapedVersion = version.replaceAll('.', '\\.');
-const headingPattern = new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}\\r?$`, 'm');
-const heading = headingPattern.exec(changelog);
-const headingText = heading?.[0];
-if (!heading || !headingText) {
-  throw new Error(`CHANGELOG.md does not contain a dated [${version}] release section.`);
-}
-
-const sectionStart = heading.index + headingText.length;
-const remaining = changelog.slice(sectionStart).replace(/^\r?\n/, '');
-const nextSection = remaining.search(/^## /m);
-const notes = (nextSection === -1 ? remaining : remaining.slice(0, nextSection)).trim();
-if (!notes) throw new Error(`CHANGELOG.md release section [${version}] is empty.`);
-
-const notesFile = optionValue('--notes-file');
-if (notesFile) writeFileSync(resolve(notesFile), `${notes}\n`);
-
-process.stdout.write(
-  sourceBuild
-    ? 'Unreleased source baseline checked; pin a matching release image before tagging.\n'
-    : `Release metadata is ready for ${expectedTag}.\n`,
-);
