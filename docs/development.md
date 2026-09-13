@@ -43,6 +43,10 @@ npm run dev
 
 Vite 会把 API 与健康检查请求代理到 Fastify。
 
+前端使用 Vite 8 的 Rolldown / Oxc 构建链，React 插件采用默认转换配置。生产构建使用
+Vite 的 `baseline-widely-available` 目标，当前最低版本为 Chrome / Edge 111、Firefox 114
+和 Safari 16.4。
+
 ## TypeScript 与静态检查
 
 TypeScript 7 负责类型检查和服务端 JavaScript 输出；开发 Watch、CLI 与维护脚本由 `tsx`
