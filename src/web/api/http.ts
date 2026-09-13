@@ -21,13 +21,14 @@ interface ApiErrorBody {
 
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const isFormData = init?.body instanceof FormData;
+  const headers = new Headers(init?.headers);
+  if (init?.body && !isFormData && !headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
   const response = await fetch(path, {
     ...init,
     credentials: 'include',
-    headers: {
-      ...(init?.body && !isFormData ? { 'content-type': 'application/json' } : {}),
-      ...init?.headers,
-    },
+    headers,
   });
   if (response.ok) return response;
   const body = (await response.json().catch(() => ({}))) as ApiErrorBody;
