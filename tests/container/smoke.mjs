@@ -38,7 +38,8 @@ async function waitFor(ready, description) {
 }
 
 try {
-  container('network', 'create', '--internal', name);
+  // Host-side HTTP checks require published ports; Docker does not publish them on internal networks.
+  container('network', 'create', name);
   cleanup.push(['network', 'rm', name]);
   container('volume', 'create', storage);
   cleanup.push(['volume', 'rm', storage]);

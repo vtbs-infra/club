@@ -233,8 +233,11 @@ npm run test:container -- --image club-candidate
 该入口也可直接运行 `node tests/container/smoke.mjs --image club-candidate`，不要求宿主机
 安装 npm 依赖。使用 Podman 时加 `--engine podman`。
 
-验收使用独立网络、空 PostgreSQL 和存储卷，运行镜像内编译后的迁移入口，以非 root
-用户启动，检查 readiness、应用版本、首页及其引用的静态资源。readiness 实际检查存储
+验收使用独立 bridge 网络、空 PostgreSQL 和存储卷；应用端口只映射到宿主机回环地址，
+数据库不发布端口。网络不设置 `--internal`，以便 Docker 建立宿主端口映射。
+
+验收运行镜像内编译后的迁移入口，以非 root 用户启动，检查 readiness、应用版本、首页
+及其引用的静态资源。readiness 实际检查存储
 读写能力。失败时输出容器日志，结束后清理本次创建的容器、网络和卷。此验收不复制
 业务测试；镜像必须预先构建或加载，入口不会偷偷重新构建。
 
