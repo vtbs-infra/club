@@ -196,7 +196,8 @@ export class BiliTvPassportClient implements BilibiliPassport {
       });
       if (!response.ok || !response.body)
         throw new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE');
-      const reader = response.body.getReader();
+      // Fetch yields bytes; Node's Response declaration leaves the stream chunk type unspecified.
+      const reader = response.body.getReader() as ReadableStreamDefaultReader<Uint8Array>;
       const chunks: Uint8Array[] = [];
       let length = 0;
       try {

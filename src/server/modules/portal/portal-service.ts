@@ -12,6 +12,7 @@ import {
 
 function summarize(value: string, maximumCharacters: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
+  // oxlint-disable-next-line typescript/no-misused-spread -- Summaries intentionally count Unicode code points.
   const characters = [...normalized];
   if (characters.length <= maximumCharacters) return normalized;
   return `${characters

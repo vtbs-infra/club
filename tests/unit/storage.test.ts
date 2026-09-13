@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Readable } from 'node:stream';
+import { text } from 'node:stream/consumers';
 
 import { InvalidStorageKeyError } from '../../src/server/infrastructure/storage/local-storage.js';
 import { createTemporaryStorage } from '../../src/server/infrastructure/storage/temporary-storage.js';
@@ -18,16 +19,12 @@ describe('LocalStorageDriver', () => {
         data: 'second',
         key: 'private/snapshots/run/page-1.json.gz',
       });
-      const body = await new Response(
-        await temporary.driver.open('private/snapshots/run/page-1.json.gz'),
-      ).text();
+      const body = await text(await temporary.driver.open('private/snapshots/run/page-1.json.gz'));
       expect(body).toBe('second');
 
       await temporary.driver.delete('private/snapshots/run/page-1.json.gz');
       await expect(
-        temporary.driver
-          .open('private/snapshots/run/page-1.json.gz')
-          .then((stream) => new Response(stream).text()),
+        temporary.driver.open('private/snapshots/run/page-1.json.gz').then(text),
       ).rejects.toThrow();
     } finally {
       await temporary.cleanup();

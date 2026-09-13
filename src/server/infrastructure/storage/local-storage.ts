@@ -2,6 +2,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
+import type { ReadableStream } from 'node:stream/web';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 

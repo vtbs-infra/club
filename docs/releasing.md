@@ -59,7 +59,7 @@ docker compose build --pull --no-cache app
 
 必须确认：
 
-- 格式、ESLint 和三套 TypeScript 检查通过；
+- 格式、Oxlint 类型感知规则和各执行环境的 TypeScript 检查通过；
 - 生产依赖没有高危或严重级别的已知漏洞，其余报告项已经逐项评估；
 - 单元、PostgreSQL 集成、Playwright 界面与完整业务闭环全部通过；
 - 空数据库能够应用完整基线；每个 Changelog 明确支持的来源版本都已实测升级；

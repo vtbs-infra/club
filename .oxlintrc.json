@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "categories": {
+    "correctness": "error"
+  },
+  "options": {
+    "typeAware": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "ignorePatterns": [
+    "data/**",
+    "dist/**",
+    "coverage/**",
+    "playwright-report/**",
+    "test-results/**"
+  ],
+  "rules": {
+    "typescript/no-floating-promises": ["error", { "checkThenables": true }],
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/unbound-method": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/server/**", "scripts/**", "tests/**", "*.config.ts"],
+      "env": { "node": true }
+    },
+    {
+      "files": ["src/web/**"],
+      "plugins": ["typescript", "react"],
+      "env": { "browser": true },
+      "rules": {
+        "typescript/no-misused-promises": [
+          "error",
+          { "checksVoidReturn": { "attributes": false } }
+        ],
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "error",
+        "react/jsx-key": "error",
+        "react/jsx-no-duplicate-props": "error",
+        "react/no-danger-with-children": "error",
+        "react/only-export-components": ["error", { "allowConstantExport": true }]
+      }
+    }
+  ]
+}

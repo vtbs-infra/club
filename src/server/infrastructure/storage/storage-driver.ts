@@ -1,3 +1,5 @@
+import type { ReadableStream } from 'node:stream/web';
+
 export interface PutFileInput {
   readonly key: string;
   readonly data: Uint8Array | string | NodeJS.ReadableStream;

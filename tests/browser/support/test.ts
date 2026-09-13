@@ -47,7 +47,7 @@ export const test = base.extend<BrowserTestFixtures, BrowserWorkerFixtures>({
   ],
   appUrl: [
     // Playwright requires fixture dependencies to use an object-destructuring pattern.
-    // eslint-disable-next-line no-empty-pattern
+    // oxlint-disable-next-line no-empty-pattern
     async ({}, provide) => {
       const app = await buildHttpApp({
         config: { nodeEnv: 'production', logLevel: 'silent', trustProxy: false },

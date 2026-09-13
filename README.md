@@ -94,7 +94,7 @@ A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.
 
 ## Technology
 
-- TypeScript 6 and Node.js 24
+- TypeScript 7 and Node.js 24
 - React 19, React Router, TanStack Query, and Vite
 - Fastify sessions, TypeBox, Drizzle ORM, and Pino
 - PostgreSQL 17

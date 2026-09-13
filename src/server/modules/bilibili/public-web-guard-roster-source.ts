@@ -26,7 +26,8 @@ async function readResponseBytes(response: Response): Promise<Uint8Array> {
     throw new Error('Bilibili roster response exceeded the size limit.');
   }
   if (!response.body) throw new Error('Bilibili roster response did not contain a body.');
-  const reader = response.body.getReader();
+  // Fetch yields bytes; Node's Response declaration leaves the stream chunk type unspecified.
+  const reader = response.body.getReader() as ReadableStreamDefaultReader<Uint8Array>;
   const chunks: Uint8Array[] = [];
   let length = 0;
   try {

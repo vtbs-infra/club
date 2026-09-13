@@ -86,7 +86,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password ap
 
 ## 技术栈
 
-- TypeScript 6 与 Node.js 24
+- TypeScript 7 与 Node.js 24
 - React 19、React Router、TanStack Query、Vite
 - Fastify Session、TypeBox、Drizzle ORM、Pino
 - PostgreSQL 17

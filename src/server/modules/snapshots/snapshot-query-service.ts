@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { ReadableStream } from 'node:stream/web';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 

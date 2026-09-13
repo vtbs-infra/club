@@ -43,6 +43,37 @@ npm run dev
 
 Vite 会把 API 与健康检查请求代理到 Fastify。
 
+## TypeScript 与静态检查
+
+TypeScript 7 负责类型检查和服务端 JavaScript 输出；开发 Watch、CLI 与维护脚本由 `tsx`
+运行。生产入口运行 `dist/server` 中的 JavaScript。服务端继续使用带 `.js` 后缀的相对导入，
+构造函数参数属性由编译器或 `tsx` 转换。
+
+根 `tsconfig.json` 是供编辑器与 Oxlint 发现项目的入口，各配置对应实际执行环境：
+
+| 配置                   | 用途                                                     |
+| ---------------------- | -------------------------------------------------------- |
+| `tsconfig.server.json` | NodeNext 服务端与共享代码，输出 JavaScript 和 source map |
+| `tsconfig.web.json`    | Vite 浏览器代码与共享代码，Bundler 解析与 DOM 类型       |
+| `tsconfig.test.json`   | Vitest / Playwright 测试，Bundler 解析与 Node / DOM 类型 |
+| `tsconfig.node.json`   | NodeNext 工具配置与维护脚本，同时检查 `.mjs`             |
+
+共享代码分别在服务端和浏览器环境中检查。`npm run typecheck` 显式检查各项目；
+服务端构建不生成无人消费的声明文件。
+
+`npm run lint` 使用 Oxlint，`.oxlintrc.json` 同时为命令行和编辑器启用 tsgolint 类型分析。
+TypeScript 与 `oxlint-tsgolint` 固定到对应版本，升级时一起核对；例如 tsgolint `7.0.2001`
+对应 TypeScript `7.0.2`。Prettier 统一负责代码、Markdown 和 YAML 格式化。
+
+规则以正确性检查为基础，补充 Promise 误用、不安全的 `any` 传播和核心 React / Hooks
+检查。Drizzle 等 thenable 也必须处理；React 事件属性允许异步处理器，其余回调仍检查
+Promise 误用。是否处理拒绝、是否需要等待任务完成，仍须结合调用方的生命周期审查，
+`void` 本身不会处理异常。
+
+不启用整套风格、性能建议或 React Compiler 实验性规则。必要的局部豁免使用带原因的
+`oxlint-disable-next-line`；失效的豁免会使检查失败。新增规则应能说明它防止哪类实际错误，
+不以复刻旧工具的规则清单为目标。
+
 ## 常用命令
 
 | 命令                       | 用途                            |

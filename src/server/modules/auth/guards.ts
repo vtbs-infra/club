@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { FastifyRequest, preHandlerHookHandler } from 'fastify';
+import type { FastifyRequest, preHandlerAsyncHookHandler } from 'fastify';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
@@ -17,7 +17,7 @@ export async function resolveSession(request: FastifyRequest, auth: AppAuth): Pr
   return session;
 }
 
-export function createRequireSession(auth: AppAuth): preHandlerHookHandler {
+export function createRequireSession(auth: AppAuth): preHandlerAsyncHookHandler {
   return async (request) => {
     await resolveSession(request, auth);
   };
@@ -26,7 +26,7 @@ export function createRequireSession(auth: AppAuth): preHandlerHookHandler {
 export function createRequireRole(
   auth: AppAuth,
   ...allowedRoles: readonly AccountRole[]
-): preHandlerHookHandler {
+): preHandlerAsyncHookHandler {
   return async (request) => {
     const session = await resolveSession(request, auth);
     if (!allowedRoles.includes(session.user.role)) {
@@ -35,14 +35,14 @@ export function createRequireRole(
   };
 }
 
-export function createRequirePlatformAdmin(auth: AppAuth): preHandlerHookHandler {
+export function createRequirePlatformAdmin(auth: AppAuth): preHandlerAsyncHookHandler {
   return createRequireRole(auth, 'PLATFORM_ADMIN');
 }
 
 export function createRequireCreator(
   auth: AppAuth,
   database: DatabaseService,
-): preHandlerHookHandler {
+): preHandlerAsyncHookHandler {
   return async (request) => {
     const session = await resolveSession(request, auth);
     if (session.user.role !== 'CREATOR') {

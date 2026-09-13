@@ -275,7 +275,7 @@ describe('username and verified UID authentication', () => {
       post('/api/v1/auth/register', body, proof.browser),
       post('/api/v1/auth/register', body, proof.browser),
     ]);
-    expect(results.map((r) => r.statusCode).sort()).toEqual([201, 409]);
+    expect(results.map((r) => r.statusCode).sort((a, b) => a - b)).toEqual([201, 409]);
     expect(
       await fixture.database.orm
         .select({ value: count() })
