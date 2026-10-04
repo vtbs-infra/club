@@ -22,12 +22,15 @@ export interface HttpAppOptions {
   readonly webRoot?: string;
 }
 
+const THIRD_PARTY_NOTICES_PATH = '/third-party-notices.txt';
+
 function isApiPath(pathname: string): boolean {
   return (
     pathname === '/api' ||
     pathname.startsWith('/api/') ||
     pathname.startsWith('/assets/') ||
     pathname.startsWith('/health/') ||
+    pathname === THIRD_PARTY_NOTICES_PATH ||
     pathname === '/openapi.json'
   );
 }
@@ -119,6 +122,21 @@ export async function buildHttpApp(options: HttpAppOptions) {
       prefix: '/assets/',
       root: join(webRoot, 'assets'),
       wildcard: true,
+    });
+    // Publish only this unversioned root file; keep other build-root files private.
+    app.get(THIRD_PARTY_NOTICES_PATH, { schema: { hide: true } }, async (_request, reply) => {
+      try {
+        const notices = await readFile(join(webRoot, 'third-party-notices.txt'), 'utf8');
+        return reply
+          .header('cache-control', 'no-cache')
+          .type('text/plain; charset=utf-8')
+          .send(notices);
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+          return reply.callNotFound();
+        }
+        throw error;
+      }
     });
   }
 

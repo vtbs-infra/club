@@ -88,11 +88,95 @@ describe('application HTTP shell', () => {
     }
   });
 
+  it.each(['*/*', 'text/html'])(
+    'serves public license text for GET and HEAD with Accept %s',
+    async (accept) => {
+      const storage = await createTemporaryStorage();
+      const webRoot = join(storage.root, 'web');
+      const notices = '@vant/area-data 2.1.0\nMIT License\n测试许可文本\n';
+      await mkdir(join(webRoot, 'assets'), { recursive: true });
+      await writeFile(join(webRoot, 'index.html'), '<main>Club shell</main>');
+      await writeFile(join(webRoot, 'third-party-notices.txt'), notices);
+      const app = await buildHttpApp({
+        config: createTestConfig({ nodeEnv: 'production' }),
+        webRoot,
+      });
+      try {
+        for (const method of ['GET', 'HEAD'] as const) {
+          const response = await app.inject({
+            headers: { accept },
+            method,
+            url: '/third-party-notices.txt?version=latest',
+          });
+          expect(response.statusCode).toBe(200);
+          expect(response.headers['content-type']).toBe('text/plain; charset=utf-8');
+          expect(response.headers['cache-control']).toBe('no-cache');
+          expect(response.headers['x-content-type-options']).toBe('nosniff');
+          expect(response.body).toBe(method === 'HEAD' ? '' : notices);
+        }
+        const openapi = await app.inject({ method: 'GET', url: '/openapi.json' });
+        expect(openapi.json<OpenApiDocument>().paths).not.toHaveProperty(
+          '/third-party-notices.txt',
+        );
+      } finally {
+        await app.close();
+        await storage.cleanup();
+      }
+    },
+  );
+
+  it('returns 404 rather than the SPA shell when the license file is missing', async () => {
+    const storage = await createTemporaryStorage();
+    const webRoot = join(storage.root, 'web');
+    await mkdir(join(webRoot, 'assets'), { recursive: true });
+    await writeFile(join(webRoot, 'index.html'), '<main>Club shell</main>');
+    const app = await buildHttpApp({
+      config: createTestConfig({ nodeEnv: 'production' }),
+      webRoot,
+    });
+    try {
+      const response = await app.inject({
+        headers: { accept: 'text/html' },
+        method: 'GET',
+        url: '/third-party-notices.txt?version=latest',
+      });
+      expect(response.statusCode).toBe(404);
+      expect(response.json<ErrorResponse>().error.code).toBe('NOT_FOUND');
+      expect(response.body).not.toContain('Club shell');
+    } finally {
+      await app.close();
+      await storage.cleanup();
+    }
+  });
+
+  it('does not publish the license route when static serving is disabled', async () => {
+    const storage = await createTemporaryStorage();
+    await writeFile(join(storage.root, 'third-party-notices.txt'), 'MIT License');
+    const app = await buildHttpApp({
+      config: createTestConfig({ nodeEnv: 'production' }),
+      serveStatic: false,
+      webRoot: storage.root,
+    });
+    try {
+      const response = await app.inject({
+        headers: { accept: 'text/html' },
+        method: 'GET',
+        url: '/third-party-notices.txt',
+      });
+      expect(response.statusCode).toBe(404);
+    } finally {
+      await app.close();
+      await storage.cleanup();
+    }
+  });
+
   it('serves SPA navigation without swallowing API or private storage routes', async () => {
     const storage = await createTemporaryStorage();
     const webRoot = join(storage.root, 'web');
     await mkdir(join(webRoot, 'assets'), { recursive: true });
     await writeFile(join(webRoot, 'index.html'), '<main>Club shell</main>');
+    await writeFile(join(webRoot, 'not-public.txt'), 'unpublished root file');
+    await writeFile(join(webRoot, 'assets', 'app-test.js'), 'window.club = true;');
     const app = await buildHttpApp({
       config: createTestConfig({ nodeEnv: 'production' }),
       serveStatic: true,
@@ -106,6 +190,14 @@ describe('application HTTP shell', () => {
       });
       expect(navigation.statusCode).toBe(200);
       expect(navigation.body).toContain('Club shell');
+
+      const rootFile = await app.inject({ method: 'GET', url: '/not-public.txt' });
+      expect(rootFile.statusCode).toBe(404);
+      expect(rootFile.body).not.toContain('unpublished root file');
+      const asset = await app.inject({ method: 'GET', url: '/assets/app-test.js' });
+      expect(asset.statusCode).toBe(200);
+      expect(asset.headers['cache-control']).toContain('max-age=31536000');
+      expect(asset.headers['cache-control']).toContain('immutable');
 
       const api = await app.inject({
         headers: { accept: 'text/html' },
