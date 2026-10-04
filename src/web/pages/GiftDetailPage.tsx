@@ -144,13 +144,7 @@ export function GiftDetailPage() {
       </section>
 
       {order.status === 'CLAIMABLE' ? (
-        <form
-          className="claim-flow stack-lg"
-          onSubmit={(event: FormEvent) => {
-            event.preventDefault();
-            submit.mutate();
-          }}
-        >
+        <div className="claim-flow stack-lg">
           {claimEnded ? (
             <InlineNotice tone="danger">
               领取已于 {formatDate(order.release.claimDeadlineAt, true)} 结束，不能再提交。
@@ -231,161 +225,179 @@ export function GiftDetailPage() {
             </div>
           </section>
 
-          {order.release.formFields.length > 0 ? (
-            <section className="panel claim-step">
-              <div className="step-number">2</div>
-              <div className="step-content">
-                <div className="section-heading compact">
-                  <div>
-                    <h2>礼物选项</h2>
-                    <p>请按主播提供的选项完成填写。</p>
+          <form
+            className="stack-lg"
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              if (
+                !selectedAddressId ||
+                !confirmed ||
+                submit.isPending ||
+                claimNotStarted ||
+                claimEnded ||
+                addingAddress
+              )
+                return;
+              submit.mutate();
+            }}
+          >
+            {order.release.formFields.length > 0 ? (
+              <section className="panel claim-step">
+                <div className="step-number">2</div>
+                <div className="step-content">
+                  <div className="section-heading compact">
+                    <div>
+                      <h2>礼物选项</h2>
+                      <p>请按主播提供的选项完成填写。</p>
+                    </div>
                   </div>
-                </div>
-                <div className="claim-fields">
-                  {order.release.formFields.map((field) =>
-                    field.type === 'RADIO' ? (
-                      <fieldset className="radio-field" key={field.key}>
-                        <legend>
-                          {field.label}
-                          {field.required ? <span className="required">*</span> : null}
-                        </legend>
-                        <span className="radio-option-list">
-                          {field.options?.map((option) => (
-                            <label className="radio-option" key={option}>
-                              <input
-                                checked={options[field.key] === option}
-                                name={`gift-option-${field.key}`}
-                                onChange={() =>
-                                  setOptions((current) => ({
-                                    ...current,
-                                    [field.key]: option,
-                                  }))
-                                }
-                                required={field.required}
-                                type="radio"
-                              />
-                              {option}
-                            </label>
-                          ))}
-                        </span>
-                      </fieldset>
-                    ) : (
-                      <label
-                        className={field.type === 'CHECKBOX' ? 'check-field' : undefined}
-                        key={field.key}
-                      >
-                        {field.type === 'CHECKBOX' ? (
-                          <>
-                            <input
-                              checked={options[field.key] === true}
-                              onChange={(event) =>
-                                setOptions((current) => ({
-                                  ...current,
-                                  [field.key]: event.target.checked,
-                                }))
-                              }
-                              required={field.required}
-                              type="checkbox"
-                            />
-                            {field.label}
-                          </>
-                        ) : (
-                          <>
+                  <div className="claim-fields">
+                    {order.release.formFields.map((field) =>
+                      field.type === 'RADIO' ? (
+                        <fieldset className="radio-field" key={field.key}>
+                          <legend>
                             {field.label}
                             {field.required ? <span className="required">*</span> : null}
-                            {field.type === 'TEXTAREA' ? (
-                              <textarea
-                                onChange={(event) =>
-                                  setOptions((current) => ({
-                                    ...current,
-                                    [field.key]: event.target.value,
-                                  }))
-                                }
-                                required={field.required}
-                                rows={4}
-                                value={(options[field.key] as string | undefined) ?? ''}
-                              />
-                            ) : field.type === 'SELECT' ? (
-                              <select
-                                onChange={(event) =>
-                                  setOptions((current) => ({
-                                    ...current,
-                                    [field.key]: event.target.value,
-                                  }))
-                                }
-                                required={field.required}
-                                value={(options[field.key] as string | undefined) ?? ''}
-                              >
-                                <option value="">请选择</option>
-                                {field.options?.map((option) => (
-                                  <option key={option}>{option}</option>
-                                ))}
-                              </select>
-                            ) : (
+                          </legend>
+                          <span className="radio-option-list">
+                            {field.options?.map((option) => (
+                              <label className="radio-option" key={option}>
+                                <input
+                                  checked={options[field.key] === option}
+                                  name={`gift-option-${field.key}`}
+                                  onChange={() =>
+                                    setOptions((current) => ({
+                                      ...current,
+                                      [field.key]: option,
+                                    }))
+                                  }
+                                  required={field.required}
+                                  type="radio"
+                                />
+                                {option}
+                              </label>
+                            ))}
+                          </span>
+                        </fieldset>
+                      ) : (
+                        <label
+                          className={field.type === 'CHECKBOX' ? 'check-field' : undefined}
+                          key={field.key}
+                        >
+                          {field.type === 'CHECKBOX' ? (
+                            <>
                               <input
+                                checked={options[field.key] === true}
                                 onChange={(event) =>
                                   setOptions((current) => ({
                                     ...current,
-                                    [field.key]: event.target.value,
+                                    [field.key]: event.target.checked,
                                   }))
                                 }
                                 required={field.required}
-                                value={(options[field.key] as string | undefined) ?? ''}
+                                type="checkbox"
                               />
-                            )}
-                          </>
-                        )}
-                      </label>
-                    ),
-                  )}
+                              {field.label}
+                            </>
+                          ) : (
+                            <>
+                              {field.label}
+                              {field.required ? <span className="required">*</span> : null}
+                              {field.type === 'TEXTAREA' ? (
+                                <textarea
+                                  onChange={(event) =>
+                                    setOptions((current) => ({
+                                      ...current,
+                                      [field.key]: event.target.value,
+                                    }))
+                                  }
+                                  required={field.required}
+                                  rows={4}
+                                  value={(options[field.key] as string | undefined) ?? ''}
+                                />
+                              ) : field.type === 'SELECT' ? (
+                                <select
+                                  onChange={(event) =>
+                                    setOptions((current) => ({
+                                      ...current,
+                                      [field.key]: event.target.value,
+                                    }))
+                                  }
+                                  required={field.required}
+                                  value={(options[field.key] as string | undefined) ?? ''}
+                                >
+                                  <option value="">请选择</option>
+                                  {field.options?.map((option) => (
+                                    <option key={option}>{option}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  onChange={(event) =>
+                                    setOptions((current) => ({
+                                      ...current,
+                                      [field.key]: event.target.value,
+                                    }))
+                                  }
+                                  required={field.required}
+                                  value={(options[field.key] as string | undefined) ?? ''}
+                                />
+                              )}
+                            </>
+                          )}
+                        </label>
+                      ),
+                    )}
+                  </div>
                 </div>
+              </section>
+            ) : null}
+
+            <section className="panel claim-step confirmation-step">
+              <div className="step-number">{order.release.formFields.length > 0 ? '3' : '2'}</div>
+              <div className="step-content">
+                <h2>确认领取</h2>
+                {selectedAddress ? (
+                  <div className="confirmation-summary">
+                    <span>将寄送给</span>
+                    <strong>{selectedAddress.payload.recipientName}</strong>
+                    <p>
+                      {selectedAddress.payload.province}
+                      {selectedAddress.payload.city}
+                      {selectedAddress.payload.district}
+                      {selectedAddress.payload.detailedAddress}
+                    </p>
+                  </div>
+                ) : null}
+                <label className="check-field confirm-check">
+                  <input
+                    checked={confirmed}
+                    onChange={(event) => setConfirmed(event.target.checked)}
+                    required
+                    type="checkbox"
+                  />
+                  我已核对礼物、收货地址和填写内容；提交后将不能自行修改。
+                </label>
+                {submit.isError ? <ErrorNotice error={submit.error} /> : null}
+                <button
+                  className="button primary large"
+                  disabled={
+                    !selectedAddressId ||
+                    !confirmed ||
+                    addingAddress ||
+                    submit.isPending ||
+                    claimNotStarted ||
+                    claimEnded
+                  }
+                  type="submit"
+                >
+                  {submit.isPending ? '正在提交…' : '确认领取礼物'}
+                  {!submit.isPending ? <PackageCheck aria-hidden="true" size={17} /> : null}
+                </button>
               </div>
             </section>
-          ) : null}
-
-          <section className="panel claim-step confirmation-step">
-            <div className="step-number">{order.release.formFields.length > 0 ? '3' : '2'}</div>
-            <div className="step-content">
-              <h2>确认领取</h2>
-              {selectedAddress ? (
-                <div className="confirmation-summary">
-                  <span>将寄送给</span>
-                  <strong>{selectedAddress.payload.recipientName}</strong>
-                  <p>
-                    {selectedAddress.payload.province}
-                    {selectedAddress.payload.city}
-                    {selectedAddress.payload.district}
-                    {selectedAddress.payload.detailedAddress}
-                  </p>
-                </div>
-              ) : null}
-              <label className="check-field confirm-check">
-                <input
-                  checked={confirmed}
-                  onChange={(event) => setConfirmed(event.target.checked)}
-                  required
-                  type="checkbox"
-                />
-                我已核对礼物、收货地址和填写内容；提交后将不能自行修改。
-              </label>
-              {submit.isError ? <ErrorNotice error={submit.error} /> : null}
-              <button
-                className="button primary large"
-                disabled={
-                  !selectedAddressId ||
-                  !confirmed ||
-                  submit.isPending ||
-                  claimNotStarted ||
-                  claimEnded
-                }
-                type="submit"
-              >
-                {submit.isPending ? '正在提交…' : '确认领取礼物'}
-                {!submit.isPending ? <PackageCheck aria-hidden="true" size={17} /> : null}
-              </button>
-            </div>
-          </section>
-        </form>
+          </form>
+        </div>
       ) : (
         <OrderProgress order={order} />
       )}

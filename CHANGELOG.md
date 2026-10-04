@@ -19,6 +19,9 @@ All notable Club changes are documented here. The format follows
 
 ### Added
 
+- Recognize pasted shipping addresses locally in the browser, with a lazy-loaded, pinned region
+  dictionary, explicit replacement previews, undo and manual fallback. Reuse the existing encrypted
+  address API without migrations or changes to saved gift-order address snapshots.
 - Manage one Bilibili reading account through administrator QR login and explicit activation,
   with separately encrypted credentials, periodic checks, automatic renewal and crash recovery.
 - Show independent account, upstream and room states, including recent valid sender-UID samples.
@@ -39,6 +42,8 @@ All notable Club changes are documented here. The format follows
 
 ### Fixed
 
+- Keep the inline address editor separate from the gift confirmation form, so saving an address
+  cannot submit a gift claim or be blocked by unfinished gift options.
 - Fetch creator profiles through public room and anchor endpoints, validating both owner UIDs;
   avoid registration failures when the full room-page endpoint returns Bilibili error `-352`.
 - Preserve upstream creator-profile failures in server logs for diagnosis.

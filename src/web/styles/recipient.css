@@ -542,6 +542,33 @@
   min-height: 42px;
 }
 
+.address-paste {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+  padding: 1rem;
+  scroll-margin-top: 6rem;
+}
+
+.address-paste textarea {
+  width: 100%;
+}
+
+.address-paste-preview dl > div {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  padding: 0.5rem 0;
+}
+
+.address-paste-preview dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .claim-fields {
   display: grid;
   gap: 1rem;

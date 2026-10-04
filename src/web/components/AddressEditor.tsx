@@ -9,51 +9,9 @@ import {
   type AddressPayload,
   type AddressRecord,
 } from '../api/client';
+import { ADDRESS_FIELDS as fields, EMPTY_ADDRESS as emptyAddress } from '../lib/address-fields';
+import { AddressPaste } from './AddressPaste';
 import { ConfirmDialog, ErrorNotice, ErrorState, InlineNotice, LoadingState } from './Ui';
-
-const emptyAddress: AddressPayload = {
-  city: '',
-  countryRegion: '中国大陆',
-  detailedAddress: '',
-  district: '',
-  phone: '',
-  postalCode: '',
-  province: '',
-  recipientName: '',
-  userNote: '',
-};
-
-const fields: readonly {
-  readonly key: keyof AddressPayload;
-  readonly label: string;
-  readonly maxLength: number;
-  readonly placeholder?: string;
-  readonly required?: boolean;
-  readonly wide?: boolean;
-}[] = [
-  { key: 'recipientName', label: '收件人', maxLength: 100, required: true },
-  { key: 'phone', label: '手机号码', maxLength: 40, required: true },
-  { key: 'countryRegion', label: '国家或地区', maxLength: 100, required: true },
-  { key: 'province', label: '省 / 直辖市', maxLength: 100, required: true },
-  { key: 'city', label: '城市', maxLength: 100, required: true },
-  { key: 'district', label: '区 / 县', maxLength: 100 },
-  {
-    key: 'detailedAddress',
-    label: '详细地址',
-    maxLength: 500,
-    placeholder: '街道、门牌号、楼栋及房间号',
-    required: true,
-    wide: true,
-  },
-  { key: 'postalCode', label: '邮政编码', maxLength: 20 },
-  {
-    key: 'userNote',
-    label: '配送备注',
-    maxLength: 500,
-    placeholder: '选填，仅在发货需要时使用',
-    wide: true,
-  },
-];
 
 export function AddressForm({
   autoFocus = false,
@@ -75,6 +33,7 @@ export function AddressForm({
   const [isDefault, setIsDefault] = useState(initial?.isDefault ?? defaultSelected);
   const [payload, setPayload] = useState<AddressPayload>(initial?.payload ?? emptyAddress);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [recognitionPending, setRecognitionPending] = useState(false);
   const save = useMutation({
     mutationFn: () =>
       initial
@@ -91,6 +50,7 @@ export function AddressForm({
       className={compact ? 'address-editor compact' : 'address-editor'}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
+        if (recognitionPending || save.isPending) return;
         if (!label.trim()) {
           setValidationError('地址名称不能只包含空格。');
           return;
@@ -108,11 +68,20 @@ export function AddressForm({
         save.mutate();
       }}
     >
+      <AddressPaste
+        autoFocus={autoFocus}
+        disabled={save.isPending}
+        onApply={(next) => {
+          setPayload(next);
+          setValidationError(null);
+        }}
+        onPendingChange={setRecognitionPending}
+        payload={payload}
+      />
       <div className="form-grid">
         <label>
           地址名称
           <input
-            autoFocus={autoFocus}
             maxLength={80}
             onChange={(event) => {
               setValidationError(null);
@@ -161,7 +130,11 @@ export function AddressForm({
       ) : null}
       {save.isError ? <ErrorNotice error={save.error} /> : null}
       <div className="form-actions">
-        <button className="button primary" disabled={save.isPending} type="submit">
+        <button
+          className="button primary"
+          disabled={save.isPending || recognitionPending}
+          type="submit"
+        >
           {save.isPending ? '正在保存…' : initial ? '保存修改' : '保存并使用'}
         </button>
         {onCancel ? (
