@@ -180,7 +180,14 @@ function parseRegion(
   return { region, before, detail: trimSeparators(text.slice(region.end)) };
 }
 
-type LabelField = 'recipientName' | 'phone' | 'address' | 'postalCode' | 'userNote';
+type LabelField =
+  | 'recipientName'
+  | 'phone'
+  | 'fullAddress'
+  | 'region'
+  | 'detailedAddress'
+  | 'postalCode'
+  | 'userNote';
 const labelPattern =
   /(收货人|收件人|联系人|姓名|联系电话|手机号码|手机号|手机|电话|收货地址|所在地区|详细地址|地区|地址|邮政编码|邮编|配送备注|备注)\s*[:：]\s*/g;
 
@@ -189,7 +196,53 @@ function labelField(label: string): LabelField {
   if (/电话|手机/.test(label)) return 'phone';
   if (/邮/.test(label)) return 'postalCode';
   if (/备注/.test(label)) return 'userNote';
-  return 'address';
+  if (label === '所在地区' || label === '地区') return 'region';
+  if (label === '详细地址') return 'detailedAddress';
+  return 'fullAddress';
+}
+
+const addressSources = ['unstructured', 'fullAddress', 'region', 'detailedAddress'] as const;
+type PhoneSource = (typeof addressSources)[number] | 'phone';
+
+interface PhoneMatch {
+  readonly source: PhoneSource;
+  readonly start: number;
+  readonly end: number;
+  readonly value: string;
+  readonly masked: boolean;
+}
+
+function matchPhones(source: PhoneSource, text: string): PhoneMatch[] {
+  const candidates = [
+    ...[...text.matchAll(/(?<!\d)1[3-9][\d*＊xX•·]{9}(?!\d)/g)]
+      .filter((match) => /[*＊xX•·]/.test(match[0]))
+      .map((match) => ({ match, masked: true })),
+    ...[
+      ...text.matchAll(
+        /(?<![\d])(?:\+?86[ -]?)?1[3-9]\d[ -]?\d{4}[ -]?\d{4}(?!\d)|(?<!\d)(?:\(0\d{2,3}\)|0\d{2,3})[- ]\d{7,8}(?:[-转]\d{1,6})?(?!\d)/g,
+      ),
+    ].map((match) => ({ match, masked: false })),
+  ];
+  return candidates
+    .filter(
+      ({ match }) =>
+        !/^\s*(?:号|室|栋|幢|单元|楼|层)/.test(text.slice(match.index + match[0].length)),
+    )
+    .map(({ match, masked }) => ({
+      source,
+      start: match.index,
+      end: match.index + match[0].length,
+      value: match[0],
+      masked,
+    }));
+}
+
+function removePhoneMatches(text: string, matches: readonly PhoneMatch[]): string {
+  // Work backwards within the original source so duplicate digits and earlier offsets stay intact.
+  for (const match of [...matches].sort((left, right) => right.start - left.start)) {
+    text = text.slice(0, match.start) + ',' + text.slice(match.end);
+  }
+  return text;
 }
 
 export function parseAddress(raw: string): ParsedAddress {
@@ -220,7 +273,7 @@ export function parseAddress(raw: string): ParsedAddress {
     .replace(/\r\n?/g, '\n');
   const labels = [...text.matchAll(labelPattern)];
   const labeled: Partial<Record<LabelField, string[]>> = {};
-  let rest = labels.length ? text.slice(0, labels[0]!.index) : text;
+  const rest = labels.length ? text.slice(0, labels[0]!.index) : text;
   for (let index = 0; index < labels.length; index += 1) {
     const match = labels[index]!;
     const field = labelField(match[1]!);
@@ -239,8 +292,13 @@ export function parseAddress(raw: string): ParsedAddress {
     }
     payload[field] = values[0]!;
   }
-  if ((labeled.address?.length ?? 0) > 2) {
-    warnings.push('检测到多段地址，请每次只粘贴一个收货地址。');
+  if (
+    (['fullAddress', 'region', 'detailedAddress'] as const).some(
+      (field) => (labeled[field]?.length ?? 0) > 1,
+    ) ||
+    (labeled.fullAddress && (labeled.region || labeled.detailedAddress))
+  ) {
+    warnings.push('检测到重复或冲突的地址标签，请只保留一个收货地址，或一组所在地区和详细地址。');
     blocked = true;
     return result();
   }
@@ -248,20 +306,19 @@ export function parseAddress(raw: string): ParsedAddress {
     payload.postalCode = '';
     warnings.push('邮编格式不明确，已留空，请核对。');
   }
-  let addressText = labeled.address?.join(' ') ?? '';
-  const phoneSource = payload.phone || rest + ' ' + addressText;
-  const maskedPhones = [...phoneSource.matchAll(/(?<!\d)1[3-9][\d*＊xX•·]{9}(?!\d)/g)].filter(
-    (match) => /[*＊xX•·]/.test(match[0]),
-  );
-  const masked = maskedPhones.length > 0;
-  const phones = [
-    ...phoneSource.matchAll(
-      /(?<![\d])(?:\+?86[ -]?)?1[3-9]\d[ -]?\d{4}[ -]?\d{4}(?!\d)|(?<!\d)(?:\(0\d{2,3}\)|0\d{2,3})[- ]\d{7,8}(?:[-转]\d{1,6})?(?!\d)/g,
-    ),
-  ].filter(
-    (match) =>
-      !/^\s*(?:号|室|栋|幢|单元|楼|层)/.test(phoneSource.slice(match.index + match[0].length)),
-  );
+  const phoneSources: Record<PhoneSource, string> = {
+    phone: payload.phone,
+    unstructured: rest,
+    fullAddress: labeled.fullAddress?.[0] ?? '',
+    region: labeled.region?.[0] ?? '',
+    detailedAddress: labeled.detailedAddress?.[0] ?? '',
+  };
+  // An explicit phone field is authoritative, including when it is empty or invalid.
+  // Otherwise scan each source separately: a number must never span two labeled fields.
+  const sources: readonly PhoneSource[] = labeled.phone ? ['phone'] : addressSources;
+  const matches = sources.flatMap((source) => matchPhones(source, phoneSources[source]));
+  const masked = matches.some((match) => match.masked);
+  const phones = matches.filter((match) => !match.masked);
   if (masked || phones.length > 1) {
     payload.phone = '';
     warnings.push(
@@ -269,27 +326,31 @@ export function parseAddress(raw: string): ParsedAddress {
         ? '手机号含有隐藏字符，无法还原，请填写完整联系电话。'
         : '检测到多个电话号码，请确认一个有效联系电话。',
     );
-    // Keep the original text visible, but never mistake phone fragments for a name or door number.
-    for (const match of [...phones, ...maskedPhones]) {
-      rest = rest.replace(match[0], ',');
-      addressText = addressText.replace(match[0], ',');
-    }
   } else if (phones.length === 1) {
-    const phone = phones[0]![0];
-    const afterPhone = phoneSource.slice(phones[0]!.index + phone.length);
+    const match = phones[0]!;
+    const phone = match.value;
+    const afterPhone = phoneSources[match.source].slice(match.end);
     if (/转/.test(phone) || /^\s*(?:转|分机|ext\.?|#|-)\s*\d+/i.test(afterPhone)) {
       payload.phone = '';
       warnings.push('联系电话包含分机，请核对可直接拨打的完整号码后手动填写。');
     } else {
       payload.phone = /^\(?0/.test(phone) ? phone : phone.replace(/[ -]/g, '');
     }
-    rest = rest.replace(phone, ',');
-    addressText = addressText.replace(phone, ',');
   } else if (payload.phone) {
     payload.phone = '';
     warnings.push('未能识别联系电话，请手动填写有效号码。');
   }
-  const regionText = trimSeparators(rest + ' ' + addressText).replace(/^中国(?:大陆)?[ ,，]*/, '');
+  // Remove only actual matches from their own source, never by looking up their digits again.
+  // Matches from a labeled phone field cannot modify any address text.
+  for (const source of addressSources) {
+    phoneSources[source] = removePhoneMatches(
+      phoneSources[source],
+      matches.filter((match) => match.source === source),
+    );
+  }
+  const regionText = trimSeparators(
+    addressSources.map((source) => phoneSources[source]).join(' '),
+  ).replace(/^中国(?:大陆)?[ ,，]*/, '');
   const parsed = parseRegion(regionText, warnings);
   blocked = Boolean(parsed.blocked);
   if (parsed.region) {
@@ -304,23 +365,15 @@ export function parseAddress(raw: string): ParsedAddress {
         payload.recipientName = candidate;
     }
   }
-  // A trailing name is accepted only when explicitly separated from the address.
-  if (!payload.recipientName && !addressText && parsed.region) {
+  // Unlabeled trailing words cannot reliably distinguish names from delivery instructions.
+  // Keep them in detail and require preview/manual completion instead of guessing a recipient.
+  if (!payload.recipientName && parsed.region) {
     const parts = payload.detailedAddress
       .split(/[,，;；\n]/)
       .map((part) => part.trim())
       .filter(Boolean);
-    const last = parts.at(-1);
-    if (
-      parts.length > 1 &&
-      last &&
-      /^[\p{L}·・.' -]{1,30}$/u.test(last) &&
-      !/[省市区县路街镇村号楼室栋]$/.test(last)
-    ) {
-      payload.recipientName = last;
-      payload.detailedAddress = trimSeparators(
-        payload.detailedAddress.slice(0, payload.detailedAddress.lastIndexOf(last)),
-      );
+    if (parts.length > 1) {
+      warnings.push('无法确定地址尾部文字是否为收件人，已保留在详细地址；请核对并补充收件人。');
     }
   }
   for (const { key, label, maxLength, required } of ADDRESS_FIELDS) {

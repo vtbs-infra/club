@@ -42,6 +42,9 @@ All notable Club changes are documented here. The format follows
 
 ### Fixed
 
+- Reject duplicate or conflicting pasted address labels, preserve uncertain trailing names and
+  delivery instructions for confirmation, and remove phone matches only at their original source
+  positions so matching door numbers remain intact.
 - Keep the inline address editor separate from the gift confirmation form, so saving an address
   cannot submit a gift claim or be blocked by unfinished gift options.
 - Fetch creator profiles through public room and anchor endpoints, validating both owner UIDs;

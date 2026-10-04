@@ -134,6 +134,72 @@ test('does not keep an old phone when applying an incomplete new address', async
   ).toBe(true);
 });
 
+test('rejects repeated full-address labels without filling or saving a combined address', async ({
+  appUrl,
+  page,
+}) => {
+  const writes = await setup(page);
+  const ambiguous =
+    '收件人：张三\n电话：13800138000\n收货地址：上海市浦东新区测试路1号\n收货地址：浦东新区测试路2号';
+  await page.goto(`${appUrl}/account/addresses`);
+  await page.getByRole('button', { name: '添加地址', exact: true }).click();
+  await paste(page, ambiguous);
+  await expect(page.getByText(/检测到重复或冲突的地址标签/)).toBeVisible();
+  await expect(page.getByLabel('粘贴整条地址', { exact: true })).toHaveValue(ambiguous);
+  await expect(page.getByLabel('收件人', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('详细地址', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: '确认替换表单' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '撤销本次填入' })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+for (const tail of ['工作日送货', '周末有人', '张三']) {
+  test(`previews uncertain trailing text without inventing a recipient: ${tail}`, async ({
+    appUrl,
+    page,
+  }) => {
+    const writes = await setup(page);
+    await page.goto(`${appUrl}/account/addresses`);
+    await page.getByRole('button', { name: '添加地址', exact: true }).click();
+    await paste(page, `13800138000，上海市浦东新区测试路1号，${tail}`);
+    await expect(page.getByText(/无法确定地址尾部文字是否为收件人/)).toBeVisible();
+    await expect(page.getByRole('button', { name: '确认替换表单' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '保存并使用', exact: true })).toBeDisabled();
+    await expect(page.getByLabel('收件人', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('详细地址', { exact: true })).toHaveValue('');
+    expect(writes).toEqual([]);
+    await page.getByRole('button', { name: '确认替换表单' }).click();
+    await expect(page.getByLabel('收件人', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('详细地址', { exact: true })).toHaveValue(`测试路1号，${tail}`);
+    await page.getByRole('button', { name: '保存并使用', exact: true }).click();
+    expect(
+      await page
+        .getByLabel('收件人', { exact: true })
+        .evaluate((element) => (element as HTMLInputElement).validity.valueMissing),
+    ).toBe(true);
+    expect(writes).toEqual([]);
+  });
+}
+
+for (const [format, text] of [
+  ['labeled', '收件人：张三\n电话：13800138000\n地址：上海市浦东新区测试路13800138000号'],
+  ['unlabeled', '张三，上海市浦东新区测试路13800138000号，13800138000'],
+] as const) {
+  test(`preserves door digits identical to the phone in ${format} input`, async ({
+    appUrl,
+    page,
+  }) => {
+    const writes = await setup(page);
+    await page.goto(`${appUrl}/account/addresses`);
+    await page.getByRole('button', { name: '添加地址', exact: true }).click();
+    await paste(page, text);
+    await expect(page.getByLabel('手机号码', { exact: true })).toHaveValue('13800138000');
+    await expect(page.getByLabel('详细地址', { exact: true })).toHaveValue('测试路13800138000号');
+    await expect(page.getByRole('button', { name: '确认替换表单' })).toHaveCount(0);
+    expect(writes).toEqual([]);
+  });
+}
+
 test('never erases subsequent manual edits when offering undo', async ({ appUrl, page }) => {
   await setup(page);
   await page.goto(`${appUrl}/account/addresses`);

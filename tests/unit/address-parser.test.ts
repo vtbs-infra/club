@@ -26,7 +26,7 @@ describe('offline address recognition', () => {
     '张三\n13800138000\n浙江省杭州市西湖区文三路88号2幢1单元502室',
     '收件人：张三\n手机号码：13800138000\n所在地区：浙江省杭州市西湖区\n详细地址：文三路88号2幢1单元502室',
     '地址：浙江省杭州市西湖区文三路88号2幢1单元502室；电话：13800138000；姓名：张三',
-    '浙江省杭州市西湖区文三路88号2幢1单元502室，张三，13800138000',
+    '浙江省杭州市西湖区文三路88号2幢1单元502室，13800138000，姓名：张三',
     '张三13800138000浙江省杭州市西湖区文三路88号2幢1单元502室',
     '张三，138-0013-8000，浙江杭州西湖区文三路88号2幢1单元502室',
     '张三，13800138000，浙江省杭州市西湖区，详细地址：文三路88号2幢1单元502室',
@@ -38,6 +38,48 @@ describe('offline address recognition', () => {
       recognized: true,
       complete: true,
     });
+  });
+
+  it('combines a region and detail by label type, independent of their order', () => {
+    const result = parseAddress(
+      '详细地址：文三路88号2幢1单元502室\n地区：浙江省杭州市西湖区\n电话：13800138000\n收货人：张三',
+    );
+    expect(result).toEqual({ payload: hangzhou, warnings: [], recognized: true, complete: true });
+  });
+
+  it.each([
+    '收货地址：上海市浦东新区测试路1号\n地址：浦东新区测试路2号',
+    '地址：上海市浦东新区测试路1号\n地址：浦东新区测试路2号',
+    '收货地址：上海市浦东新区测试路1号\n详细地址：测试路2号',
+    '收货地址：上海市浦东新区测试路1号\n所在地区：上海市浦东新区',
+    '所在地区：上海市浦东新区\n地区：浦东新区\n详细地址：测试路1号',
+    '所在地区：上海市浦东新区\n详细地址：测试路1号\n详细地址：测试路2号',
+  ])('rejects duplicate or conflicting address labels: %s', (address) => {
+    const result = parseAddress(`收件人：张三\n电话：13800138000\n${address}`);
+    expect(result).toMatchObject({ complete: false, recognized: false });
+    expect(result.payload.detailedAddress).toBe('');
+    expect(result.warnings.join('')).toContain('地址标签');
+  });
+
+  it.each([
+    '张三',
+    'Alex Chen',
+    '工作日送货',
+    '请先联系',
+    '周末有人',
+    'Please call before delivery',
+  ])('keeps an uncertain trailing name or instruction for manual confirmation: %s', (tail) => {
+    const result = parseAddress(`浙江省杭州市西湖区文三路88号2幢1单元502室，${tail}，13800138000`);
+    expect(result).toMatchObject({
+      complete: false,
+      recognized: true,
+      payload: {
+        ...hangzhou,
+        recipientName: '',
+        detailedAddress: `${hangzhou.detailedAddress}，${tail}`,
+      },
+    });
+    expect(result.warnings.join('')).toContain('收件人');
   });
 
   it('normalizes country code and spaces without dropping door numbers', () => {
@@ -152,6 +194,62 @@ describe('offline address recognition', () => {
     const result = parseAddress('张三，138****8000，上海市浦东新区测试路13800138000号');
     expect(result.payload.phone).toBe('');
     expect(result.payload.detailedAddress).toBe('测试路13800138000号');
+    expect(result.complete).toBe(false);
+  });
+
+  it.each([
+    '张三，13800138000，地址：上海市浦东新区测试路13800138000号',
+    '收件人：张三\n地址：上海市浦东新区测试路13800138000号，13800138000',
+    '张三，所在地区：上海市浦东新区\n详细地址：测试路13800138000号，13800138000',
+  ])('removes a phone only from its matching source and position: %s', (text) => {
+    const result = parseAddress(text);
+    expect(result.payload).toMatchObject({
+      recipientName: '张三',
+      phone: '13800138000',
+      detailedAddress: '测试路13800138000号',
+    });
+    expect(result.complete).toBe(true);
+  });
+
+  it.each([
+    '张三，上海市浦东新区测试路13800138000号，13800138000，13900139000',
+    '收件人：张三\n电话：13800138000、13900139000\n地址：上海市浦东新区测试路13800138000号',
+    '张三，13800138000，地址：上海市浦东新区测试路13800138000号，13900139000',
+  ])('preserves matching door digits while removing multiple phone matches: %s', (text) => {
+    const result = parseAddress(text);
+    expect(result.payload).toMatchObject({ phone: '', detailedAddress: '测试路13800138000号' });
+    expect(result.complete).toBe(false);
+    expect(result.warnings.join('')).toContain('多个电话号码');
+  });
+
+  it.each([
+    '张三，上海市浦东新区测试路138****8000号，138****8000',
+    '收件人：张三\n电话：138****8000\n地址：上海市浦东新区测试路138****8000号',
+  ])('does not remove masked digits from a door number: %s', (text) => {
+    const result = parseAddress(text);
+    expect(result.payload).toMatchObject({ phone: '', detailedAddress: '测试路138****8000号' });
+    expect(result.complete).toBe(false);
+    expect(result.warnings.join('')).toContain('隐藏字符');
+  });
+
+  it.each(['', '不详'])(
+    'does not replace an explicit invalid phone with address digits: %s',
+    (phone) => {
+      const result = parseAddress(
+        `收件人：张三\n电话：${phone}\n地址：上海市浦东新区测试路1号，13800138000`,
+      );
+      expect(result.payload).toMatchObject({
+        phone: '',
+        detailedAddress: '测试路1号，13800138000',
+      });
+      expect(result.complete).toBe(false);
+    },
+  );
+
+  it('does not join phone fragments across fields into a phone number', () => {
+    const result = parseAddress('138\n详细地址：0013 8000\n所在地区：上海市浦东新区\n收件人：张三');
+    expect(result.payload.phone).toBe('');
+    expect(result.payload.detailedAddress).toBe('0013 8000');
     expect(result.complete).toBe(false);
   });
 
