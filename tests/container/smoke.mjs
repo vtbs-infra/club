@@ -142,6 +142,18 @@ try {
     JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
   );
   assert.equal(health.version, expected.version);
+  const notices = await fetch(`${origin}/third-party-notices.txt`, {
+    headers: { accept: 'text/html' },
+    signal: AbortSignal.timeout(5_000),
+  });
+  assert.equal(notices.status, 200);
+  assert.equal(notices.headers.get('content-type'), 'text/plain; charset=utf-8');
+  assert.equal(notices.headers.get('cache-control'), 'no-cache');
+  assert.equal(
+    await notices.text(),
+    readFileSync(new URL('../../src/web/public/third-party-notices.txt', import.meta.url), 'utf8'),
+    'the production image must publish the complete bundled third-party notices, not the SPA shell',
+  );
   const homepage = await fetch(origin, {
     headers: { accept: 'text/html' },
     signal: AbortSignal.timeout(5_000),
@@ -160,7 +172,9 @@ try {
     assert.match(response.headers.get('content-type') ?? '', /(?:javascript|text\/css)/);
     assert.ok((await response.arrayBuffer()).byteLength > 0, path);
   }
-  process.stdout.write(`Production image ${image} passed migration, readiness and web delivery.\n`);
+  process.stdout.write(
+    `Production image ${image} passed migration, readiness, license and web delivery.\n`,
+  );
 } catch (error) {
   for (const service of [postgres, app]) {
     spawnSync(engine, ['logs', '--tail', '100', service], { stdio: 'inherit', timeout: 10_000 });

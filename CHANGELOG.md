@@ -42,6 +42,8 @@ All notable Club changes are documented here. The format follows
 
 ### Fixed
 
+- Publish the bundled third-party license text at `/third-party-notices.txt` in production,
+  with revalidation and a real 404 when missing instead of falling back to the SPA shell.
 - Reject duplicate or conflicting pasted address labels, preserve uncertain trailing names and
   delivery instructions for confirmation, and remove phone matches only at their original source
   positions so matching door numbers remain intact.
