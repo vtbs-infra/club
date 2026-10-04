@@ -1,3 +1,4 @@
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../shared/password-policy';
 import { ApiError } from '../api/http';
 
 const errorMessages: Readonly<Record<string, string>> = {
@@ -23,7 +24,7 @@ const errorMessages: Readonly<Record<string, string>> = {
   VERIFICATION_CHANNEL_NOT_READY: '验证通道尚未就绪，请稍后重新点击验证。',
   INVALID_CREDENTIALS: '用户名或密码不正确。',
   CURRENT_PASSWORD_INCORRECT: '当前密码不正确，请重新输入。',
-  PASSWORD_INVALID: '密码需要 12 至 128 个字符。',
+  PASSWORD_INVALID: `密码需要 ${PASSWORD_MIN_LENGTH} 至 ${PASSWORD_MAX_LENGTH} 个字符。`,
   USERNAME_INVALID: '用户名需要 3 至 30 位字母、数字或下划线。',
   USERNAME_TAKEN: '这个用户名已被使用，请换一个。',
   UID_ALREADY_REGISTERED: '这个 B站账号已经注册，请登录或找回账号。',

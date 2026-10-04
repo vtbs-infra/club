@@ -35,15 +35,18 @@ test('edits a display name and changes password while keeping account identity i
   await page.getByRole('button', { name: '保存昵称' }).click();
   await expect(page.getByRole('button', { name: '新的昵称的账号菜单' })).toBeVisible();
   await page.getByLabel('当前密码', { exact: true }).fill('old-password-for-test');
-  await page.getByLabel('新密码', { exact: true }).fill('new-password-for-test');
+  await expect(page.getByLabel('新密码', { exact: true })).toHaveAccessibleDescription(
+    '密码需为 8–128 个字符，建议使用较长的随机密码或密码管理器生成。',
+  );
+  await page.getByLabel('新密码', { exact: true }).fill('87654321');
   await page.getByLabel('确认密码', { exact: true }).fill('different-password');
   await expect(page.getByRole('button', { name: '更新密码' })).toBeDisabled();
-  await page.getByLabel('确认密码', { exact: true }).fill('new-password-for-test');
+  await page.getByLabel('确认密码', { exact: true }).fill('87654321');
   await page.getByRole('button', { name: '更新密码' }).click();
   await expect(page).toHaveURL(/\/login$/);
   expect(submittedPassword).toEqual({
     currentPassword: 'old-password-for-test',
-    password: 'new-password-for-test',
+    password: '87654321',
   });
   await expect(page.getByText('密码已更新，请重新登录。')).toBeVisible();
   await expect(page.getByLabel('密码', { exact: true })).toHaveValue('');

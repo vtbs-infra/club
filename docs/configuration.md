@@ -172,7 +172,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password ap
 
 该命令只创建新管理员。用户名已存在时返回 `ADMIN_ACCOUNT_ALREADY_EXISTS`，不修改已有账号、身份或密码。创建成功后移除临时密码变量。
 
-不传 `CLUB_ADMIN_PASSWORD` 时会在交互终端隐藏输入并确认密码；密码必须为 12–128 个字符。
+不传 `CLUB_ADMIN_PASSWORD` 时会在交互终端隐藏输入并确认密码；密码必须为 8–128 个字符。
 管理员忘记密码时，在服务器执行：
 
 ```powershell

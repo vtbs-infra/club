@@ -1,4 +1,4 @@
-import { fulfillJson, mockApi, mockJson } from './support/api.js';
+import { fulfillJson, mockApi, mockJson, requestJsonObject } from './support/api.js';
 import { addressRecord, portalHome, recipientIdentity, testId } from './support/fixtures.js';
 import { expect, freezeBrowserTime, test, TEST_NOW } from './support/test.js';
 
@@ -21,6 +21,54 @@ test('keeps signed-in visitors on the public home until they choose the workspac
   await expect(workspaceLink).toBeVisible();
   await expect(workspaceLink).toHaveAttribute('href', '/app');
   await expect(page.getByRole('link', { exact: true, name: '登录' })).toHaveCount(0);
+});
+
+test('registers with eight characters and explains the password limits', async ({
+  appUrl,
+  page,
+}) => {
+  const challenge = {
+    id: testId(14),
+    purpose: 'REGISTER',
+    status: 'VERIFIED',
+    code: 'CLUB-ABCDEFGH24',
+    expiresAt: new Date(TEST_NOW.getTime() + 10 * 60_000).toISOString(),
+    room: { displayName: '验证房间', link: 'https://live.bilibili.com/777001' },
+    connectionState: 'HEALTHY',
+    biliUid: '10001',
+    username: null,
+  };
+  let submitted: Record<string, unknown> | null = null;
+  await mockJson(page, 'POST', '/api/v1/auth/challenges', challenge, 201);
+  await mockJson(page, 'GET', '/api/v1/auth/challenges/' + challenge.id, challenge);
+  await mockApi(page, 'POST', '/api/v1/auth/register', (route) => {
+    submitted = requestJsonObject(route.request());
+    return fulfillJson(route, recipientIdentity().user, 201);
+  });
+  await page.goto(`${appUrl}/register`);
+  await page.getByRole('button', { name: '验证 B站身份', exact: true }).click();
+  await page.getByLabel('用户名', { exact: true }).fill('new_user');
+  await page.getByLabel('昵称', { exact: true }).fill('新用户');
+  const password = page.getByLabel('新密码', { exact: true });
+  await expect(password).toHaveAccessibleDescription(
+    '密码需为 8–128 个字符，建议使用较长的随机密码或密码管理器生成。',
+  );
+  await expect(password).toHaveAttribute('maxlength', '128');
+  await password.pressSequentially('1234567');
+  await page.getByLabel('确认密码', { exact: true }).fill('1234567');
+  await page.getByRole('button', { name: '创建账号', exact: true }).click();
+  expect(await password.evaluate((input: HTMLInputElement) => input.validity.tooShort)).toBe(true);
+  expect(submitted).toBeNull();
+  await password.fill('12345678');
+  await page.getByLabel('确认密码', { exact: true }).fill('12345678');
+  await page.getByRole('button', { name: '创建账号', exact: true }).click();
+  await expect(page.getByText('账号已创建，请使用用户名和密码登录。')).toBeVisible();
+  expect(submitted).toEqual({
+    challengeId: challenge.id,
+    username: 'new_user',
+    name: '新用户',
+    password: '12345678',
+  });
 });
 
 test('reveals username after recovery verification and resets the password', async ({
@@ -59,8 +107,8 @@ test('reveals username after recovery verification and resets the password', asy
   await expect(page.getByText('recoverable_user')).toHaveCount(0);
   verified = true;
   await expect(page.getByText('recoverable_user')).toBeVisible();
-  await page.getByLabel('新密码', { exact: true }).fill('a-new-password-for-login');
-  await page.getByLabel('确认密码', { exact: true }).fill('a-new-password-for-login');
+  await page.getByLabel('新密码', { exact: true }).fill('12345678');
+  await page.getByLabel('确认密码', { exact: true }).fill('12345678');
   await page.getByRole('button', { name: '设置新密码', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByText('密码已更新，请重新登录。')).toBeVisible();

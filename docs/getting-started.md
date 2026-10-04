@@ -86,7 +86,7 @@ docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password ap
   node dist/server/server/cli.js admin:create --username admin --name Admin
 ```
 
-密码为 12–128 个字符。该命令只创建新管理员；用户名已存在时明确拒绝，不修改已有账号。
+密码为 8–128 个字符。该命令只创建新管理员；用户名已存在时明确拒绝，不修改已有账号。
 不传密码环境变量时，CLI 会在终端隐藏输入密码。管理员无需 B站 UID。
 成功后移除临时管理员密码环境变量。
 

@@ -25,6 +25,9 @@ All notable Club changes are documented here. The format follows
 
 ### Changed
 
+- Accept 8–128 character passwords across registration, recovery, password changes and administrator
+  commands, with consistent browser guidance. This policy-only change within the username/UID baseline
+  requires no database migration and preserves existing password hashes, sessions and login compatibility.
 - Guide registration and recovery through a shared identity-verification panel with code copying,
   an explicit live-room action, expiry feedback and a clear transition to account setup.
 - Require the managed reading account for live verification, creator profiles and guard rosters;
