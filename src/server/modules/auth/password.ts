@@ -1,5 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { AppError } from '../../../shared/errors/app-error.js';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../../shared/password-policy.js';
 
 const N = 32768;
 const R = 8;
@@ -22,8 +23,12 @@ async function derive(password: string, salt: Buffer): Promise<Buffer> {
 }
 
 export function validatePassword(password: string): void {
-  if (password.length < 12 || password.length > 128) {
-    throw new AppError('PASSWORD_INVALID', 'Use a password between 12 and 128 characters.', 400);
+  if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+    throw new AppError(
+      'PASSWORD_INVALID',
+      `Use a password between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`,
+      400,
+    );
   }
 }
 

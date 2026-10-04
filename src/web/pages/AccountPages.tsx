@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../shared/password-policy';
 import { changePassword, getIdentity, updateProfile, type Identity } from '../api/auth';
 import { useSession } from '../app/session-context';
 import { AddressBook } from '../components/AddressEditor';
@@ -95,22 +96,27 @@ function PasswordEditor() {
         />
       </label>
       <label>
-        新密码
+        <span id="account-password-label">新密码</span>
         <input
+          aria-labelledby="account-password-label"
+          aria-describedby="account-password-help"
           autoComplete="new-password"
-          minLength={12}
-          maxLength={128}
+          minLength={PASSWORD_MIN_LENGTH}
+          maxLength={PASSWORD_MAX_LENGTH}
           required
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
+        <small id="account-password-help">
+          {`密码需为 ${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} 个字符，建议使用较长的随机密码或密码管理器生成。`}
+        </small>
       </label>
       <label>
         确认密码
         <input
           autoComplete="new-password"
-          maxLength={128}
+          maxLength={PASSWORD_MAX_LENGTH}
           required
           type="password"
           value={confirmation}

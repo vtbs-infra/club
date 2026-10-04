@@ -1,4 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../password-policy.js';
 import { AccountRoleSchema, DateTimeSchema, IdSchema, Nullable } from './common.js';
 
 export const UsernameSchema = Type.String({
@@ -6,7 +7,10 @@ export const UsernameSchema = Type.String({
   maxLength: 30,
   pattern: '^[A-Za-z0-9_]+$',
 });
-export const PasswordSchema = Type.String({ minLength: 12, maxLength: 128 });
+export const PasswordSchema = Type.String({
+  minLength: PASSWORD_MIN_LENGTH,
+  maxLength: PASSWORD_MAX_LENGTH,
+});
 export const DisplayNameSchema = Type.String({ minLength: 1, maxLength: 80, pattern: '\\S' });
 export const BiliUidSchema = Type.String({ pattern: '^[1-9][0-9]{0,19}$' });
 export const ChallengePurposeSchema = Type.Union([

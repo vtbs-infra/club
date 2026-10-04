@@ -29,7 +29,7 @@ import { FakeCreatorProfileSource } from '../helpers/fake-creator-profile-source
 import { FakeGuardRosterSource } from '../helpers/fake-guard-roster-source.js';
 
 const PASSWORD = 'first-password-for-tests';
-const NEXT_PASSWORD = 'second-password-for-tests';
+const NEXT_PASSWORD = '87654321';
 const ORIGIN = 'http://localhost:3000';
 const ROOM = '777001';
 
@@ -222,6 +222,65 @@ describe('username and verified UID authentication', () => {
     const [credential] = await fixture.database.orm.select().from(passwordCredentials);
     expect(credential?.passwordHash).toMatch(/^scrypt\$1\$32768\$8\$3\$/);
     expect(credential?.passwordHash).not.toContain(PASSWORD);
+  });
+
+  it('rejects invalid lengths without consuming registration proof and accepts eight characters', async () => {
+    const proof = await start();
+    await verify(proof.challenge, '10001');
+    const registration = {
+      challengeId: proof.challenge.id,
+      username: 'alice',
+      name: 'Alice',
+    };
+    for (const password of ['', '1234567', 'a'.repeat(129)]) {
+      const rejected = await post(
+        '/api/v1/auth/register',
+        { ...registration, password },
+        proof.browser,
+      );
+      expect(rejected.statusCode).toBe(400);
+      expect(await fixture.database.orm.select().from(users)).toEqual([]);
+      expect(await fixture.database.orm.select().from(passwordCredentials)).toEqual([]);
+      expect(
+        (await get('/api/v1/auth/challenges/' + proof.challenge.id, proof.browser)).json(),
+      ).toMatchObject({ status: 'VERIFIED' });
+    }
+    const created = await post(
+      '/api/v1/auth/register',
+      { ...registration, password: '12345678' },
+      proof.browser,
+    );
+    expect(created.statusCode, created.body).toBe(201);
+    const browser = await login('alice', '12345678');
+    expect((await get('/api/v1/me', browser)).statusCode).toBe(200);
+  });
+
+  it('preserves credentials and sessions after rejected password changes and an application restart', async () => {
+    await existingUser('alice', '10001');
+    const browser = await login('alice');
+    const credentialsBefore = await fixture.database.orm.select().from(passwordCredentials);
+    const usersBefore = await fixture.database.orm.select().from(users);
+    for (const password of ['1234567', 'a'.repeat(129)]) {
+      const rejected = await post(
+        '/api/v1/auth/password',
+        { currentPassword: PASSWORD, password },
+        browser,
+      );
+      expect(rejected.statusCode).toBe(400);
+    }
+    await app.close();
+    auth = createAuth({
+      config: createTestConfig({ databaseUrl: fixture.databaseUrl }),
+      database: fixture.database,
+      clock,
+    });
+    await makeApp();
+    expect((await get('/api/v1/me', browser)).statusCode).toBe(200);
+    await login('alice');
+    expect(await fixture.database.orm.select().from(passwordCredentials)).toEqual(
+      credentialsBefore,
+    );
+    expect(await fixture.database.orm.select().from(users)).toEqual(usersBefore);
   });
 
   it('rejects existing UID and lets an owner retry a username collision without consuming proof', async () => {
@@ -541,9 +600,9 @@ describe('username and verified UID authentication', () => {
       database: fixture.database,
       username: 'admin',
       name: 'Admin',
-      password: PASSWORD,
+      password: '12345678',
     });
-    const admin = await login('admin');
+    const admin = await login('admin', '12345678');
     expect((await get('/api/v1/admin/verification-rooms', admin)).statusCode).toBe(200);
     await expect(
       bootstrapPlatformAdmin({

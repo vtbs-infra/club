@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Check, Gift, ShieldCheck, Sparkles } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../shared/password-policy';
 import {
   createIdentityChallenge,
   getIdentityChallenge,
@@ -272,15 +273,17 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                   aria-labelledby="auth-password-label"
                   aria-describedby={isLogin ? undefined : 'auth-password-help'}
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
-                  minLength={isLogin ? 1 : 12}
-                  maxLength={128}
+                  minLength={isLogin ? 1 : PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   required
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
                 {!isLogin ? (
-                  <small id="auth-password-help">至少 12 个字符，可使用密码管理器生成。</small>
+                  <small id="auth-password-help">
+                    {`密码需为 ${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} 个字符，建议使用较长的随机密码或密码管理器生成。`}
+                  </small>
                 ) : null}
               </label>
               {!isLogin ? (
@@ -288,7 +291,7 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                   确认密码
                   <input
                     autoComplete="new-password"
-                    maxLength={128}
+                    maxLength={PASSWORD_MAX_LENGTH}
                     required
                     type="password"
                     value={confirmation}
