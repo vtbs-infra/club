@@ -25,6 +25,7 @@ All notable Club changes are documented here. The format follows
 
 ### Changed
 
+- Accept passwords of 8–128 characters for all roles, including administrator CLI operations.
 - Guide registration and recovery through a shared identity-verification panel with code copying,
   an explicit live-room action, expiry feedback and a clear transition to account setup.
 - Require the managed reading account for live verification, creator profiles and guard rosters;

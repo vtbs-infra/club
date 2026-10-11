@@ -28,8 +28,8 @@ import { FakeLiveMessageSource } from '../helpers/fake-live-message-source.js';
 import { FakeCreatorProfileSource } from '../helpers/fake-creator-profile-source.js';
 import { FakeGuardRosterSource } from '../helpers/fake-guard-roster-source.js';
 
-const PASSWORD = 'first-password-for-tests';
-const NEXT_PASSWORD = 'second-password-for-tests';
+const PASSWORD = 'first-pw';
+const NEXT_PASSWORD = 'next-pwd';
 const ORIGIN = 'http://localhost:3000';
 const ROOM = '777001';
 

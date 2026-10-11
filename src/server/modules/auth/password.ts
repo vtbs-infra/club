@@ -22,8 +22,8 @@ async function derive(password: string, salt: Buffer): Promise<Buffer> {
 }
 
 export function validatePassword(password: string): void {
-  if (password.length < 12 || password.length > 128) {
-    throw new AppError('PASSWORD_INVALID', 'Use a password between 12 and 128 characters.', 400);
+  if (password.length < 8 || password.length > 128) {
+    throw new AppError('PASSWORD_INVALID', 'Use a password between 8 and 128 characters.', 400);
   }
 }
 

@@ -6,7 +6,7 @@ export const UsernameSchema = Type.String({
   maxLength: 30,
   pattern: '^[A-Za-z0-9_]+$',
 });
-export const PasswordSchema = Type.String({ minLength: 12, maxLength: 128 });
+export const PasswordSchema = Type.String({ minLength: 8, maxLength: 128 });
 export const DisplayNameSchema = Type.String({ minLength: 1, maxLength: 80, pattern: '\\S' });
 export const BiliUidSchema = Type.String({ pattern: '^[1-9][0-9]{0,19}$' });
 export const ChallengePurposeSchema = Type.Union([

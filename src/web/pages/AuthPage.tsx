@@ -272,7 +272,7 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                   aria-labelledby="auth-password-label"
                   aria-describedby={isLogin ? undefined : 'auth-password-help'}
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
-                  minLength={isLogin ? 1 : 12}
+                  minLength={isLogin ? 1 : 8}
                   maxLength={128}
                   required
                   type="password"
@@ -280,7 +280,7 @@ export function AuthPage({ mode }: { readonly mode: 'login' | 'register' | 'reco
                   onChange={(event) => setPassword(event.target.value)}
                 />
                 {!isLogin ? (
-                  <small id="auth-password-help">至少 12 个字符，可使用密码管理器生成。</small>
+                  <small id="auth-password-help">8–128 个字符，可使用密码管理器生成。</small>
                 ) : null}
               </label>
               {!isLogin ? (

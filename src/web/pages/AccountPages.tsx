@@ -98,7 +98,7 @@ function PasswordEditor() {
         新密码
         <input
           autoComplete="new-password"
-          minLength={12}
+          minLength={8}
           maxLength={128}
           required
           type="password"
