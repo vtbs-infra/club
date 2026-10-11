@@ -19,6 +19,8 @@ All notable Club changes are documented here. The format follows
 
 ### Added
 
+- Recognize pasted mainland China shipping addresses locally in the browser, with searchable
+  province/city/district selectors, explicit choices for ambiguous results and manual fallback.
 - Manage one Bilibili reading account through administrator QR login and explicit activation,
   with separately encrypted credentials, periodic checks, automatic renewal and crash recovery.
 - Show independent account, upstream and room states, including recent valid sender-UID samples.
@@ -37,6 +39,8 @@ All notable Club changes are documented here. The format follows
 
 ### Fixed
 
+- Keep inline address creation and gift claiming in separate forms so saving an address never
+  submits the claim; require recipients to review and confirm after selecting the saved address.
 - Fetch creator profiles through public room and anchor endpoints, validating both owner UIDs;
   avoid registration failures when the full room-page endpoint returns Bilibili error `-352`.
 - Preserve upstream creator-profile failures in server logs for diagnosis.

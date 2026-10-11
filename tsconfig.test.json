@@ -3,6 +3,7 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": ["node"],

@@ -10,6 +10,8 @@ import {
   type AddressRecord,
 } from '../api/client';
 import { ConfirmDialog, ErrorNotice, ErrorState, InlineNotice, LoadingState } from './Ui';
+import { AddressRecognition } from './AddressRecognition';
+import { RegionSelect } from './RegionSelect';
 
 const emptyAddress: AddressPayload = {
   city: '',
@@ -75,6 +77,35 @@ export function AddressForm({
   const [isDefault, setIsDefault] = useState(initial?.isDefault ?? defaultSelected);
   const [payload, setPayload] = useState<AddressPayload>(initial?.payload ?? emptyAddress);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [manualRegions, setManualRegions] = useState(false);
+  const [recognitionNotice, setRecognitionNotice] = useState('');
+  const [replacement, setReplacement] = useState<AddressPayload | null>(null);
+  const tools = useQuery({
+    queryKey: ['address-tools'],
+    queryFn: () => import('../lib/address-parser'),
+    staleTime: Infinity,
+    retry: 1,
+  });
+  const useRegionSelect =
+    payload.countryRegion.trim() === '中国大陆' && tools.data && !manualRegions;
+  const selectedProvince = tools.data?.addressRegions.find(
+    (region) => region.name === payload.province,
+  );
+  const selectedCity = selectedProvince?.children.find((region) => region.name === payload.city);
+  const applyRecognition = (value: AddressPayload) => {
+    setPayload((current) => ({ ...value, userNote: current.userNote || value.userNote }));
+    setManualRegions(false);
+    setValidationError(null);
+    const missing = fields
+      .filter((field) => field.required && !value[field.key].trim())
+      .map((field) => field.label);
+    setRecognitionNotice(
+      missing.length
+        ? `已填入识别结果，请补充${missing.join('、')}，并核对后保存。`
+        : '已填入识别结果，请核对姓名、电话和门牌号后保存。',
+    );
+    setReplacement(null);
+  };
   const save = useMutation({
     mutationFn: () =>
       initial
@@ -91,6 +122,8 @@ export function AddressForm({
       className={compact ? 'address-editor compact' : 'address-editor'}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
+        event.stopPropagation();
+        if (save.isPending || replacement) return;
         if (!label.trim()) {
           setValidationError('地址名称不能只包含空格。');
           return;
@@ -98,6 +131,13 @@ export function AddressForm({
         const missingField = fields.find((field) => field.required && !payload[field.key].trim());
         if (missingField) {
           setValidationError(`请填写${missingField.label}。`);
+          return;
+        }
+        const oversizedField = fields.find((field) => payload[field.key].length > field.maxLength);
+        if (oversizedField) {
+          setValidationError(
+            `${oversizedField.label}不能超过 ${oversizedField.maxLength} 个字符，请修改后保存。`,
+          );
           return;
         }
         if (!/^[+0-9 ()-]{5,40}$/.test(payload.phone.trim())) {
@@ -108,68 +148,225 @@ export function AddressForm({
         save.mutate();
       }}
     >
-      <div className="form-grid">
-        <label>
-          地址名称
-          <input
-            autoFocus={autoFocus}
-            maxLength={80}
-            onChange={(event) => {
-              setValidationError(null);
-              setLabel(event.target.value);
+      <fieldset className="address-form-fields" disabled={save.isPending}>
+        {payload.countryRegion.trim() === '中国大陆' && tools.data ? (
+          <AddressRecognition
+            autoFocus={autoFocus && !initial}
+            recognize={tools.data.recognizeAddress}
+            onApply={(value) => {
+              const hasInput = fields.some(
+                ({ key }) => key !== 'countryRegion' && key !== 'userNote' && payload[key].trim(),
+              );
+              if (hasInput) setReplacement(value);
+              else applyRecognition(value);
             }}
-            required
-            value={label}
           />
-        </label>
-        <label className="check-field">
-          <input
-            checked={isDefault}
-            onChange={(event) => {
-              setValidationError(null);
-              setIsDefault(event.target.checked);
-            }}
-            type="checkbox"
-          />
-          设为默认地址
-        </label>
-        {fields.map((field) => (
-          <label className={field.wide ? 'span-full' : undefined} key={field.key}>
-            {field.label}
+        ) : null}
+        {tools.isPending ? (
+          <p className="quiet-line" role="status">
+            正在加载地址识别与地区列表，可先手动填写。
+          </p>
+        ) : null}
+        {tools.isError ? (
+          <div className="address-recognition-actions">
+            <p className="quiet-line">地址识别与地区列表暂时不可用，请手动填写。</p>
+            <button className="text-button" type="button" onClick={() => void tools.refetch()}>
+              重新加载
+            </button>
+          </div>
+        ) : null}
+        {recognitionNotice ? (
+          <p className="recognition-notice" role="status">
+            {recognitionNotice}
+          </p>
+        ) : null}
+        <div className="form-grid">
+          <label>
+            地址名称
             <input
-              inputMode={field.key === 'phone' ? 'tel' : undefined}
-              maxLength={field.maxLength}
+              autoFocus={autoFocus && Boolean(initial)}
+              maxLength={80}
               onChange={(event) => {
                 setValidationError(null);
-                setPayload((current) => ({
-                  ...current,
-                  [field.key]: event.target.value,
-                }));
+                setLabel(event.target.value);
               }}
-              pattern={field.key === 'phone' ? '[+0-9 ()-]{5,40}' : undefined}
-              placeholder={field.placeholder}
-              required={field.required}
-              value={payload[field.key]}
+              required
+              value={label}
             />
           </label>
-        ))}
-      </div>
-      {validationError ? (
-        <InlineNotice tone="danger">
-          <p>{validationError}</p>
-        </InlineNotice>
-      ) : null}
-      {save.isError ? <ErrorNotice error={save.error} /> : null}
-      <div className="form-actions">
-        <button className="button primary" disabled={save.isPending} type="submit">
-          {save.isPending ? '正在保存…' : initial ? '保存修改' : '保存并使用'}
-        </button>
-        {onCancel ? (
-          <button className="button ghost" onClick={onCancel} type="button">
-            取消
-          </button>
+          <label className="check-field">
+            <input
+              checked={isDefault}
+              onChange={(event) => {
+                setValidationError(null);
+                setIsDefault(event.target.checked);
+              }}
+              type="checkbox"
+            />
+            设为默认地址
+          </label>
+          {fields
+            .filter(
+              (field) =>
+                ![
+                  'province',
+                  'city',
+                  'district',
+                  'detailedAddress',
+                  'postalCode',
+                  'userNote',
+                ].includes(field.key),
+            )
+            .map((field) => (
+              <label className={field.wide ? 'span-full' : undefined} key={field.key}>
+                {field.label}
+                <input
+                  inputMode={field.key === 'phone' ? 'tel' : undefined}
+                  maxLength={field.maxLength}
+                  onChange={(event) => {
+                    setValidationError(null);
+                    setPayload((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }));
+                  }}
+                  pattern={field.key === 'phone' ? '[+0-9 ()-]{5,40}' : undefined}
+                  placeholder={field.placeholder}
+                  required={field.required}
+                  value={payload[field.key]}
+                />
+              </label>
+            ))}
+          <div className="span-full stack-md">
+            <div className="address-recognition-actions">
+              <strong>所在地区</strong>
+              {payload.countryRegion.trim() === '中国大陆' && tools.data ? (
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => setManualRegions(!manualRegions)}
+                >
+                  {manualRegions ? '使用地区选择' : '手动填写地区'}
+                </button>
+              ) : null}
+            </div>
+            {useRegionSelect ? (
+              <div className="address-region-grid">
+                <RegionSelect
+                  label="省 / 直辖市"
+                  options={tools.data.addressRegions}
+                  value={payload.province}
+                  required
+                  onChange={(province) => {
+                    setValidationError(null);
+                    setPayload((current) => ({
+                      ...current,
+                      province: province.name,
+                      city: province.children.length === 1 ? province.children[0]!.name : '',
+                      district: '',
+                    }));
+                  }}
+                />
+                <RegionSelect
+                  label="城市"
+                  options={selectedProvince?.children ?? []}
+                  value={payload.city}
+                  required
+                  disabled={!selectedProvince}
+                  onChange={(city) => {
+                    setValidationError(null);
+                    setPayload((current) => ({ ...current, city: city.name, district: '' }));
+                  }}
+                />
+                <RegionSelect
+                  label="区 / 县"
+                  options={selectedCity?.children ?? []}
+                  value={payload.district}
+                  disabled={!selectedCity?.children.length}
+                  onChange={(district) => {
+                    setValidationError(null);
+                    setPayload((current) => ({ ...current, district: district.name }));
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="address-region-grid">
+                {fields
+                  .filter((field) => ['province', 'city', 'district'].includes(field.key))
+                  .map((field) => (
+                    <label key={field.key}>
+                      {field.label}
+                      <input
+                        maxLength={field.maxLength}
+                        required={field.required}
+                        value={payload[field.key]}
+                        onChange={(event) => {
+                          setValidationError(null);
+                          setPayload((current) => ({
+                            ...current,
+                            [field.key]: event.target.value,
+                          }));
+                        }}
+                      />
+                    </label>
+                  ))}
+              </div>
+            )}
+            {useRegionSelect && !tools.data.isKnownRegion(payload) ? (
+              <p className="quiet-line">
+                当前地区不在列表中，已保留原内容。可重新选择，或切换为手动填写。
+              </p>
+            ) : (
+              <p className="quiet-line">
+                找不到新地区或历史地名时，可以手动填写；不设区县的城市可留空。
+              </p>
+            )}
+          </div>
+          {fields
+            .filter((field) => ['detailedAddress', 'postalCode', 'userNote'].includes(field.key))
+            .map((field) => (
+              <label className={field.wide ? 'span-full' : undefined} key={field.key}>
+                {field.label}
+                <input
+                  maxLength={field.maxLength}
+                  placeholder={field.placeholder}
+                  required={field.required}
+                  value={payload[field.key]}
+                  onChange={(event) => {
+                    setValidationError(null);
+                    setPayload((current) => ({ ...current, [field.key]: event.target.value }));
+                  }}
+                />
+              </label>
+            ))}
+        </div>
+        {validationError ? (
+          <InlineNotice tone="danger">
+            <p>{validationError}</p>
+          </InlineNotice>
         ) : null}
-      </div>
+        {save.isError ? <ErrorNotice error={save.error} /> : null}
+        <div className="form-actions">
+          <button className="button primary" disabled={save.isPending} type="submit">
+            {save.isPending ? '正在保存…' : initial ? '保存修改' : '保存并使用'}
+          </button>
+          {onCancel ? (
+            <button className="button ghost" onClick={onCancel} type="button">
+              取消
+            </button>
+          ) : null}
+        </div>
+      </fieldset>
+      <ConfirmDialog
+        open={replacement !== null}
+        title="替换当前收件信息？"
+        description="识别结果将替换收件人、电话、地区、详细地址和邮编。地址名称、默认地址设置与已填写的配送备注会保留。替换后仍可修改，点击保存后才会存入地址簿。"
+        confirmLabel="替换并核对"
+        onCancel={() => setReplacement(null)}
+        onConfirm={() => {
+          if (replacement) applyRecognition(replacement);
+        }}
+      />
     </form>
   );
 }

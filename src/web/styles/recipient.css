@@ -542,6 +542,103 @@
   min-height: 42px;
 }
 
+.address-form-fields {
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.address-recognition {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.address-recognition-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+}
+
+.address-recognition-actions small,
+.recognition-notice {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.recognition-choices {
+  max-height: 24rem;
+  overflow-y: auto;
+}
+
+.recognition-choices .check-field {
+  align-self: stretch;
+  min-height: 44px;
+}
+
+.address-region-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.region-select {
+  min-width: 0;
+  position: relative;
+}
+
+.region-select > label {
+  margin-bottom: 0.5rem;
+}
+
+.region-options {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  left: 0;
+  max-height: 15rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.25rem;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+}
+
+.region-option {
+  border-radius: var(--radius-sm);
+  display: block;
+  min-height: 44px;
+  padding: 0.6rem;
+  text-align: left;
+  width: 100%;
+}
+
+.region-option:hover,
+.region-option.active,
+.region-option[aria-selected='true'] {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+@media (max-width: 680px) {
+  .address-region-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .claim-fields {
   display: grid;
   gap: 1rem;

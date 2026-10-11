@@ -6,3 +6,4 @@ playwright-report
 test-results
 package-lock.json
 data
+src/web/lib/address-data/regions.json
