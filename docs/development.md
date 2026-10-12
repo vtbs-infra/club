@@ -20,14 +20,26 @@ Copy-Item .env.example .env
 `npm ci` 按提交的 `package-lock.json` 重建依赖目录，适用于首次安装、切换分支和 CI。
 添加或更新依赖时使用 `npm install` / `npm update`，并提交对应的锁文件变化。
 依赖安装脚本许可由 `package.json` 的 `allowScripts` 声明，`.npmrc` 启用严格检查。
+当前仅放行 esbuild 的安装脚本，显式禁止 protobufjs 的安装脚本；Sharp 使用预编译可选包，
+当前版本没有安装脚本，不保留额外许可。
+
+更新范围依赖时，将声明的最低版本同步提高到已验证版本。`npm update --package-lock-only` 只刷新
+现有声明范围内的版本；固定版本升级时需要同时修改 `package.json`。Vite 与 React 插件、
+Vitest 与 coverage、Oxlint 与 tsgolint / TypeScript 分别固定版本并成组核对兼容性，
+其中 Vitest 与 coverage 必须保持相同版本。`@types/node` 保持 24.x，与项目 Node 24
+运行环境一致，不跟随其他 Node 主版本的 `latest` 标签。
 
 `dependencies` 只包含编译后的 Node.js 服务端和 CLI 运行时需要的包；React、UI 组件等
 纯前端包与构建、测试工具放在 `devDependencies`。前端代码已打包到 `dist/web`，生产镜像
 在构建完成后通过 `npm prune --omit=dev` 移除这些包。
 
 `npm run audit` 检查全部依赖，并在出现 high / critical 公告时失败，确保前端和开发工具
-也纳入 CI 审计。当前剩余 moderate 条目来自 Drizzle Kit 的旧 esbuild 链；该公告涉及
-esbuild 开发服务器，我们仅使用 Kit 生成迁移，待稳定上游更新后处理，不强制替换内部工具。
+也纳入 CI 审计。2026-10-12 核对时，剩余 4 个 moderate 条目均来自 Drizzle Kit
+`0.31.11` → `@esbuild-kit/esm-loader` → `@esbuild-kit/core-utils` → esbuild 的同一条链，
+对应 [GHSA-67mh-4wv8-2f99](https://github.com/evanw/esbuild/security/advisories/GHSA-67mh-4wv8-2f99)。
+该公告涉及 esbuild 开发服务器；本项目仅使用 Kit 生成迁移，不启动该服务，Kit 也不包含在
+编译后的服务端运行依赖中。保留完整审计输出，升级 Kit 或改变工具使用方式时重新评估；
+待上游稳定版修复后移除这项记录，不通过强制降级或未经迁移生成验证的覆盖替换内部依赖。
 
 配置 `.env` 后启动 PostgreSQL：
 
@@ -73,8 +85,8 @@ TypeScript 7 负责类型检查和服务端 JavaScript 输出；开发 Watch、C
 服务端构建不生成无人消费的声明文件。
 
 `npm run lint` 使用 Oxlint，`.oxlintrc.json` 同时为命令行和编辑器启用 tsgolint 类型分析。
-TypeScript 与 `oxlint-tsgolint` 固定到对应版本，升级时一起核对；例如 tsgolint `7.0.2001`
-对应 TypeScript `7.0.2`。Prettier 统一负责代码、Markdown 和 YAML 格式化。
+Oxlint、`oxlint-tsgolint` 与 TypeScript 固定版本，升级时一起核对 peer 要求和类型分析结果；
+当前组合为 `1.87.0`、`7.0.2004` 和 `7.0.2`。Prettier 统一负责代码、Markdown 和 YAML 格式化。
 
 规则以正确性检查为基础，补充 Promise 误用、不安全的 `any` 传播和核心 React / Hooks
 检查。Drizzle 等 thenable 也必须处理；React 事件属性允许异步处理器，其余回调仍检查
@@ -381,7 +393,7 @@ docker compose build --pull app
 
 如果宿主机没有 Chromium 动态库，可以用与项目依赖版本一致的
 [Playwright 官方容器](https://playwright.dev/docs/docker)执行浏览器测试。当前版本为
-`mcr.microsoft.com/playwright:v1.63.0-noble`；先在源码目录安装依赖并构建，容器读取源码、
+`mcr.microsoft.com/playwright:v1.64.0-noble`；先在源码目录安装依赖并构建，容器读取源码、
 `node_modules` 和 `dist`，直接运行 `node node_modules/@playwright/test/cli.js test`。
 将临时目录和测试结果目录挂载到磁盘；完整 E2E 还须提供独立测试库的 `TEST_DATABASE_URL`。
 更新 Playwright 依赖后，也应同步测试容器版本。
