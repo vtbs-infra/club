@@ -1,4 +1,4 @@
-import { Temporal } from '@js-temporal/polyfill';
+import { Temporal } from 'temporal-polyfill';
 
 import { AppError } from '../../../shared/errors/app-error.js';
 
