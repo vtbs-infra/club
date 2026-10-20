@@ -86,6 +86,12 @@ Club 使用 Pino 输出结构化日志。每个 HTTP 请求都有 `x-request-id`
 
 日志级别通过 `LOG_LEVEL` 配置。诊断单个请求时，使用请求 ID 搜索应用日志。
 
+容器健康检查会频繁调用 `/health/live` 和 `/health/ready`，正常探测不写请求日志。
+Readiness 失败时记录一条 `readiness check failed` 警告，其中包含各项检查结果。
+使用 Podman 部署时，每次健康检查默认还会写一条 `health_status` 事件；可在
+`~/.config/containers/containers.conf` 的 `[engine]` 中设置 `healthcheck_events = false`，
+当前健康状态仍可通过 `podman ps` 和 `podman inspect` 查看。
+
 日志中不应记录：
 
 - 密码与认证密钥；

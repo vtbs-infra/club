@@ -24,7 +24,7 @@ const readinessRoutes: FastifyPluginCallback<ReadinessOptions> = (app, options, 
         tags: ['system'],
       },
     },
-    async (_request, reply) => {
+    async (request, reply) => {
       const [database, schema, storage] = await Promise.allSettled([
         options.database.ping(),
         options.database.checkSchema(),
@@ -53,6 +53,10 @@ const readinessRoutes: FastifyPluginCallback<ReadinessOptions> = (app, options, 
             ? 'ok'
             : 'not_ready',
       };
+      // Probe requests are not access-logged, so a failure needs its own entry.
+      if (response.status !== 'ok') {
+        request.log.warn({ checks: response.checks }, 'readiness check failed');
+      }
       return reply.status(response.status === 'ok' ? 200 : 503).send(response);
     },
   );

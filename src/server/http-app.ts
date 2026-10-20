@@ -22,6 +22,8 @@ export interface HttpAppOptions {
   readonly webRoot?: string;
 }
 
+const HEALTH_PROBE_PATHS = new Set(['/health/live', '/health/ready']);
+
 function isApiPath(pathname: string): boolean {
   return (
     pathname === '/api' ||
@@ -39,7 +41,11 @@ export async function buildHttpApp(options: HttpAppOptions) {
   const app = Fastify({
     ajv: { customOptions: { removeAdditional: false } },
     genReqId: () => randomUUID(),
-    logController: new LogController({ disableRequestLogging: false }),
+    logController: new LogController({
+      // Container probes call these every few seconds; the readiness route logs its own failures.
+      disableRequestLogging: (request) =>
+        HEALTH_PROBE_PATHS.has(request.url.split('?', 1)[0] ?? request.url),
+    }),
     loggerInstance: logger,
     requestIdHeader: 'x-request-id',
     trustProxy: config.trustProxy,
