@@ -12,8 +12,7 @@ npm ci
 cp .env.example .env
 ```
 
-在 `.env` 中按注释生成两套密钥环，设置数据库密码，并把 `APP_URL` 改为
-`http://localhost:5173`：浏览器通过 Vite 访问时，写请求的 Origin 是这个地址。
+在 `.env` 中按注释生成两套密钥环，并设置数据库密码。
 
 ```bash
 docker compose up -d postgres
