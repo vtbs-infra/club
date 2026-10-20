@@ -1,24 +1,23 @@
-import { dateTimeLocalToIso } from '../../lib/date-time';
 import type { EditableField, EditablePackage } from './types';
 
+const LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
 export function releaseValidationMessage(input: {
-  readonly claimDeadlineAt: string;
-  readonly claimStartAt: string;
+  readonly claimDeadlineLocal: string;
+  readonly claimStartLocal: string;
   readonly fields: readonly EditableField[];
   readonly packages: readonly EditablePackage[];
-  readonly timeZone: string;
   readonly title: string;
 }): string | null {
   if (!input.title.trim()) return '礼物名称不能只包含空格。';
-  let claimStart: string;
-  let claimDeadline: string;
-  try {
-    claimStart = dateTimeLocalToIso(input.claimStartAt, input.timeZone);
-    claimDeadline = dateTimeLocalToIso(input.claimDeadlineAt, input.timeZone);
-  } catch {
-    return `领取时间在 ${input.timeZone} 时区中不存在或格式不正确。`;
+  if (
+    !LOCAL_DATE_TIME.test(input.claimStartLocal) ||
+    !LOCAL_DATE_TIME.test(input.claimDeadlineLocal)
+  ) {
+    return '请完整填写领取开始和截止时间。';
   }
-  if (Date.parse(claimDeadline) <= Date.parse(claimStart)) {
+  // Both values share one time zone, so wall-clock order is instant order.
+  if (input.claimDeadlineLocal <= input.claimStartLocal) {
     return '领取截止时间必须晚于开始时间。';
   }
   const packageNames = input.packages.map((package_) => package_.name.trim());

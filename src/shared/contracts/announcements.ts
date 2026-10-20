@@ -1,6 +1,12 @@
 import { Type, type Static } from 'typebox';
 
-import { DateTimeSchema, IdSchema, Nullable } from './common.js';
+import {
+  DateTimeSchema,
+  IdSchema,
+  LocalDateTimeSchema,
+  Nullable,
+  TimeZoneSchema,
+} from './common.js';
 
 export const AnnouncementSeveritySchema = Type.Union([
   Type.Literal('INFO'),
@@ -17,10 +23,11 @@ export const AnnouncementStatusSchema = Type.Union([
 export const AnnouncementContentSchema = Type.Object(
   {
     body: Type.String({ maxLength: 20_000, minLength: 1 }),
-    expiresAt: Type.Optional(Nullable(DateTimeSchema)),
+    expiresLocal: Type.Optional(Nullable(LocalDateTimeSchema)),
     pinned: Type.Boolean(),
     publicVisible: Type.Boolean(),
     severity: AnnouncementSeveritySchema,
+    timeZone: TimeZoneSchema,
     title: Type.String({ maxLength: 200, minLength: 1 }),
   },
   { additionalProperties: false },

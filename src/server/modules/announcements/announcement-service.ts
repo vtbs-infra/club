@@ -3,6 +3,7 @@ import { and, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL } from 'driz
 import type { AnnouncementContent } from '../../../shared/contracts/announcements.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
+import { localDateTimeToInstant } from '../../infrastructure/clock/local-time.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import {
   announcementReads,
@@ -70,10 +71,9 @@ function normalizeContent(input: AnnouncementContent): NormalizedContent {
   if (!title || title.length > 200 || !body || body.length > 20_000) {
     throw new AppError('ANNOUNCEMENT_CONTENT_INVALID', 'Announcement content is invalid.', 400);
   }
-  const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
-  if (expiresAt && Number.isNaN(expiresAt.getTime())) {
-    throw new AppError('ANNOUNCEMENT_EXPIRY_INVALID', 'Announcement expiry is invalid.', 400);
-  }
+  const expiresAt = input.expiresLocal
+    ? localDateTimeToInstant(input.expiresLocal, input.timeZone)
+    : null;
   return { body, expiresAt, title };
 }
 

@@ -5,6 +5,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { ReleaseInput, VersionedReleaseInput } from '../../../shared/contracts/gifts.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
+import { localDateTimeToInstant } from '../../infrastructure/clock/local-time.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
 import { isUniqueViolation } from '../../infrastructure/db/errors.js';
 import {
@@ -60,13 +61,9 @@ function validateDraft(input: ReleaseDraftInput) {
   if (!title || title.length > 160 || description.length > 5_000) {
     throw new AppError('GIFT_RELEASE_CONTENT_INVALID', 'Gift release content is invalid.', 400);
   }
-  const claimStartAt = new Date(input.claimStartAt);
-  const claimDeadlineAt = new Date(input.claimDeadlineAt);
-  if (
-    Number.isNaN(claimStartAt.getTime()) ||
-    Number.isNaN(claimDeadlineAt.getTime()) ||
-    claimDeadlineAt <= claimStartAt
-  ) {
+  const claimStartAt = localDateTimeToInstant(input.claimStartLocal, input.timeZone);
+  const claimDeadlineAt = localDateTimeToInstant(input.claimDeadlineLocal, input.timeZone);
+  if (claimDeadlineAt <= claimStartAt) {
     throw new AppError('GIFT_RELEASE_WINDOW_INVALID', 'The claim window is invalid.', 400);
   }
   if (input.packages.length < 1 || input.packages.length > 12) {

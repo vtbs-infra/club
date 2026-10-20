@@ -1,8 +1,8 @@
 import type { ReleaseInput } from '../../api/client';
 
 interface BasicInfoSectionProps {
-  readonly claimDeadlineAt: string;
-  readonly claimStartAt: string;
+  readonly claimDeadlineLocal: string;
+  readonly claimStartLocal: string;
   readonly description: string;
   readonly editable: boolean;
   readonly eligibilityMonth: string;
@@ -20,8 +20,8 @@ interface BasicInfoSectionProps {
 }
 
 export function BasicInfoSection({
-  claimDeadlineAt,
-  claimStartAt,
+  claimDeadlineLocal,
+  claimStartLocal,
   description,
   editable,
   eligibilityMonth,
@@ -98,7 +98,7 @@ export function BasicInfoSection({
             onChange={(event) => onClaimStartAtChange(event.target.value)}
             required
             type="datetime-local"
-            value={claimStartAt}
+            value={claimStartLocal}
           />
           <small>时区：{timeZone}</small>
         </label>
@@ -106,11 +106,11 @@ export function BasicInfoSection({
           截止领取
           <input
             disabled={!editable}
-            min={claimStartAt}
+            min={claimStartLocal}
             onChange={(event) => onClaimDeadlineAtChange(event.target.value)}
             required
             type="datetime-local"
-            value={claimDeadlineAt}
+            value={claimDeadlineLocal}
           />
           <small>时区：{timeZone}</small>
         </label>

@@ -6,7 +6,9 @@ import {
   DateTimeSchema,
   GuardTierSchema,
   IdSchema,
+  LocalDateTimeSchema,
   Nullable,
+  TimeZoneSchema,
 } from './common.js';
 
 export const GiftOrderStatusSchema = Type.Union([
@@ -63,8 +65,8 @@ export type ReleasePackageInput = Static<typeof ReleasePackageInputSchema>;
 
 export const ReleaseInputSchema = Type.Object(
   {
-    claimDeadlineAt: DateTimeSchema,
-    claimStartAt: DateTimeSchema,
+    claimDeadlineLocal: LocalDateTimeSchema,
+    claimStartLocal: LocalDateTimeSchema,
     description: Type.String({ maxLength: 5_000 }),
     eligibilityMonth: CalendarMonthSchema,
     formFields: Type.Array(GiftFormFieldSchema, { maxItems: 20 }),
@@ -79,6 +81,7 @@ export const ReleaseInputSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
+    timeZone: TimeZoneSchema,
     title: Type.String({ maxLength: 160, minLength: 1 }),
   },
   { additionalProperties: false },

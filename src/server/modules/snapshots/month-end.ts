@@ -1,15 +1,12 @@
 import { Temporal } from '@js-temporal/polyfill';
 
+import { normalizeIanaTimezone } from '../../infrastructure/clock/local-time.js';
+
 export interface MonthlyCutoff {
   readonly cutoffTimezone: string;
   readonly onTimeWindowEndAt: Date;
   readonly periodStart: string;
   readonly scheduledCutoffAt: Date;
-}
-
-export function normalizeIanaTimezone(timezone: string): string {
-  if (/^[+-]/.test(timezone)) throw new RangeError('An IANA timezone name is required.');
-  return new Intl.DateTimeFormat('en', { timeZone: timezone }).resolvedOptions().timeZone;
 }
 
 export function calculateMonthlyCutoff(periodStart: string, timezone: string): MonthlyCutoff {

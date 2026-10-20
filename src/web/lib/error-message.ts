@@ -82,6 +82,8 @@ const errorMessages: Readonly<Record<string, string>> = {
   GIFT_RELEASE_VERSION_CONFLICT: '礼物草稿已在其他页面被修改，请刷新后再试。',
   GIFT_RELEASE_WINDOW_INVALID: '领取截止时间必须晚于开始时间。',
   INTERNAL_SERVER_ERROR: '服务器处理请求时出现异常，请稍后重试。',
+  LOCAL_TIME_INVALID: '这个时间因夏令时调整在该时区中不存在或不唯一，请换一个时间。',
+  TIME_ZONE_INVALID: '表单的时区无效，请刷新页面后重试。',
   NOT_FOUND: '请求的内容不存在。',
   RATE_LIMITED: '操作过于频繁，请稍后再试。',
   REQUEST_FAILED: '操作未能完成，请稍后重试。',

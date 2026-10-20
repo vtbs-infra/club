@@ -15,7 +15,7 @@ import {
   type AnnouncementSummary,
 } from '../api/client';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
-import { dateTimeLocalToIso, isoToDateTimeLocal, PLATFORM_TIME_ZONE } from '../lib/date-time';
+import { PLATFORM_TIME_ZONE, toLocalDateTime } from '../lib/date-time';
 import { formatDate } from '../lib/format';
 import { announcementStatePresentation } from '../lib/status-presentation';
 import {
@@ -28,22 +28,26 @@ import {
   StatusBadge,
 } from './Ui';
 
-const emptyDraft: AnnouncementContent = {
-  body: '',
-  expiresAt: null,
-  pinned: false,
-  publicVisible: false,
-  severity: 'INFO',
-  title: '',
-};
+function emptyDraft(timeZone: string): AnnouncementContent {
+  return {
+    body: '',
+    expiresLocal: null,
+    pinned: false,
+    publicVisible: false,
+    severity: 'INFO',
+    timeZone,
+    title: '',
+  };
+}
 
-function announcementDraft(announcement: Announcement): AnnouncementContent {
+function announcementDraft(announcement: Announcement, timeZone: string): AnnouncementContent {
   return {
     body: announcement.body,
-    expiresAt: announcement.expiresAt,
+    expiresLocal: announcement.expiresAt ? toLocalDateTime(announcement.expiresAt, timeZone) : null,
     pinned: announcement.pinned,
     publicVisible: announcement.publicVisible,
     severity: announcement.severity,
+    timeZone,
     title: announcement.title,
   };
 }
@@ -51,10 +55,11 @@ function announcementDraft(announcement: Announcement): AnnouncementContent {
 function sameDraft(left: AnnouncementContent, right: AnnouncementContent): boolean {
   return (
     left.body === right.body &&
-    left.expiresAt === right.expiresAt &&
+    left.expiresLocal === right.expiresLocal &&
     left.pinned === right.pinned &&
     left.publicVisible === right.publicVisible &&
     left.severity === right.severity &&
+    left.timeZone === right.timeZone &&
     left.title === right.title
   );
 }
@@ -62,19 +67,14 @@ function sameDraft(left: AnnouncementContent, right: AnnouncementContent): boole
 function announcementValidationMessage(
   draft: AnnouncementContent,
   editing: Announcement | null,
+  timeZone: string,
   publishing = false,
 ): string | null {
   if (!draft.title.trim()) return '公告标题不能只包含空格。';
   if (!draft.body.trim()) return '公告正文不能只包含空格。';
-  if (!draft.expiresAt) return null;
-  const expiresAt = Date.parse(draft.expiresAt);
-  if (Number.isNaN(expiresAt)) return '公告失效时间格式不正确。';
-  const publishedAt = publishing
-    ? Date.now()
-    : editing?.publishedAt
-      ? Date.parse(editing.publishedAt)
-      : null;
-  if (publishedAt !== null && expiresAt <= publishedAt) {
+  if (!draft.expiresLocal) return null;
+  const publishedAt = publishing ? Date.now() : (editing?.publishedAt ?? null);
+  if (publishedAt !== null && draft.expiresLocal <= toLocalDateTime(publishedAt, timeZone)) {
     return '公告失效时间必须晚于发布时间。';
   }
   return null;
@@ -96,9 +96,13 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
     queryFn: getIdentity,
     queryKey: ['identity'],
   });
+  const currentTimeZone =
+    area === 'creator'
+      ? (identity.data?.creator?.timezone ?? PLATFORM_TIME_ZONE)
+      : PLATFORM_TIME_ZONE;
   const [editing, setEditing] = useState<Announcement | null>(null);
-  const [draft, setDraft] = useState<AnnouncementContent>(emptyDraft);
-  const [baselineDraft, setBaselineDraft] = useState<AnnouncementContent>(emptyDraft);
+  const [draft, setDraft] = useState(() => emptyDraft(currentTimeZone));
+  const [baselineDraft, setBaselineDraft] = useState(() => emptyDraft(currentTimeZone));
   const [deleteConfirmation, setDeleteConfirmation] = useState<string | null>(null);
   const [publishConfirmation, setPublishConfirmation] = useState(false);
   const [withdrawConfirmation, setWithdrawConfirmation] = useState(false);
@@ -107,10 +111,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   const [selectionPendingId, setSelectionPendingId] = useState<string | null>(null);
   const dirty = !sameDraft(draft, baselineDraft);
   const unsavedChanges = useUnsavedChangesGuard(dirty);
-  const timeZone =
-    area === 'creator'
-      ? (identity.data?.creator?.timezone ?? PLATFORM_TIME_ZONE)
-      : PLATFORM_TIME_ZONE;
+  const timeZone = draft.timeZone;
   const updateDraft = (patch: Partial<AnnouncementContent>) => {
     setValidationError(null);
     setDraft((current) => ({ ...current, ...patch }));
@@ -123,8 +124,9 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
   };
   const reset = () => {
     setEditing(null);
-    setDraft(emptyDraft);
-    setBaselineDraft(emptyDraft);
+    const nextDraft = emptyDraft(currentTimeZone);
+    setDraft(nextDraft);
+    setBaselineDraft(nextDraft);
     setPublishConfirmation(false);
     setWithdrawConfirmation(false);
     setValidationError(null);
@@ -137,7 +139,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
         queryFn: () => getManagedAnnouncement(area, announcement.id),
         queryKey: [...queryKey, 'detail', announcement.id],
       });
-      const nextDraft = announcementDraft(selected);
+      const nextDraft = announcementDraft(selected, currentTimeZone);
       setEditing(selected);
       setDraft(nextDraft);
       setBaselineDraft(nextDraft);
@@ -150,7 +152,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
     }
   };
   const acceptAnnouncement = (announcement: Announcement) => {
-    const nextDraft = announcementDraft(announcement);
+    const nextDraft = announcementDraft(announcement, timeZone);
     setEditing(announcement);
     setDraft(nextDraft);
     setBaselineDraft(nextDraft);
@@ -275,7 +277,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
         className="panel editor-panel"
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
-          const message = announcementValidationMessage(draft, editing);
+          const message = announcementValidationMessage(draft, editing, timeZone);
           setValidationError(message);
           if (message) return;
           save.mutate();
@@ -327,20 +329,9 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
           <label>
             失效时间（可选）
             <input
-              onChange={(event) => {
-                if (!event.target.value) {
-                  updateDraft({ expiresAt: null });
-                  return;
-                }
-                try {
-                  const expiresAt = dateTimeLocalToIso(event.target.value, timeZone);
-                  updateDraft({ expiresAt });
-                } catch {
-                  setValidationError(`这个时间在 ${timeZone} 时区中不存在，请重新选择。`);
-                }
-              }}
+              onChange={(event) => updateDraft({ expiresLocal: event.target.value || null })}
               type="datetime-local"
-              value={draft.expiresAt ? isoToDateTimeLocal(draft.expiresAt, timeZone) : ''}
+              value={draft.expiresLocal ?? ''}
             />
             <small>时区：{timeZone}</small>
           </label>
@@ -393,7 +384,7 @@ export function AnnouncementManager({ area }: { readonly area: 'admin' | 'creato
               className="button secondary"
               disabled={publish.isPending || dirty}
               onClick={() => {
-                const message = announcementValidationMessage(draft, editing, true);
+                const message = announcementValidationMessage(draft, editing, timeZone, true);
                 setValidationError(message);
                 if (!message) setPublishConfirmation(true);
               }}

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateMonthlyCutoff,
   classifyPunctuality,
-  normalizeIanaTimezone,
   relevantMonthlyPeriods,
 } from '../../src/server/modules/snapshots/month-end.js';
 
@@ -38,9 +37,9 @@ describe('monthly snapshot timing', () => {
     ]);
   });
 
-  it('rejects offsets and unknown time zones', () => {
-    expect(() => normalizeIanaTimezone('+08:00')).toThrow();
-    expect(() => normalizeIanaTimezone('Mars/Olympus')).toThrow();
+  it('rejects offsets, unknown time zones and mid-month periods', () => {
+    expect(() => calculateMonthlyCutoff('2026-07-01', '+08:00')).toThrow();
+    expect(() => calculateMonthlyCutoff('2026-07-01', 'Mars/Olympus')).toThrow();
     expect(() => calculateMonthlyCutoff('2026-07-02', 'Asia/Shanghai')).toThrow();
   });
 });

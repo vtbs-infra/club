@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { releaseValidationMessage } from '../../src/web/components/release-editor/validation';
 
 const validInput: Parameters<typeof releaseValidationMessage>[0] = {
-  claimDeadlineAt: '2026-09-30T23:59',
-  claimStartAt: '2026-09-01T00:00',
+  claimDeadlineLocal: '2026-09-30T23:59',
+  claimStartLocal: '2026-09-01T00:00',
   fields: [],
   packages: [
     {
@@ -13,7 +13,6 @@ const validInput: Parameters<typeof releaseValidationMessage>[0] = {
       name: '舰长礼包',
     },
   ],
-  timeZone: 'Asia/Shanghai',
   title: '九月舰长礼物',
 };
 
@@ -26,9 +25,15 @@ describe('releaseValidationMessage', () => {
     expect(
       releaseValidationMessage({
         ...validInput,
-        claimDeadlineAt: validInput.claimStartAt,
+        claimDeadlineLocal: validInput.claimStartLocal,
       }),
     ).not.toBeNull();
+  });
+
+  it('requires both claim times to be complete', () => {
+    expect(releaseValidationMessage({ ...validInput, claimStartLocal: '' })).toBe(
+      '请完整填写领取开始和截止时间。',
+    );
   });
 
   it('rejects duplicate package names after trimming', () => {

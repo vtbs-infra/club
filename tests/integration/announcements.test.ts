@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { announcements, users } from '../../src/server/infrastructure/db/schema/index.js';
 import { AnnouncementService } from '../../src/server/modules/announcements/announcement-service.js';
+import { insertTestCreator } from '../helpers/creator-fixture.js';
 import {
   createIntegrationDatabase,
   type IntegrationDatabase,
@@ -11,6 +12,7 @@ import {
 const target = { scope: 'PLATFORM' as const };
 const input = {
   body: '第一版内容',
+  timeZone: 'Asia/Shanghai',
   title: '公告',
   publicVisible: false,
   pinned: false,
@@ -44,6 +46,34 @@ describe('announcement publication and reading', () => {
   });
   afterAll(async () => {
     await fixture?.cleanup();
+  });
+
+  it('interprets expiry in the time zone the form showed', async () => {
+    const platform = await service.createDraft(
+      target,
+      { ...input, expiresLocal: '2026-08-02T08:00' },
+      context(),
+    );
+    expect(platform.expiresAt).toEqual(new Date('2026-08-02T00:00:00.000Z'));
+
+    // The creator now lives in Asia/Tokyo, but this form still showed Asia/Shanghai.
+    const [account] = await fixture.database.orm
+      .insert(users)
+      .values({ username: 'tokyo', name: 'Tokyo', role: 'CREATOR', bilibiliUid: '100002' })
+      .returning();
+    const creator = await insertTestCreator(fixture.database, {
+      bilibiliUid: '100002',
+      displayName: 'Tokyo',
+      roomId: '200002',
+      timezone: 'Asia/Tokyo',
+      userId: account!.id,
+    });
+    const creatorDraft = await service.createDraft(
+      { creatorId: creator.id, scope: 'CREATOR' },
+      { ...input, expiresLocal: '2026-08-02T08:00' },
+      { actorUserId: account!.id },
+    );
+    expect(creatorDraft.expiresAt).toEqual(new Date('2026-08-02T00:00:00.000Z'));
   });
 
   it('requires explicit publication and preserves history after withdrawal', async () => {

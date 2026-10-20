@@ -5,8 +5,8 @@ export function createReleaseDraft(
   overrides: Partial<ReleaseDraftInput> = {},
 ): ReleaseDraftInput {
   return {
-    claimDeadlineAt: '2099-12-31T15:59:00.000Z',
-    claimStartAt: '2020-01-01T00:00:00.000Z',
+    claimDeadlineLocal: '2099-12-31T23:59',
+    claimStartLocal: '2020-01-01T08:00',
     description: '',
     eligibilityMonth,
     formFields: [],
@@ -20,6 +20,7 @@ export function createReleaseDraft(
     ],
     publicVisible: false,
     tierPackageIndexes: { ADMIRAL: 0, CAPTAIN: 0, GOVERNOR: 0 },
+    timeZone: 'Asia/Shanghai',
     title: '舰长礼物',
     ...overrides,
   };

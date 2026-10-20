@@ -84,4 +84,32 @@ integration('gift release lifecycle', () => {
     ).rejects.toMatchObject({ code: 'GIFT_RELEASE_NOT_PUBLISHABLE' });
     expect((await releaseService.get(creatorId, draft.id)).title).toBe('直接发布时输入的新标题');
   });
+
+  it('interprets the claim window in the time zone the form showed', async () => {
+    // The creator's own zone is Asia/Shanghai; this form was filled in Los Angeles time.
+    const context = { actorUserId: creatorUserId, ipAddress: '127.0.0.1', requestId: 'zones' };
+    const release = await releaseService.create(
+      creatorId,
+      createReleaseDraft('2026-03-01', {
+        claimDeadlineLocal: '2026-03-09T09:00',
+        claimStartLocal: '2026-03-07T09:00',
+        timeZone: 'America/Los_Angeles',
+      }),
+      context,
+    );
+    expect(new Date(release.claimStartAt).toISOString()).toBe('2026-03-07T17:00:00.000Z');
+    expect(new Date(release.claimDeadlineAt).toISOString()).toBe('2026-03-09T16:00:00.000Z');
+
+    for (const [overrides, code] of [
+      [
+        { claimStartLocal: '2026-03-08T02:30', timeZone: 'America/Los_Angeles' },
+        'LOCAL_TIME_INVALID',
+      ],
+      [{ timeZone: '+08:00' }, 'TIME_ZONE_INVALID'],
+    ] as const) {
+      await expect(
+        releaseService.create(creatorId, createReleaseDraft('2026-04-01', overrides), context),
+      ).rejects.toMatchObject({ code });
+    }
+  });
 });

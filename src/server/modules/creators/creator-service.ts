@@ -11,7 +11,8 @@ import {
   type CreatorProfileSource,
 } from '../bilibili/creator-profile-source.js';
 import { AuditService, type RequestAuditContext } from '../audit/audit-service.js';
-import { calculateMonthlyCutoff, normalizeIanaTimezone } from '../snapshots/month-end.js';
+import { normalizeIanaTimezone } from '../../infrastructure/clock/local-time.js';
+import { calculateMonthlyCutoff } from '../snapshots/month-end.js';
 
 export interface RegisterCreatorInput extends RequestAuditContext {
   readonly monthlySyncEnabled?: boolean;

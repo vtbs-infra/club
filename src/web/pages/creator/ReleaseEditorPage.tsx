@@ -31,28 +31,17 @@ import {
   StatusBadge,
 } from '../../components/Ui';
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard';
-import {
-  dateTimeLocalToIso,
-  epochMillisecondsToDateTimeLocal,
-  isoToDateTimeLocal,
-  PLATFORM_TIME_ZONE,
-} from '../../lib/date-time';
+import { PLATFORM_TIME_ZONE, toLocalDateTime } from '../../lib/date-time';
 import { formatMonth } from '../../lib/format';
 import { giftReleasePresentation } from '../../lib/status-presentation';
 
 function monthStart(timeZone: string): string {
-  return `${epochMillisecondsToDateTimeLocal(Date.now(), timeZone).slice(0, 7)}-01`;
+  return `${toLocalDateTime(Date.now(), timeZone).slice(0, 7)}-01`;
 }
 
-const editorLoadedAt = new Date();
-const defaultClaimStart = epochMillisecondsToDateTimeLocal(
-  editorLoadedAt.getTime(),
-  PLATFORM_TIME_ZONE,
-);
-const defaultClaimDeadline = epochMillisecondsToDateTimeLocal(
-  editorLoadedAt.getTime() + 30 * 86_400_000,
-  PLATFORM_TIME_ZONE,
-);
+const editorLoadedAt = Date.now();
+const defaultClaimStart = toLocalDateTime(editorLoadedAt, PLATFORM_TIME_ZONE);
+const defaultClaimDeadline = toLocalDateTime(editorLoadedAt + 30 * 86_400_000, PLATFORM_TIME_ZONE);
 
 export function ReleaseEditorPage() {
   const { releaseId = 'new' } = useParams();
@@ -71,8 +60,9 @@ export function ReleaseEditorPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [eligibilityMonth, setEligibilityMonth] = useState(monthStart(PLATFORM_TIME_ZONE));
-  const [claimStartAt, setClaimStartAt] = useState(defaultClaimStart);
-  const [claimDeadlineAt, setClaimDeadlineAt] = useState(defaultClaimDeadline);
+  const [claimStartLocal, setClaimStartLocal] = useState(defaultClaimStart);
+  const [claimDeadlineLocal, setClaimDeadlineLocal] = useState(defaultClaimDeadline);
+  const [formTimeZone, setFormTimeZone] = useState(PLATFORM_TIME_ZONE);
   const [fulfillmentMode, setFulfillmentMode] =
     useState<ReleaseInput['fulfillmentMode']>('HIGHEST_ONLY');
   const [publicVisible, setPublicVisible] = useState(false);
@@ -109,11 +99,12 @@ export function ReleaseEditorPage() {
       return;
     initialized.current = release.data.id;
     setEditingVersion(release.data.version);
+    setFormTimeZone(timeZone);
     setTitle(release.data.title);
     setDescription(release.data.description);
     setEligibilityMonth(release.data.eligibilityMonth);
-    setClaimStartAt(isoToDateTimeLocal(release.data.claimStartAt, timeZone));
-    setClaimDeadlineAt(isoToDateTimeLocal(release.data.claimDeadlineAt, timeZone));
+    setClaimStartLocal(toLocalDateTime(release.data.claimStartAt, timeZone));
+    setClaimDeadlineLocal(toLocalDateTime(release.data.claimDeadlineAt, timeZone));
     setFulfillmentMode(release.data.fulfillmentMode);
     setPublicVisible(release.data.publicVisible);
     setPackages(
@@ -139,10 +130,11 @@ export function ReleaseEditorPage() {
     if (!isNew || !identity.data?.creator || dirty || initialized.current === `new:${timeZone}`)
       return;
     initialized.current = `new:${timeZone}`;
+    setFormTimeZone(timeZone);
     const now = Date.now();
     setEligibilityMonth(monthStart(timeZone));
-    setClaimStartAt(epochMillisecondsToDateTimeLocal(now, timeZone));
-    setClaimDeadlineAt(epochMillisecondsToDateTimeLocal(now + 30 * 86_400_000, timeZone));
+    setClaimStartLocal(toLocalDateTime(now, timeZone));
+    setClaimDeadlineLocal(toLocalDateTime(now + 30 * 86_400_000, timeZone));
   }, [dirty, identity.data?.creator, isNew, timeZone]);
 
   const coverPreviewUrl = useMemo(
@@ -157,8 +149,8 @@ export function ReleaseEditorPage() {
   );
 
   const input = (): ReleaseInput => ({
-    claimDeadlineAt: dateTimeLocalToIso(claimDeadlineAt, timeZone),
-    claimStartAt: dateTimeLocalToIso(claimStartAt, timeZone),
+    claimDeadlineLocal,
+    claimStartLocal,
     description,
     eligibilityMonth,
     formFields: fields.map((field) => ({
@@ -174,6 +166,7 @@ export function ReleaseEditorPage() {
     packages,
     publicVisible,
     tierPackageIndexes,
+    timeZone: formTimeZone,
     title,
   });
   const markDirty = () => {
@@ -182,11 +175,10 @@ export function ReleaseEditorPage() {
   };
   const validateEditor = (): boolean => {
     const message = releaseValidationMessage({
-      claimDeadlineAt,
-      claimStartAt,
+      claimDeadlineLocal,
+      claimStartLocal,
       fields,
       packages,
-      timeZone,
       title,
     });
     setValidationError(message);
@@ -346,21 +338,21 @@ export function ReleaseEditorPage() {
           </InlineNotice>
         ) : null}
         <BasicInfoSection
-          claimDeadlineAt={claimDeadlineAt}
-          claimStartAt={claimStartAt}
+          claimDeadlineLocal={claimDeadlineLocal}
+          claimStartLocal={claimStartLocal}
           description={description}
           editable={inputsEditable}
           eligibilityMonth={eligibilityMonth}
           fulfillmentMode={fulfillmentMode}
-          onClaimDeadlineAtChange={setClaimDeadlineAt}
-          onClaimStartAtChange={setClaimStartAt}
+          onClaimDeadlineAtChange={setClaimDeadlineLocal}
+          onClaimStartAtChange={setClaimStartLocal}
           onDescriptionChange={setDescription}
           onEligibilityMonthChange={setEligibilityMonth}
           onFulfillmentModeChange={setFulfillmentMode}
           onPublicVisibleChange={setPublicVisible}
           onTitleChange={setTitle}
           publicVisible={publicVisible}
-          timeZone={timeZone}
+          timeZone={formTimeZone}
           title={title}
         />
         <CoverSection

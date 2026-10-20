@@ -134,8 +134,8 @@ integration('claim windows', () => {
 
   it('derives upcoming, claimable and expired immediately without changing the stored order', async () => {
     const { order } = await publish('2026-01-01', {
-      claimStartAt: '2026-09-02T00:00:00Z',
-      claimDeadlineAt: '2026-09-03T00:00:00Z',
+      claimStartLocal: '2026-09-02T08:00',
+      claimDeadlineLocal: '2026-09-03T08:00',
     });
     expect((await queries.getForUser(recipientId, order.id)).status).toBe('UPCOMING');
     await expect(submit(order.id)).rejects.toMatchObject({
@@ -170,7 +170,7 @@ integration('claim windows', () => {
   });
 
   it('counts and finds urgent gifts beyond the most recent twelve orders', async () => {
-    const urgent = await publish('2026-02-01', { claimDeadlineAt: '2026-09-02T00:00:00Z' });
+    const urgent = await publish('2026-02-01', { claimDeadlineLocal: '2026-09-02T08:00' });
     for (let index = 0; index < 13; index += 1) {
       const year = 2027 + Math.floor(index / 12);
       const month = String((index % 12) + 1).padStart(2, '0');

@@ -150,8 +150,9 @@ test('registers, verifies, publishes, claims, exports, ships and corrects using 
       title: '七月礼物草稿',
       description: '感谢支持',
       eligibilityMonth: '2026-07-01',
-      claimStartAt: '2026-07-31T00:00:00.000Z',
-      claimDeadlineAt: '2026-08-07T00:00:00.000Z',
+      claimStartLocal: '2026-07-31T08:00',
+      claimDeadlineLocal: '2026-08-07T08:00',
+      timeZone: 'Asia/Shanghai',
       fulfillmentMode: 'HIGHEST_ONLY',
       publicVisible: true,
       packages: [
