@@ -1,6 +1,5 @@
 import type {
   Announcement,
-  IdentityChallenge,
   GiftOrder,
   GiftRelease,
   SnapshotDetail,
@@ -80,14 +79,6 @@ export function roomHealthPresentation(
   if (!enabled) return { label: '已停用', tone: 'neutral' };
   return roomHealthPresentations[status];
 }
-
-export const connectionStatePresentation = {
-  CONNECTING: { label: '正在连接直播间', tone: 'info' },
-  HEALTHY: { label: '正在监听直播间', tone: 'success' },
-  UNHEALTHY: { label: '连接恢复中', tone: 'danger' },
-} as const satisfies Readonly<
-  Record<NonNullable<IdentityChallenge['connectionState']>, StatusPresentation>
->;
 
 export const systemStatusPresentation = {
   degraded: { label: '需要检查', tone: 'danger' },

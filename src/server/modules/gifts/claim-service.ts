@@ -131,7 +131,7 @@ export class GiftClaimService {
       if (!identity || identity.biliUid !== order.biliUid) {
         throw new AppError(
           'BILIBILI_UID_REQUIRED',
-          'Bind the Bilibili UID associated with this gift before claiming it.',
+          'This gift belongs to a different Bilibili UID.',
           403,
         );
       }

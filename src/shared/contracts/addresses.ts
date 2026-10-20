@@ -26,7 +26,6 @@ export const AddressInputSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type AddressInputContract = Static<typeof AddressInputSchema>;
 
 export const AddressUpdateSchema = Type.Partial(AddressInputSchema, {
   additionalProperties: false,

@@ -17,4 +17,3 @@ export const UpdateAppearanceSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export type UpdateAppearance = Static<typeof UpdateAppearanceSchema>;
