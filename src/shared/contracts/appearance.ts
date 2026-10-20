@@ -1,8 +1,8 @@
 import { Type, type Static } from '@sinclair/typebox';
 
-export const THEME_PRESETS = ['moe', 'neon', 'archive', 'pixel'] as const;
+import { THEME_PRESETS } from '../theme-presets.js';
 
-export type ThemePreset = (typeof THEME_PRESETS)[number];
+export type { ThemePreset } from '../theme-presets.js';
 
 export const ThemePresetSchema = Type.Union(THEME_PRESETS.map((preset) => Type.Literal(preset)));
 

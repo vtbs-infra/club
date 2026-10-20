@@ -46,7 +46,26 @@
         "react/jsx-key": "error",
         "react/jsx-no-duplicate-props": "error",
         "react/no-danger-with-children": "error",
-        "react/only-export-components": ["error", { "allowConstantExport": true }]
+        "react/only-export-components": ["error", { "allowConstantExport": true }],
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@sinclair/typebox",
+                "allowTypeImports": true,
+                "message": "Keep the TypeBox runtime out of the browser bundle."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/shared/contracts/**"],
+                "allowTypeImports": true,
+                "message": "Browser code imports only types from the shared contracts; put shared runtime values in a plain module."
+              }
+            ]
+          }
+        ]
       }
     }
   ]

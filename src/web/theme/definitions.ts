@@ -1,4 +1,4 @@
-import { THEME_PRESETS, type ThemePreset } from '../../shared/contracts/appearance';
+import { THEME_PRESETS, type ThemePreset } from '../../shared/theme-presets';
 
 export interface ThemeDefinition {
   readonly description: string;

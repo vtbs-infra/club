@@ -1,8 +1,5 @@
-import {
-  THEME_PRESETS,
-  type Appearance,
-  type ThemePreset,
-} from '../../shared/contracts/appearance';
+import type { Appearance, ThemePreset } from '../../shared/contracts/appearance';
+import { THEME_PRESETS } from '../../shared/theme-presets';
 import { apiRequest } from './http';
 
 export type { Appearance, ThemePreset } from '../../shared/contracts/appearance';
