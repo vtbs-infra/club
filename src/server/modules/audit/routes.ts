@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { AuditLogPageSchema } from '../../../shared/contracts/audit.js';

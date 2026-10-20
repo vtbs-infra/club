@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
@@ -262,7 +262,7 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     },
   );
 
-  app.post<{ Body: typeof SnapshotApprovalInputSchema.static; Params: { snapshotRunId: string } }>(
+  app.post<{ Body: Static<typeof SnapshotApprovalInputSchema>; Params: { snapshotRunId: string } }>(
     '/api/v1/admin/rosters/:snapshotRunId/approve-late',
     {
       preHandler: requireAdmin,
@@ -283,7 +283,10 @@ const snapshotRoutes: FastifyPluginAsync<SnapshotRoutesOptions> = (app, options)
     },
   );
 
-  app.post<{ Body: typeof SnapshotRejectionInputSchema.static; Params: { snapshotRunId: string } }>(
+  app.post<{
+    Body: Static<typeof SnapshotRejectionInputSchema>;
+    Params: { snapshotRunId: string };
+  }>(
     '/api/v1/admin/rosters/:snapshotRunId/reject-late',
     {
       preHandler: requireAdmin,

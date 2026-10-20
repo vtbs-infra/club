@@ -1,4 +1,4 @@
-import { Type, type Static } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import { DateTimeSchema, IdSchema, Nullable } from './common.js';
 
 export const BilibiliAccountSchema = Type.Object({

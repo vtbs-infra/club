@@ -52,12 +52,17 @@
           {
             "paths": [
               {
-                "name": "@sinclair/typebox",
+                "name": "typebox",
                 "allowTypeImports": true,
                 "message": "Keep the TypeBox runtime out of the browser bundle."
               }
             ],
             "patterns": [
+              {
+                "group": ["typebox/*"],
+                "allowTypeImports": true,
+                "message": "Keep the TypeBox runtime out of the browser bundle."
+              },
               {
                 "group": ["**/shared/contracts/**"],
                 "allowTypeImports": true,

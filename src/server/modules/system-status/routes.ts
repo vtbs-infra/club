@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import type { FastifyPluginCallback } from 'fastify';
 
 import { SystemStatusSchema } from '../../../shared/contracts/system.js';

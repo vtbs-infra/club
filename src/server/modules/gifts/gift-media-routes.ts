@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 
 import multipart from '@fastify/multipart';
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { AppError } from '../../../shared/errors/app-error.js';

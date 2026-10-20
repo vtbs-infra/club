@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { Type, type Static } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import {
   AuthSessionSchema,

@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import {
   BilibiliLoginAttemptSchema,
@@ -46,7 +46,7 @@ const bilibiliRoutes: FastifyPluginAsync<{
     },
     async (request, reply) => reply.status(201).send(await service.createLogin(owner(request))),
   );
-  app.get<{ Params: typeof Parameters.static }>(
+  app.get<{ Params: Static<typeof Parameters> }>(
     prefix + '/login-attempts/:id',
     {
       preHandler,
@@ -58,7 +58,7 @@ const bilibiliRoutes: FastifyPluginAsync<{
     },
     (request) => service.getLogin(request.params.id, owner(request)),
   );
-  app.delete<{ Params: typeof Parameters.static }>(
+  app.delete<{ Params: Static<typeof Parameters> }>(
     prefix + '/login-attempts/:id',
     { preHandler, schema: { tags: ['bilibili'], params: Parameters } },
     async (request, reply) => {
@@ -66,7 +66,7 @@ const bilibiliRoutes: FastifyPluginAsync<{
       return reply.status(204).send();
     },
   );
-  app.post<{ Params: typeof Parameters.static }>(
+  app.post<{ Params: Static<typeof Parameters> }>(
     prefix + '/login-attempts/:id/activate',
     {
       preHandler,
@@ -91,7 +91,7 @@ const bilibiliRoutes: FastifyPluginAsync<{
     },
     (request) => service.requestCheck(owner(request)),
   );
-  app.delete<{ Body: typeof BilibiliRevisionInputSchema.static }>(
+  app.delete<{ Body: Static<typeof BilibiliRevisionInputSchema> }>(
     prefix + '/session',
     {
       preHandler,

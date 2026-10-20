@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { EmptyBodySchema, IdSchema } from '../../../shared/contracts/common.js';
@@ -6,8 +6,7 @@ import {
   GiftReleaseSchema,
   GiftReleaseSummaryPageSchema,
   ReleaseInputSchema,
-  ReleasePublishInputSchema,
-  ReleaseUpdateInputSchema,
+  VersionedReleaseInputSchema,
 } from '../../../shared/contracts/gifts.js';
 import type { DatabaseService } from '../../infrastructure/db/database.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
@@ -61,7 +60,7 @@ const giftReleaseRoutes: FastifyPluginAsync<GiftReleaseRoutesOptions> = (app, op
       }),
   );
 
-  app.post<{ Body: typeof ReleaseInputSchema.static }>(
+  app.post<{ Body: Static<typeof ReleaseInputSchema> }>(
     '/api/v1/creator/releases',
     {
       preHandler: requireCreator,
@@ -92,12 +91,12 @@ const giftReleaseRoutes: FastifyPluginAsync<GiftReleaseRoutesOptions> = (app, op
     (request) => options.service.get(request.creatorProfile!.id, request.params.releaseId),
   );
 
-  app.put<{ Body: typeof ReleaseUpdateInputSchema.static; Params: { releaseId: string } }>(
+  app.put<{ Body: Static<typeof VersionedReleaseInputSchema>; Params: { releaseId: string } }>(
     '/api/v1/creator/releases/:releaseId',
     {
       preHandler: requireCreator,
       schema: {
-        body: ReleaseUpdateInputSchema,
+        body: VersionedReleaseInputSchema,
         params: parameters,
         response: { 200: GiftReleaseSchema },
         tags: ['creator-gifts'],
@@ -112,12 +111,12 @@ const giftReleaseRoutes: FastifyPluginAsync<GiftReleaseRoutesOptions> = (app, op
       ),
   );
 
-  app.post<{ Body: typeof ReleasePublishInputSchema.static; Params: { releaseId: string } }>(
+  app.post<{ Body: Static<typeof VersionedReleaseInputSchema>; Params: { releaseId: string } }>(
     '/api/v1/creator/releases/:releaseId/publish',
     {
       preHandler: requireCreator,
       schema: {
-        body: ReleasePublishInputSchema,
+        body: VersionedReleaseInputSchema,
         params: parameters,
         response: { 200: GiftReleaseSchema },
         tags: ['creator-gifts'],

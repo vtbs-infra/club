@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import type { Static } from 'typebox';
 
 import { AppearanceSchema, UpdateAppearanceSchema } from '../../../shared/contracts/appearance.js';
 import type { AppAuth, AuthSession } from '../auth/auth.js';
@@ -37,7 +38,7 @@ const appearanceRoutes: FastifyPluginAsync<AppearanceRoutesOptions> = (app, opti
     () => options.service.get(),
   );
 
-  app.put<{ Body: typeof UpdateAppearanceSchema.static }>(
+  app.put<{ Body: Static<typeof UpdateAppearanceSchema> }>(
     '/api/v1/admin/appearance',
     {
       preHandler: requirePlatformAdmin,

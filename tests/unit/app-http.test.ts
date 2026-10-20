@@ -5,7 +5,7 @@ import multipart from '@fastify/multipart';
 import { describe, expect, it } from 'vitest';
 
 import { buildHttpApp } from '../../src/server/http-app.js';
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import { APPLICATION_VERSION } from '../../src/server/application-version.js';
 import {
   InMemoryRateLimiter,

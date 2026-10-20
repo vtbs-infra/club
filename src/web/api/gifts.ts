@@ -17,8 +17,7 @@ import type {
   GiftReleaseSummaryPage,
   ReleaseInput,
   ReleasePackageInput,
-  ReleasePublishInput,
-  ReleaseUpdateInput,
+  VersionedReleaseInput,
 } from '../../shared/contracts/gifts';
 import { apiDownload, apiRequest } from './http';
 
@@ -39,8 +38,7 @@ export type {
   GuardTier,
   ReleaseInput,
   ReleasePackageInput,
-  ReleasePublishInput,
-  ReleaseUpdateInput,
+  VersionedReleaseInput,
 };
 
 function queryString(values: Readonly<Record<string, number | string | undefined>>): string {
@@ -106,7 +104,7 @@ export function createCreatorRelease(input: ReleaseInput): Promise<GiftRelease> 
 
 export function updateCreatorRelease(
   releaseId: string,
-  input: ReleaseUpdateInput,
+  input: VersionedReleaseInput,
 ): Promise<GiftRelease> {
   return apiRequest(`/api/v1/creator/releases/${releaseId}`, {
     body: JSON.stringify(input),
@@ -116,7 +114,7 @@ export function updateCreatorRelease(
 
 export function publishCreatorRelease(
   releaseId: string,
-  input: ReleasePublishInput,
+  input: VersionedReleaseInput,
 ): Promise<GiftRelease> {
   return apiRequest(`/api/v1/creator/releases/${releaseId}/publish`, {
     body: JSON.stringify(input),

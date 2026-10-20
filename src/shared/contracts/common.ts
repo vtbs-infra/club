@@ -1,4 +1,4 @@
-import { Type, type Static, type TSchema } from '@sinclair/typebox';
+import { Type, type Static, type TSchema } from 'typebox';
 
 export const IdSchema = Type.String({ format: 'uuid' });
 export const DateTimeSchema = Type.String({ format: 'date-time' });

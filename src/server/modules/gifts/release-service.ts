@@ -2,11 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 
-import type {
-  ReleaseInput,
-  ReleasePublishInput,
-  ReleaseUpdateInput,
-} from '../../../shared/contracts/gifts.js';
+import type { ReleaseInput, VersionedReleaseInput } from '../../../shared/contracts/gifts.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import type { Clock } from '../../infrastructure/clock/clock.js';
 import type { AppDatabase, DatabaseService } from '../../infrastructure/db/database.js';
@@ -377,7 +373,7 @@ export class GiftReleaseService {
   public async update(
     creatorId: string,
     releaseId: string,
-    input: ReleaseUpdateInput,
+    input: VersionedReleaseInput,
     context: RequestAuditContext,
   ) {
     const validated = validateDraft(input);
@@ -460,7 +456,7 @@ export class GiftReleaseService {
   public async publish(
     creatorId: string,
     releaseId: string,
-    input: ReleasePublishInput,
+    input: VersionedReleaseInput,
     context: RequestAuditContext,
   ) {
     const validated = validateDraft(input);

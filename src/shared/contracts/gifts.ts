@@ -1,4 +1,4 @@
-import { Type, type Static } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 
 import { AddressPayloadSchema } from './addresses.js';
 import {
@@ -85,17 +85,12 @@ export const ReleaseInputSchema = Type.Object(
 );
 export type ReleaseInput = Static<typeof ReleaseInputSchema>;
 
-export const ReleaseUpdateInputSchema = Type.Composite([
-  ReleaseInputSchema,
-  Type.Object({ expectedVersion: Type.Integer({ minimum: 1 }) }),
-]);
-export type ReleaseUpdateInput = Static<typeof ReleaseUpdateInputSchema>;
-
-export const ReleasePublishInputSchema = Type.Composite([
-  ReleaseInputSchema,
-  Type.Object({ expectedVersion: Type.Integer({ minimum: 1 }) }),
-]);
-export type ReleasePublishInput = Static<typeof ReleasePublishInputSchema>;
+// Saving and publishing both send the complete form, pinned to the version it was loaded from.
+export const VersionedReleaseInputSchema = Type.Object(
+  { ...ReleaseInputSchema.properties, expectedVersion: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+export type VersionedReleaseInput = Static<typeof VersionedReleaseInputSchema>;
 
 const ReleasePackageSchema = Type.Object({
   description: Type.String(),

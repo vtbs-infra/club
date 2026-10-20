@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import {
@@ -47,7 +47,7 @@ const addressRoutes: FastifyPluginAsync<AddressRoutesOptions> = (app, options) =
     (request) => options.service.list(session(request).user.id),
   );
 
-  app.post<{ Body: typeof AddressInputSchema.static }>(
+  app.post<{ Body: Static<typeof AddressInputSchema> }>(
     '/api/v1/me/addresses',
     {
       preHandler: requireSession,
@@ -65,7 +65,7 @@ const addressRoutes: FastifyPluginAsync<AddressRoutesOptions> = (app, options) =
         ),
   );
 
-  app.patch<{ Body: typeof AddressUpdateSchema.static; Params: { addressId: string } }>(
+  app.patch<{ Body: Static<typeof AddressUpdateSchema>; Params: { addressId: string } }>(
     '/api/v1/me/addresses/:addressId',
     {
       preHandler: requireSession,

@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import {
@@ -83,7 +83,10 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
       options.service.getVisible(session(request).user.id, request.params.announcementId),
   );
 
-  app.post<{ Body: typeof AnnouncementReadInputSchema.static; Params: { announcementId: string } }>(
+  app.post<{
+    Body: Static<typeof AnnouncementReadInputSchema>;
+    Params: { announcementId: string };
+  }>(
     '/api/v1/me/announcements/:announcementId/read',
     {
       preHandler: requireSession,
@@ -134,7 +137,7 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
         }),
     );
 
-    app.post<{ Body: typeof AnnouncementContentSchema.static }>(
+    app.post<{ Body: Static<typeof AnnouncementContentSchema> }>(
       prefix,
       {
         preHandler: guard,
@@ -164,7 +167,7 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
     );
 
     app.put<{
-      Body: typeof AnnouncementContentUpdateSchema.static;
+      Body: Static<typeof AnnouncementContentUpdateSchema>;
       Params: { announcementId: string };
     }>(
       `${prefix}/:announcementId`,
@@ -187,7 +190,7 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
     );
 
     app.post<{
-      Body: typeof AnnouncementVersionCommandSchema.static;
+      Body: Static<typeof AnnouncementVersionCommandSchema>;
       Params: { announcementId: string };
     }>(
       `${prefix}/:announcementId/publish`,
@@ -210,7 +213,7 @@ const announcementRoutes: FastifyPluginAsync<AnnouncementRoutesOptions> = (app, 
     );
 
     app.post<{
-      Body: typeof AnnouncementVersionCommandSchema.static;
+      Body: Static<typeof AnnouncementVersionCommandSchema>;
       Params: { announcementId: string };
     }>(
       `${prefix}/:announcementId/withdraw`,

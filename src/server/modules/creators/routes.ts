@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { IdSchema } from '../../../shared/contracts/common.js';
@@ -100,7 +100,7 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
     () => options.service.summary(),
   );
 
-  app.post<{ Body: typeof CreatorInputSchema.static }>(
+  app.post<{ Body: Static<typeof CreatorInputSchema> }>(
     '/api/v1/admin/creators',
     {
       preHandler: requireAdmin,
@@ -116,7 +116,7 @@ const creatorRoutes: FastifyPluginAsync<CreatorRoutesOptions> = (app, options) =
         .send(await options.service.register({ ...context(request), ...request.body })),
   );
 
-  app.patch<{ Body: typeof CreatorSettingsSchema.static; Params: { creatorId: string } }>(
+  app.patch<{ Body: Static<typeof CreatorSettingsSchema>; Params: { creatorId: string } }>(
     '/api/v1/admin/creators/:creatorId',
     {
       preHandler: requireAdmin,

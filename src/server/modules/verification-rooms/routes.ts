@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { IdSchema } from '../../../shared/contracts/common.js';
@@ -53,7 +53,7 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
     async () => options.service.list(),
   );
 
-  app.post<{ Body: typeof VerificationRoomInputSchema.static }>(
+  app.post<{ Body: Static<typeof VerificationRoomInputSchema> }>(
     '/api/v1/admin/verification-rooms',
     {
       preHandler: requirePlatformAdmin,
@@ -75,7 +75,7 @@ const verificationRoomRoutes: FastifyPluginAsync<VerificationRoomRoutesOptions> 
     },
   );
 
-  app.patch<{ Body: typeof VerificationRoomUpdateSchema.static; Params: RoomParameters }>(
+  app.patch<{ Body: Static<typeof VerificationRoomUpdateSchema>; Params: RoomParameters }>(
     '/api/v1/admin/verification-rooms/:roomId',
     {
       preHandler: requirePlatformAdmin,

@@ -1,4 +1,4 @@
-import { Type, type Static } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 
 import { DateTimeSchema, GuardTierSchema, IdSchema, Nullable } from './common.js';
 

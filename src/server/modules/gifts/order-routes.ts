@@ -1,4 +1,4 @@
-import { Type } from '@sinclair/typebox';
+import { Type, type Static } from 'typebox';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { IdSchema } from '../../../shared/contracts/common.js';
@@ -136,7 +136,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
   );
 
   app.post<{
-    Body: typeof SubmitGiftSchema.static;
+    Body: Static<typeof SubmitGiftSchema>;
     Params: { giftOrderId: string };
   }>(
     '/api/v1/me/gifts/:giftOrderId/submit',
@@ -218,7 +218,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
       }),
   );
 
-  app.post<{ Body: typeof FulfillmentExportInputSchema.static }>(
+  app.post<{ Body: Static<typeof FulfillmentExportInputSchema> }>(
     '/api/v1/creator/orders/fulfillment-export',
     {
       preHandler: requireCreator,
@@ -268,7 +268,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
   );
 
   app.post<{
-    Body: typeof ShipGiftSchema.static;
+    Body: Static<typeof ShipGiftSchema>;
     Params: { giftOrderId: string };
   }>(
     '/api/v1/creator/orders/:giftOrderId/ship',
@@ -296,7 +296,7 @@ const giftOrderRoutes: FastifyPluginAsync<GiftOrderRoutesOptions> = (app, option
     },
   );
 
-  app.patch<{ Body: typeof CorrectShippingSchema.static; Params: { giftOrderId: string } }>(
+  app.patch<{ Body: Static<typeof CorrectShippingSchema>; Params: { giftOrderId: string } }>(
     '/api/v1/creator/orders/:giftOrderId/shipping',
     {
       preHandler: requireCreator,

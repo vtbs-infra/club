@@ -1,7 +1,8 @@
-import { FormatRegistry, Type, type Static } from '@sinclair/typebox';
-import { Value } from '@sinclair/typebox/value';
+import { Type, type Static } from 'typebox';
+import { Format } from 'typebox/format';
+import { Value } from 'typebox/value';
 
-FormatRegistry.Set('http-url', (value) => {
+Format.Set('http-url', (value) => {
   try {
     return ['http:', 'https:'].includes(new URL(value).protocol);
   } catch {
@@ -112,7 +113,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     );
   if (!Value.Check(ConfigSchema, candidate) || encryptionErrors.length > 0) {
     const details = [...Value.Errors(ConfigSchema, candidate)]
-      .map((error) => `${error.path || '/'} ${error.message}`)
+      .map((error) => `${error.instancePath || '/'} ${error.message}`)
       .join('; ');
     throw new ConfigurationError(
       `Invalid application configuration: ${[details, ...encryptionErrors].filter(Boolean).join('; ')}`,
