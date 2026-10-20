@@ -115,6 +115,8 @@ export class PublicWebCreatorProfileSource implements CreatorProfileSource {
   public async fetchByUid(biliUid: string, signal: AbortSignal): Promise<BilibiliCreatorProfile> {
     if (!/^[0-9]{1,32}$/.test(biliUid)) throw new Error('Invalid Bilibili UID.');
     const client = await this.client.forOperation(signal);
+    // Basic room and anchor endpoints: the full room-page endpoint fails with -352 under risk
+    // control. Both later steps re-check that the room belongs to the verified UID.
     const lookupUrl = new URL('https://api.live.bilibili.com/room/v1/Room/getRoomInfoOld');
     lookupUrl.searchParams.set('mid', biliUid);
     const roomAlias = parseCreatorRoomLookup(await this.request(client, lookupUrl));

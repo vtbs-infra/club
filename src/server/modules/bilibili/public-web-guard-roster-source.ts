@@ -138,6 +138,7 @@ export function parsePublicWebGuardRosterPage(
     declaredPageCount,
     declaredTotal,
     fetchedAt,
+    // Bilibili repeats the top three members on every page; count them once.
     members: [...(pageNumber === 1 ? top3 : []), ...list].map(parseMember),
     pageNumber,
     rawBytes,

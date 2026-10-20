@@ -18,6 +18,8 @@ function fingerprint(page: Pick<GuardRosterPage, 'members'>): string {
     .join('|');
 }
 
+// Bilibili offers no snapshot token. A capture counts as consistent only when the declared
+// totals stay fixed across pages and a final first-page recheck still matches.
 export function validateRosterPages(
   pages: readonly CapturedRosterPage[],
   recheck: CapturedRosterPage,

@@ -1,160 +1,107 @@
-# Changelog
+# 更新记录
 
-All notable Club changes are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+每个版本只记录部署者需要知道的变化：不兼容的变更、升级时必须执行的操作，以及值得了解的新能力。
+完整的改动见 Git 提交历史。版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
 ## [Unreleased]
 
-### Breaking changes
+### 不兼容变更
 
-- Use npm 11.19+ (11.x) and `package-lock.json` for development, CI and image builds;
-  install the source checkout with `npm ci`.
-- Replace email/Better Auth with username credentials and PostgreSQL-backed Fastify sessions.
-- Require Bilibili UID verification before creating ordinary accounts; recover usernames and reset passwords through the same UID proof.
-- Make username and UID immutable and unique. Remove separate binding, unbinding and conflict-management flows.
-- Replace the database baseline. Fresh deployment and account registration are required; previous databases and password hashes are not migrated.
-- Rename the authentication secret to `AUTH_SECRET`; administrator CLI uses `--username` and provides `admin:reset-password`.
-- Build the unreleased source with `CLUB_IMAGE=club-app`; existing v0.2.0 images remain on the previous baseline.
+- 开发、CI 和镜像构建改用 npm 11.19+（11.x）和 `package-lock.json`；源码检出后用 `npm ci` 安装。
+- 认证从邮箱和 Better Auth 改为用户名密码，会话保存在 PostgreSQL 中。
+- 创建普通账号前必须先验证 B站 UID；找回用户名和重置密码使用同样的 UID 验证。
+- 用户名和 UID 唯一且不可修改，不再有单独的绑定、解绑和冲突处理流程。
+- 替换数据库基线：必须全新部署并重新注册账号，旧数据库和密码摘要不会迁移。
+- 认证密钥改名为 `AUTH_SECRET`；管理员 CLI 改用 `--username`，并新增 `admin:reset-password`。
+- 未发布的源码用 `CLUB_IMAGE=club-app` 构建；已有的 v0.2.0 镜像仍使用旧基线。
 
-### Added
+### 新增
 
-- Recognize pasted mainland China shipping addresses locally in the browser, with searchable
-  province/city/district selectors, explicit choices for ambiguous results and manual fallback.
-- Manage one Bilibili reading account through administrator QR login and explicit activation,
-  with separately encrypted credentials, periodic checks, automatic renewal and crash recovery.
-- Show independent account, upstream and room states, including recent valid sender-UID samples.
+- 在浏览器本地识别粘贴的中国大陆收货地址，提供可搜索的省市区选择器；结果有歧义时由用户选择，也可以手动填写。
+- 管理员通过扫码登录并明确启用一个 B站读取账号；凭据单独加密，定期检查、自动续期，并能从进程崩溃中恢复。
+- 分别显示账号、上游和直播间状态，包括最近收到的有效发送者 UID 样本。
 
-### Changed
+### 变更
 
-- Accept passwords of 8–128 characters for all roles, including administrator CLI operations.
-- Stop logging routine health probes; a failed readiness check logs one warning with the check results.
-- Guide registration and recovery through a shared identity-verification panel with code copying,
-  an explicit live-room action, expiry feedback and a clear transition to account setup.
-- Require the managed reading account for live verification, creator profiles and guard rosters;
-  keep enabled verification rooms authenticated and remove message-history polling.
-- Freeze credentials for each profile lookup and roster attempt; invalidate old contexts when
-  credentials change. Unavailable channels reject new challenges before issuing a code.
-- Add migration 0002 within the username/UID baseline and require a separate Bilibili credential
-  key ring. Existing accounts on that baseline are preserved; administrator QR setup is required.
+- 所有身份（包括管理员 CLI）的密码长度要求统一为 8–128 个字符。
+- 注册和找回使用同一个身份验证面板：可以复制验证码、明确地打开直播间、提示过期，并清楚地进入账号设置。
+- 直播验证、主播资料和大航海名单都必须使用托管的读取账号；启用的验证直播间保持鉴权连接，不再轮询消息历史。
+- 每次资料查询和名单抓取固定使用一份凭据，凭据变化时旧的读取上下文失效。通道不可用时，在发出验证码之前就拒绝新的验证请求。
+- 在用户名/UID 基线内新增迁移 0002，并要求单独配置 B站凭据密钥环。该基线上已有的账号会保留，但管理员需要扫码配置读取账号。
 
-### Fixed
+### 修复
 
-- Keep inline address creation and gift claiming in separate forms so saving an address never
-  submits the claim; require recipients to review and confirm after selecting the saved address.
-- Fetch creator profiles through public room and anchor endpoints, validating both owner UIDs;
-  avoid registration failures when the full room-page endpoint returns Bilibili error `-352`.
-- Preserve upstream creator-profile failures in server logs for diagnosis.
+- 新建地址和领取礼物分成两个表单，保存地址不会顺带提交领取；选择地址后需要用户核对并确认。
+- 主播资料改用公开的房间和主播接口，并校验两处的所属 UID，避免完整房间页接口返回 B站错误 `-352` 导致注册失败。
+- 在服务端日志中保留上游主播资料请求的失败原因，便于诊断。
 
 ## [0.2.0] - 2026-09-09
 
-### Changed
+### 变更
 
-- A finalized monthly roster references one accepted, consistent capture. Completed evidence and
-  member collections are sealed; there is no second copy of the formal roster.
-- Capture success is saved before finalization. READY runs retry internal finalization without
-  refetching Bilibili data or consuming another capture attempt. Late results require approval.
-- Publication and roster finalization share a creator/month transaction lock and generate complete,
-  unique eligibility regardless of execution order or concurrency.
-- Unclaimed orders derive upcoming, claimable, or expired state from release windows and closure.
-  Claiming no longer depends on global expiry maintenance; closure does not write every order.
-- User dashboard counts and the most urgent gift come from a global database summary.
-- Orders store fixed package allocations and read immutable published content instead of duplicating
-  every package. Claim-time addresses and options remain independently frozen and encrypted.
-- Shipping confirmation ends the platform workflow. Carrier name and tracking number live on the
-  order; recipients can copy the number. Audited corrections preserve the original shipping actor,
-  timestamp, and SHIPPED status, with optimistic version checks.
-- Application composition constructs services explicitly. Three background runtimes share bounded
-  periodic execution, startup recovery, failure reporting, demand coalescing, and shutdown draining.
-- Database and UI state types use finite shared contracts. Bilibili fakes are explicitly injected
-  by tests; production exposes only the supported public-web sources and local private storage.
+- 定稿的月度名单引用一次被接受且一致的抓取。完成的证据和成员集合被封存，正式名单不再另存一份副本。
+- 抓取成功的结果先保存，再定稿。处于 READY 的任务重试内部定稿时，不会重新请求 B站，也不消耗抓取次数。迟到的结果需要审批。
+- 发布礼物和名单定稿共用同一把“主播 + 月份”事务锁，无论执行顺序和并发情况如何，都会生成完整且不重复的资格。
+- 未领取订单的待开放、可领取和已过期状态由领取窗口和关闭状态计算得出。领取不再依赖全局的过期维护任务，关闭礼物也不会逐条改写订单。
+- 用户仪表盘的计数和最紧急的礼物来自数据库的全局汇总。
+- 订单保存固定的礼包分配，并读取不可变的已发布内容，不再复制每个礼包。领取时的地址和选项仍然独立冻结并加密。
+- 确认发货即平台流程终点。快递公司和单号保存在订单上，收件人可以复制单号。更正发货信息会被审计，保留首次发货人、时间和“已发货”状态，并使用乐观版本检查。
+- 应用组装时显式构造各个服务。三个后台运行器共用有上限的周期执行、启动恢复、失败报告、需求合并和关闭排空。
+- 数据库和界面的状态类型使用有限的共享契约。B站替身由测试显式注入；生产环境只提供受支持的公开 Web 来源和本地私有存储。
 
-### Fixed
+### 修复
 
-- Replace private browser caches and page state across account changes and expired sessions.
-- Bind roster decisions to the reviewed attempt, recover abandoned captures on each scheduler pass,
-  and drain concurrent page requests before completing a failed attempt.
-- Bound Bilibili initialization and requests by operation cancellation; drain connection setup,
-  connectivity tests, history requests, and active message delivery during shutdown.
-- Keep release form versions tied to their loaded content and read full configurations consistently.
-  Repeated publication returns a conflict instead of acknowledging unapplied content.
-- Serialize address-book changes and verification-room edits; report duplicate rooms as conflicts.
-- Acknowledge the displayed announcement version after its body loads and refresh gift status at
-  claim-window boundaries. Permit local cover previews under production CSP and preserve HTTP
-  parser and upload errors as client errors.
+- 切换账号或会话过期时，替换浏览器的私有缓存和页面状态。
+- 名单决定绑定到被审阅的那一次抓取；每轮调度都会恢复被遗弃的抓取；失败的抓取在结束前等待并发的分页请求全部完成。
+- B站初始化和请求受操作取消信号约束；关闭时等待建连、连通性测试、历史请求和正在投递的消息完成。
+- 发布表单的版本与加载时的内容绑定，并一致地读取完整配置。重复发布返回冲突，而不是确认一份没有生效的内容。
+- 地址簿修改和验证直播间编辑串行执行；重复的直播间报告为冲突。
+- 公告正文加载完成后才确认已读版本；在领取窗口边界刷新礼物状态。生产 CSP 下允许本地封面预览，HTTP 解析和上传错误按客户端错误返回。
 
-### Retained capabilities
+### 保留的能力
 
-- Verified creator registration, immutable binding-conflict ownership, audited conflict decisions,
-  recoverable gift-cover cleanup, announcement lifecycle and versioned reads, public visibility,
-  encrypted personal data, and deployment-wide appearance presets.
-- Cursor-based operational lists, privacy-aware audit queries, precise migration identity checks,
-  and independent runtime readiness diagnostics.
+- 已验证的主播注册、不可变的绑定冲突归属、经过审计的冲突处理、可恢复的礼物封面清理、公告生命周期和按版本的已读、公开可见性控制、加密的个人数据，以及全站外观预设。
+- 基于游标的运营列表、注重隐私的审计查询、精确的迁移身份校验，以及各运行器独立的就绪诊断。
 
-### Verification
+### 验证
 
-- Integration scenarios cover concurrent publication/finalization, claim/close races, retries,
-  immutable evidence, permissions, encryption, audit, and frozen historical content.
-- Capacity scenarios exercise 30,000 members, 90,000 cumulative allocations, and 30,000-row exports.
-- A mandatory PostgreSQL-backed browser workflow covers real authentication, binding, publication,
-  scheduled roster finalization, claim submission, export, shipping correction, and number copying.
-  Only Bilibili boundaries are replaced with test sources; live upstream availability is separate.
+- 集成测试覆盖发布与定稿并发、领取与关闭竞争、重试、不可变证据、权限、加密、审计和冻结的历史内容。
+- 容量测试覆盖 30,000 名成员、90,000 条累计礼包分配和 30,000 行导出。
+- 一条必须运行的、基于 PostgreSQL 的浏览器流程覆盖真实认证、绑定、发布、定时名单定稿、提交领取、导出、更正发货信息和复制单号。只有 B站边界替换为测试来源，真实上游的可用性需要另行验证。
 
-### Breaking changes
+### 不兼容变更
 
-- Roster approval and rejection require `expectedAttemptId`; announcement read requests require
-  `version`. Release detail responses always include form fields, packages, and all tier mappings.
-- v0.2 requires an empty PostgreSQL database with its single fresh-install baseline. No v0.1 or
-  intermediate-model upgrade, dual-write, or compatibility path is provided.
-- Separate shipment/tracking tables, carrier providers, tracking URLs and events, delivery sync,
-  expiry jobs, and the manual COMPLETED step are removed.
-- Source and storage-driver selectors are removed from environment configuration. Order APIs expose
-  one shipping record, derived claim-window status, and versioned shipping correction.
-- Administrator bootstrap creates a new account; it rejects an existing email without changing it.
+- 名单批准和拒绝需要 `expectedAttemptId`；公告已读请求需要 `version`。礼物发布详情始终包含领取字段、礼包和全部等级映射。
+- v0.2 需要一个空的 PostgreSQL 数据库，使用单一的全新安装基线，不提供从 v0.1 或中间模型升级、双写或兼容的路径。
+- 删除独立的发货和物流追踪表、承运商 Provider、追踪链接和事件、签收同步、过期任务，以及手动“完成”步骤。
+- 环境配置中删除了数据来源和存储驱动的选择项。订单 API 只提供一条发货记录、计算得出的领取窗口状态，以及带版本的发货更正。
+- 管理员引导只创建新账号；邮箱已存在时直接拒绝，不修改原账号。
 
 ## [0.1.0] - 2026-08-27
 
-### Added
+### 新增
 
-- Platform-managed Bilibili live-room verification that binds the UID which actually sends a
-  one-time code.
-- Per-creator monthly captain, admiral, and governor roster tasks with immutable finalized members,
-  bounded retries, explicit late-result approval, and hashed compressed source evidence.
-- Optional monthly gift releases with tier packages, cumulative or highest-tier fulfillment,
-  configurable claim fields, cover images, and idempotent eligibility reconciliation.
-- Recipient dashboards, encrypted address books, independent claim-time address snapshots, gift
-  claiming, status history, shipment details, and tracking views.
-- Creator workspaces for publishing gifts and announcements, monitoring claims, exporting current
-  submitted orders to XLSX, recording one shipment per order, cancellation, and completion.
-- A public landing portal for explicitly visible active gifts and platform announcements without
-  exposing roster membership, account eligibility, or recipient information.
-- Platform administration for creator registration, verification rooms, roster evidence and
-  approval, announcements, audit queries, runtime diagnostics, and system health.
-- Deployment-wide Moe, Neon, Archive, and Pixel theme presets with local administrator preview and
-  explicit audited application across public, recipient, creator, administrator, and Radix portal
-  surfaces.
-- Shared TypeBox contracts for Fastify validation, OpenAPI 3.1, and browser types, with stable error
-  codes and request IDs.
-- Docker Compose deployment, explicit database migrations, administrator bootstrap CLI, structured
-  logs, liveness/readiness endpoints, backup and restore documentation, and a versioned GHCR release
-  path.
+- 由平台管理的 B站直播间验证：绑定实际发送一次性验证码的 UID。
+- 每位主播每月的舰长、提督、总督名单任务：定稿成员不可变，重试次数有上限，迟到结果需要明确批准，并保存经过哈希和压缩的原始证据。
+- 可选的月度礼物发布：按等级配置礼包，支持累计或仅最高等级发放、自定义领取字段、封面图片，以及幂等的资格匹配。
+- 收件人仪表盘、加密地址簿、领取时独立保存的地址快照、礼物领取、状态历史、发货详情和物流查看。
+- 主播工作台：发布礼物和公告、查看领取情况、把当前已提交的订单导出为 XLSX、每张订单记录一次发货、取消和完成。
+- 公开首页：只展示明确设为公开的有效礼物和平台公告，不暴露名单成员、账号资格或收件人信息。
+- 平台管理：主播注册、验证直播间、名单证据与审批、公告、审计查询、运行器诊断和系统健康。
+- Moe、Neon、Archive、Pixel 四套全站主题预设，管理员可以先在本地预览，再明确应用并留下审计，覆盖公开页、收件人、主播、管理员页面和 Radix 浮层。
+- 共享的 TypeBox 契约同时用于 Fastify 校验、OpenAPI 3.1 和浏览器类型，提供稳定的错误码和请求 ID。
+- Docker Compose 部署、显式的数据库迁移、管理员引导 CLI、结构化日志、存活与就绪检查接口、备份与恢复文档，以及带版本号的 GHCR 发布流程。
 
-### Security and reliability
+### 安全与可靠性
 
-- AES-256-GCM encryption uses a versioned address key ring; submitted orders retain independent
-  encrypted address and claim-option snapshots.
-- Database constraints, row locks, immutable snapshot triggers, optimistic versions, audit records,
-  retry state, and idempotency keys protect core workflow transitions.
-- Origin validation, secure response headers, bounded in-memory rate limiting, private storage
-  routes, and log redaction protect HTTP and operational boundaries.
-- Unit, PostgreSQL integration, migration, production-build, responsive Playwright, and Docker-image
-  checks run before a release image can be published.
+- 地址使用带版本的 AES-256-GCM 密钥环加密；已提交的订单独立保存加密的地址和领取选项快照。
+- 数据库约束、行锁、不可变快照触发器、乐观版本、审计记录、重试状态和幂等键保护核心流程的状态转换。
+- Origin 校验、安全响应头、有上限的内存限流、私有存储路由和日志脱敏保护 HTTP 与运维边界。
+- 发布镜像之前必须通过单元测试、PostgreSQL 集成测试、迁移、生产构建、响应式 Playwright 测试和 Docker 镜像检查。
 
-### Supported deployment
+### 支持的部署方式
 
-- One active Club application instance with PostgreSQL 17 and a private local storage volume.
-- Published images currently target `linux/amd64`; source builds require Node.js 24 and pnpm 11.9.
-- The default Bilibili integration uses public web endpoints and may require maintenance when the
-  upstream behavior changes.
-- Shipment records support a public tracking URL; automatic carrier refresh remains disabled unless
-  a tracking Provider is configured.
+- 一个活动的 Club 应用实例，配合 PostgreSQL 17 和一个私有的本地存储卷。
+- 发布的镜像目前面向 `linux/amd64`；从源码构建需要 Node.js 24 和 pnpm 11.9。
+- 默认的 B站集成使用公开 Web 接口，上游行为变化时可能需要维护。
+- 发货记录支持公开的物流追踪链接；未配置追踪 Provider 时，承运商状态的自动刷新保持关闭。

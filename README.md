@@ -2,116 +2,44 @@
 
 [![CI](https://github.com/vtbs-infra/club/actions/workflows/ci.yml/badge.svg)](https://github.com/vtbs-infra/club/actions/workflows/ci.yml)
 
-English | [简体中文](README.zh-CN.md)
+Club 是一个自托管的礼物领取与发货平台，服务 B站主播和他们的大航海成员。
 
-Club is a self-hosted gift claiming and shipping platform for Bilibili
-VTubers, streamers, and their viewers.
+Club 自动保存主播每月的大航海名单，为名单上的每个 UID 生成礼物单。成员用自己的 B站身份
+注册、领取并填写地址；主播导出待发货信息、录入单号，成员可以查看和复制单号。
 
-It connects a viewer's Bilibili UID to a platform account, captures each
-creator's monthly guard roster, creates gift orders for eligible UIDs, and
-takes recipients from claiming to a creator-recorded shipping confirmation.
-The platform workflow ends at shipped; recipients can view and copy the tracking number.
-
-## Highlights
-
-- One-time-code UID verification in a platform-managed Bilibili live room
-- Creator identity and canonical live-room lookup from a verified Bilibili account
-- Immutable monthly captain, admiral, and governor roster snapshots
-- Optional monthly gift releases with tier-based packages
-- Automatic and idempotent gift-order generation
-- Address book, encrypted claim snapshots, and configurable claim fields
-- Release-scoped fulfillment export, shipping records, and audited corrections
-- Public gift and announcement portal with explicit visibility controls
-- Platform and creator announcements, plus four application-wide theme presets
-- Dedicated recipient, creator, and administrator interfaces
-- Self-hosted TypeScript application with PostgreSQL and local object storage
-
-## Workflow
+## 工作流程
 
 ```text
-Bilibili message
-  -> verified UID and username registration
-  -> monthly guard roster
-  -> creator gift release
-  -> recipient gift order
-  -> claim and frozen address
-  -> shipping confirmation and a copyable tracking number
+成员在验证直播间发送验证码，证明 UID 后注册
+  -> 每月最后一天自动保存主播的大航海名单
+  -> 主播发布当月礼物，按舰长、提督、总督配置礼包
+  -> 名单上的每个 UID 得到一张礼物单
+  -> 成员领取并填写地址
+  -> 主播发货，成员查看与复制单号
 ```
 
-Creators publish a release only for months in which they want to send a gift.
-Roster capture continues on its monthly schedule. A finalized roster and a
-published release for the same creator and month are reconciled automatically.
+主播只需在想送礼物的月份发布礼物。名单每月照常保存，发布与名单谁先完成都会自动匹配。
 
-## Quick start
+## 主要能力
 
-Requirements: Docker Engine and Docker Compose v2.
+- 在直播间发送验证码证明 B站 UID，不需要邮箱，也不收集用户的 B站密码
+- 定稿后不可修改的月度名单，并保留原始抓取证据
+- 自动且不重复地生成礼物单；尚未注册的成员也会先得到礼物单
+- 加密保存的地址簿，领取时冻结一份独立的地址副本
+- 按礼物导出待发货清单，录入与更正单号
+- 平台公告与主播公告、可选择公开的礼物首页、四套全站主题
 
-```powershell
-Copy-Item .env.example .env
-docker compose build --pull app
-docker compose up -d postgres
-docker compose run --rm app node dist/server/server/infrastructure/db/migrate.js
-docker compose up -d --no-build app
-```
+## 文档
 
-Before starting, replace the secrets and database passwords in `.env`. The current unreleased source
-uses `CLUB_IMAGE=club-app` and must be built locally. Published v0.2.0 images use a different auth model.
+- [部署与运维](docs/deploy.md)：用 Docker Compose 部署、配置、备份、升级和处理故障
+- [使用指南](docs/guide.md)：普通用户、主播和平台管理员怎么使用 Club
+- [开发](docs/development.md)：本地开发、测试、数据库迁移和发布
+- [更新记录](CHANGELOG.md)
 
-This is a breaking, fresh-install baseline requiring an empty PostgreSQL database and new accounts.
-There is no upgrade or account migration from previous releases. Registration requires Bilibili UID
-verification before creating a username and password; account recovery uses the same proof of UID
-ownership. No email service is required.
+## 技术栈
 
-Create the first platform administrator with:
+TypeScript、Node.js 24、Fastify、React、PostgreSQL 17，以 Docker Compose 部署单个应用实例。
 
-```powershell
-docker compose run --rm -e CLUB_ADMIN_PASSWORD=replace-with-a-random-password app `
-  node dist/server/server/cli.js admin:create --username admin --name Admin
-```
+## 许可证
 
-The administrator command creates a new account and rejects an existing username without changing it.
-
-For browser login, configure an HTTPS reverse proxy, set `APP_URL` to its public URL and
-`TRUST_PROXY=true`, then open that URL to configure verification rooms and creators.
-Compose binds the application port to host loopback by default. A proxy on the same host can use
-`127.0.0.1:3000`; other proxy topologies require an explicit network configuration described in
-[Configuration](docs/configuration.md).
-The local HTTP port can be used for health checks; production authentication requires HTTPS.
-
-The complete setup procedure is in [Getting started](docs/getting-started.md).
-
-## Documentation
-
-The detailed guides are maintained in Simplified Chinese. Start from the
-[documentation index](docs/README.md), or go directly to:
-
-- [Getting started](docs/getting-started.md)
-- [Product guide](docs/product-guide.md)
-- [Operations](docs/operations.md)
-- [Authentication](docs/authentication.md)
-- [Architecture](docs/architecture.md)
-- [Contributing](CONTRIBUTING.md)
-- [Changelog](CHANGELOG.md)
-
-A running instance exposes its OpenAPI 3.1 document at `/openapi.json`.
-
-## Technology
-
-- TypeScript 7 and Node.js 24
-- React 19, React Router, TanStack Query, and Vite
-- Fastify sessions, TypeBox, Drizzle ORM, and Pino
-- PostgreSQL 17
-- Vitest and Playwright
-- Docker Compose
-
-The supported deployment runs one Club application instance. The application
-process serves the web interface and API and owns the roster, Bilibili-room,
-and gift-cover cleanup background runtimes.
-
-## License
-
-Club is licensed under the [Parity Public License 7.0.0](LICENSE).
-
-Contributor: `zclkkk and Fox-yun`
-
-Source code: <https://github.com/vtbs-infra/club>
+[Parity Public License 7.0.0](LICENSE)。贡献者：zclkkk、Fox-yun。
