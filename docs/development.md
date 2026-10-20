@@ -63,6 +63,7 @@ export TEST_DATABASE_URL='postgres://club:<数据库密码>@localhost:55432/post
 `npm run audit` 在出现高危公告时失败；Drizzle Kit 依赖链上已知的中危公告只涉及它的开发服务器，
 本项目不使用。
 
+依赖积极跟进上游的最新正式发布，不等新版本"沉淀"。`@types/node` 保持与运行时一致的 24.x。
 几组工具需要一起升级并核对兼容性：Vite 与 React 插件，Vitest 与 coverage，Oxlint、
 tsgolint 与 TypeScript。依赖的安装脚本默认禁止，放行名单在 `package.json` 的 `allowScripts`。
 
