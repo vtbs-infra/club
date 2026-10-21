@@ -3,6 +3,7 @@
   "extends": ["config:recommended", ":semanticCommitTypeAll(chore)"],
   "timezone": "Asia/Shanghai",
   "rangeStrategy": "bump",
+  "prHourlyLimit": 0,
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
@@ -14,8 +15,8 @@
       "automerge": true
     },
     {
-      "description": "Before 1.0 a minor release may break the API, so review it like a major one.",
-      "matchCurrentVersion": "<1.0.0",
+      "description": "Before 1.0 a minor release may break the API, so review it like a major one. Match the version text, because GitHub Actions versioning cannot evaluate ranges such as <1.0.0.",
+      "matchCurrentVersion": "/^v?0\\./",
       "matchUpdateTypes": ["minor"],
       "automerge": false
     },
