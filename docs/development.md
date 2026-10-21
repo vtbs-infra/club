@@ -63,7 +63,10 @@ export TEST_DATABASE_URL='postgres://club:<数据库密码>@localhost:55432/post
 `npm run audit` 在出现高危公告时失败；Drizzle Kit 依赖链上已知的中危公告只涉及它的开发服务器，
 本项目不使用。
 
-依赖积极跟进上游的最新正式发布，不等新版本"沉淀"。`@types/node` 保持与运行时一致的 24.x。
+依赖积极跟进上游的最新正式发布，不等新版本"沉淀"。Renovate 按 `renovate.json` 发起更新：
+小版本和补丁在 CI 通过后自动合并，大版本和 0.x 的次版本需要审阅，锁文件每周整体刷新一次。
+Node.js、npm 和 PostgreSQL 的大版本是计划内的平台升级，在 Renovate 的依赖看板上确认后才会发起；
+`@types/node` 跟随运行时保持 24.x。
 几组工具需要一起升级并核对兼容性：Vite 与 React 插件，Vitest 与 coverage，Oxlint、
 tsgolint 与 TypeScript。依赖的安装脚本默认禁止，放行名单在 `package.json` 的 `allowScripts`。
 

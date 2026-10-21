@@ -1,0 +1,75 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommitTypeAll(chore)"],
+  "timezone": "Asia/Shanghai",
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "Merge non-major updates once CI passes.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "pinDigest", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Before 1.0 a minor release may break the API, so review it like a major one.",
+      "matchCurrentVersion": "<1.0.0",
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
+    },
+    {
+      "description": "Node.js and npm majors are planned platform upgrades; approve them on the Dependency Dashboard.",
+      "matchPackageNames": ["node", "npm", "@types/node"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "PostgreSQL server majors need a data migration; approve them on the Dependency Dashboard. The postgres npm client is not affected.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Engines describe the supported runtime range; change them only when it no longer fits.",
+      "matchDepTypes": ["engines"],
+      "rangeStrategy": "replace"
+    },
+    {
+      "description": "Floating image tags such as node:24-alpine already pick up patches at build time.",
+      "matchDatasources": ["docker"],
+      "rangeStrategy": "replace"
+    },
+    {
+      "description": "setup-node's node-version: 24 already installs the newest 24.x.",
+      "matchManagers": ["github-actions"],
+      "matchDepTypes": ["uses-with"],
+      "matchDepNames": ["node"],
+      "enabled": false
+    },
+    {
+      "groupName": "Vite",
+      "matchPackageNames": ["vite", "@vitejs/plugin-react"]
+    },
+    {
+      "groupName": "Oxlint and TypeScript",
+      "matchPackageNames": ["oxlint", "oxlint-tsgolint", "typescript"]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "regctl versions installed by the workflows",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["release: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "regclient/regclient",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
