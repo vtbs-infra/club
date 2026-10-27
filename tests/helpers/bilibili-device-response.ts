@@ -1,10 +1,5 @@
 /** Anonymous device endpoints shared by HTTP adapter fixtures; all other requests belong to the caller. */
 export function bilibiliDeviceResponse(url: URL): Response | undefined {
-  if (url.origin === 'https://www.bilibili.com' && url.pathname === '/') {
-    return new Response('', {
-      headers: { 'set-cookie': 'buvid3=fixture-buvid; Path=/' },
-    });
-  }
   if (url.pathname === '/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket') {
     return Response.json({
       code: 0,
@@ -20,7 +15,7 @@ export function bilibiliDeviceResponse(url: URL): Response | undefined {
     });
   }
   if (url.pathname === '/x/frontend/finger/spi')
-    return Response.json({ code: 0, data: { b_4: 'fixture-buvid4' } });
+    return Response.json({ code: 0, data: { b_3: 'fixture-buvid', b_4: 'fixture-buvid4' } });
   if (url.pathname === '/x/internal/gaia-gateway/ExClimbWuzhi')
     return Response.json({ code: 0, data: {} });
   return undefined;

@@ -26,7 +26,7 @@ export class PublicWebClient {
           url.username ||
           url.password ||
           url.port ||
-          !['api.live.bilibili.com', 'api.bilibili.com', 'www.bilibili.com'].includes(url.hostname)
+          !['api.live.bilibili.com', 'api.bilibili.com'].includes(url.hostname)
         ) {
           throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
         }
@@ -51,9 +51,20 @@ export class PublicWebClient {
       client.setCookie(this.deviceCookie);
     } else {
       try {
-        await client.initCookie();
-      } catch {
+        // The HTML homepage may redirect to a locale page. Obtain the device identity
+        // from its API so initialization does not depend on browser navigation.
+        const { data: device } = await client.xapiSpi();
+        if (typeof device?.b_3 !== 'string' || !device.b_3)
+          throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
+        client.cookies.set('buvid3', device.b_3);
+        const { data: ticket } = await client.apiGenWebTicket();
+        client.cookies.set('bili_ticket', ticket.ticket);
+        client.cookies.set('bili_ticket_expires', String(ticket.created_at + ticket.ttl));
+        client.cookies.set('enable_web_push', 'DISABLE');
+        await client.activateBuvid();
+      } catch (error) {
         lifetime.throwIfAborted();
+        if (error instanceof BilibiliProviderError) throw error;
         throw new BilibiliProviderError('BILIBILI_UPSTREAM_UNAVAILABLE');
       }
       lifetime.throwIfAborted();

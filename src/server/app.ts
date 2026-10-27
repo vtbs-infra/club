@@ -141,7 +141,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
         );
       }
     },
-    onStateChange: async (biliRoomId, state) => {
+    onStateChange: async (biliRoomId, state, error) => {
+      if (state === 'UNHEALTHY')
+        app.log.warn({ roomId: biliRoomId, err: error }, 'Bilibili room connection failed');
       const now = clock.now();
       await database.orm
         .update(verificationRooms)

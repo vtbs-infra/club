@@ -13,6 +13,46 @@ function withDeviceRequests(fetch: typeof globalThis.fetch): typeof globalThis.f
 }
 
 describe('immutable Bilibili reading contexts', () => {
+  it('initializes device cookies through the API when the homepage redirects', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      if (url.hostname === 'www.bilibili.com') {
+        if (init?.redirect === 'error') return Promise.reject(new TypeError('fetch failed'));
+        return Promise.resolve(Response.redirect('https://www.bilibili.com/zh-Hans', 302));
+      }
+      const response = bilibiliDeviceResponse(url);
+      if (!response) throw new Error('Unexpected request');
+      // Device registration must not send the verified account's credentials.
+      expect(new Headers(init?.headers).get('cookie')).not.toContain('SESSDATA');
+      return Promise.resolve(response);
+    });
+    const client = await new PublicWebClient(new FakeBilibiliReadingSession(), fetch).forOperation(
+      new AbortController().signal,
+    );
+    expect(client.cookies.get('buvid3')).toBe('fixture-buvid');
+    expect(client.cookies.get('bili_ticket')).toBe('fixture-ticket');
+    expect(client.cookies.get('SESSDATA')).toBe('test-session-1');
+    expect(
+      fetch.mock.calls.every(
+        ([input]) =>
+          new URL(input instanceof Request ? input.url : input.toString()).hostname !==
+          'www.bilibili.com',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects device responses without a usable buvid3', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(() =>
+      Promise.resolve(Response.json({ code: 0, data: { b_4: 'fixture-buvid4' } })),
+    );
+    await expect(
+      new PublicWebClient(new FakeBilibiliReadingSession(), fetch).forOperation(
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ code: 'BILIBILI_INVALID_RESPONSE' });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('applies verified login cookies after device initialization and restricts their destinations', async () => {
     const session = new FakeBilibiliReadingSession();
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({ code: 0 }));

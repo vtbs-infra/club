@@ -178,7 +178,8 @@ export class VerificationRoomService {
     }
     try {
       await this.connections.testRoom(room.biliRoomId);
-    } catch {
+    } catch (error) {
+      this.reportError?.(error, 'verification-room.test');
       const now = new Date();
       await this.database.orm.transaction(async (transaction) => {
         await transaction
