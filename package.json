@@ -67,7 +67,7 @@
     "concurrently": "^10.0.6",
     "drizzle-kit": "^0.31.11",
     "lucide-react": "^1.63.0",
-    "oxlint": "1.89.0",
+    "oxlint": "1.90.0",
     "oxlint-tsgolint": "7.0.2005",
     "prettier": "^3.9.10",
     "qrcode.react": "4.2.0",
