@@ -1,13 +1,10 @@
 import { FakeBilibiliReadingSession } from '../helpers/fake-bilibili-reading-session.js';
 import { seedTestUser } from '../helpers/auth-session.js';
 import { randomUUID } from 'node:crypto';
-import { Signer } from '@fastify/cookie';
 import { count, eq } from 'drizzle-orm';
-import type { Session } from 'fastify';
 import { afterEach, beforeEach, expect, it, describe } from 'vitest';
 import { buildApp } from '../../src/server/app.js';
-import { createAuth } from '../../src/server/modules/auth/auth.js';
-import { SESSION_COOKIE } from '../../src/server/modules/auth/session-store.js';
+import { createAuth, SESSION_COOKIE } from '../../src/server/modules/auth/auth.js';
 import {
   bootstrapPlatformAdmin,
   resetPlatformAdminPassword,
@@ -444,20 +441,21 @@ describe('username and verified UID authentication', () => {
     ).toMatchObject({ error: { code: 'IDENTITY_PROOF_INVALID' } });
   });
 
-  it('prevents late session saves from resurrecting sessions revoked by change-password', async () => {
+  it('ends only the current browser session on logout', async () => {
     await existingUser('bob', '10002');
+    const first = await login('bob');
+    const second = await login('bob');
+    const result = await post('/api/v1/auth/logout', {}, first);
+    expect(result.statusCode).toBe(204);
+    expect(String(result.headers['set-cookie'])).toMatch(new RegExp(`^${SESSION_COOKIE}=;`));
+    expect((await get('/api/v1/me', first)).statusCode).toBe(401);
+    expect((await get('/api/v1/me', second)).statusCode).toBe(200);
+  });
+
+  it('ends every session of the account after a password change', async () => {
+    await existingUser('bob', '10002');
+    const other = await login('bob');
     const browser = await login('bob');
-    const raw = decodeURIComponent(browser.split('=', 2)[1]!);
-    const id = new Signer(createTestConfig().authSecret).unsign(raw).value!;
-    const previous = await new Promise<Session>((resolve, reject) =>
-      auth.store.get(id, (error, data) =>
-        error
-          ? reject(
-              error instanceof Error ? error : new Error('Session store failed', { cause: error }),
-            )
-          : resolve(data!),
-      ),
-    );
     expect(
       (
         await post(
@@ -476,19 +474,9 @@ describe('username and verified UID authentication', () => {
         )
       ).statusCode,
     ).toBe(204);
-    await new Promise<void>((resolve, reject) =>
-      auth.store.set(id, previous, (error: unknown) =>
-        error
-          ? reject(
-              error instanceof Error ? error : new Error('Session store failed', { cause: error }),
-            )
-          : resolve(),
-      ),
-    );
     expect((await get('/api/v1/me', browser)).statusCode).toBe(401);
-    const current = await login('bob', NEXT_PASSWORD);
-    expect((await post('/api/v1/auth/logout', {}, current)).statusCode).toBe(204);
-    expect((await get('/api/v1/me', current)).statusCode).toBe(401);
+    expect((await get('/api/v1/me', other)).statusCode).toBe(401);
+    expect((await get('/api/v1/me', await login('bob', NEXT_PASSWORD))).statusCode).toBe(200);
   });
 
   it('expires both pending and verified challenges and does not reuse message events', async () => {

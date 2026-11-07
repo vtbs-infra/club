@@ -6,18 +6,20 @@ import {
   BilibiliSessionStatusSchema,
 } from '../../../shared/contracts/bilibili.js';
 import { IdSchema } from '../../../shared/contracts/common.js';
-import type { AppAuth } from '../auth/auth.js';
+import { requestSessionId, type AppAuth } from '../auth/auth.js';
 import { createRequirePlatformAdmin } from '../auth/guards.js';
-import { sessionDigest } from '../auth/session-store.js';
 import type { BilibiliLoginOwner, BilibiliSessionService } from './session-service.js';
 
 const EmptyBody = Type.Object({}, { additionalProperties: false });
 const Parameters = Type.Object({ id: IdSchema }, { additionalProperties: false });
 function owner(request: FastifyRequest): BilibiliLoginOwner {
-  if (!request.authSession) throw new Error('Authenticated route is missing its session.');
+  const clubSessionId = requestSessionId(request);
+  if (!request.authSession || !clubSessionId) {
+    throw new Error('Authenticated route is missing its session.');
+  }
   return {
     actorUserId: request.authSession.user.id,
-    clubSessionId: sessionDigest(request.session.sessionId),
+    clubSessionId,
     requestId: request.id,
     ipAddress: request.ip,
   };

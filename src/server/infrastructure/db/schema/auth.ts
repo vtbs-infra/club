@@ -4,7 +4,6 @@ import {
   check,
   index,
   integer,
-  jsonb,
   pgTable,
   text,
   timestamp,
@@ -55,7 +54,6 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     authVersion: integer('auth_version').notNull(),
-    data: jsonb('data').$type<Record<string, unknown>>().notNull(),
     expiresAt: timestamp('expires_at', { mode: 'date', withTimezone: true }).notNull(),
     ...timestamps,
   },

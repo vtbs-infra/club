@@ -20,7 +20,6 @@ import { InMemoryRateLimiter } from '../../infrastructure/security/request-secur
 import type { AppAuth } from './auth.js';
 import { createRequireSession } from './guards.js';
 import { CHALLENGE_COOKIE, type IdentityService } from './identity-service.js';
-import { SESSION_COOKIE } from './session-store.js';
 
 interface Options {
   auth: AppAuth;
@@ -106,16 +105,14 @@ const authRoutes: FastifyPluginAsync<Options> = (app, options) => {
     },
     (request, reply) => {
       throttle(loginLimiter, 'login:' + request.ip, reply);
-      return options.auth.login(request, request.body.username, request.body.password);
+      return options.auth.login(request, reply, request.body.username, request.body.password);
     },
   );
   app.post(
     '/api/v1/auth/logout',
     { schema: { response: { 204: Type.Null() }, tags: ['auth'] } },
     async (request, reply) => {
-      await request.session.destroy();
-      request.authSession = null;
-      void reply.clearCookie(SESSION_COOKIE, { path: '/' });
+      await options.auth.endSession(request, reply);
       return reply.status(204).send();
     },
   );
@@ -130,8 +127,7 @@ const authRoutes: FastifyPluginAsync<Options> = (app, options) => {
         request.body.challengeId,
         request.body.password,
       );
-      await request.session.destroy();
-      void reply.clearCookie(SESSION_COOKIE, { path: '/' });
+      await options.auth.endSession(request, reply);
       return reply.status(204).send();
     },
   );
@@ -147,9 +143,7 @@ const authRoutes: FastifyPluginAsync<Options> = (app, options) => {
         request.body.currentPassword,
         request.body.password,
       );
-      await request.session.destroy();
-      request.authSession = null;
-      void reply.clearCookie(SESSION_COOKIE, { path: '/' });
+      await options.auth.endSession(request, reply);
       return reply.status(204).send();
     },
   );

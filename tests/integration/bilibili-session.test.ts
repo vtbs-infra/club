@@ -53,7 +53,6 @@ describe('managed Bilibili session lifecycle', () => {
       id: owner.clubSessionId,
       userId: owner.actorUserId,
       authVersion: 1,
-      data: {},
       expiresAt: new Date(instant.getTime() + 86_400_000),
     });
     passport = new FakeBilibiliPassport(clock);

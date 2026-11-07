@@ -1,7 +1,8 @@
+import { createHash, randomBytes } from 'node:crypto';
 import fastifyCookie from '@fastify/cookie';
-import fastifySession from '@fastify/session';
 import type {
   FastifyInstance,
+  FastifyReply,
   FastifyRequest,
   FastifyBaseLogger,
   FastifyTypeProvider,
@@ -18,13 +19,27 @@ import type { AuthUser } from '../../../shared/contracts/auth.js';
 import { AppError } from '../../../shared/errors/app-error.js';
 import { AuditService } from '../audit/audit-service.js';
 import { hashPassword, normalizeName, normalizeUsername, verifyPassword } from './password.js';
-import {
-  PostgresSessionStore,
-  SESSION_COOKIE,
-  SESSION_LIFETIME_MS,
-  sessionData,
-  sessionDigest,
-} from './session-store.js';
+
+/**
+ * A session row is written once at login and only deleted afterwards, so a request still
+ * running during a logout or password change has nothing it could write back.
+ */
+export const SESSION_COOKIE = 'club_session';
+const SESSION_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
+type SessionRequest = Pick<FastifyRequest, 'cookies' | 'unsignCookie'>;
+
+/** Rows are keyed by a digest, so the database never holds a usable token. */
+function sessionDigest(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/** The stored id behind the browser's signed session cookie, whether or not the row still exists. */
+export function requestSessionId(request: SessionRequest): string | null {
+  const cookie = request.cookies[SESSION_COOKIE];
+  if (!cookie) return null;
+  const { valid, value } = request.unsignCookie(cookie);
+  return valid ? sessionDigest(value) : null;
+}
 
 export type AuthSession = { user: AuthUser; session: { expiresAt: Date } };
 export type AuthTransaction = Parameters<Parameters<AppDatabase['transaction']>[0]>[0];
@@ -57,14 +72,11 @@ export async function replacePassword(
 }
 
 export class AuthService {
-  public readonly store: PostgresSessionStore;
   public constructor(
     private readonly config: AppConfig,
     private readonly database: DatabaseService,
     private readonly clock: Clock,
-  ) {
-    this.store = new PostgresSessionStore(database, clock);
-  }
+  ) {}
   public async install<
     S extends RawServerBase,
     Q extends RawRequestDefaultExpression<S>,
@@ -72,23 +84,11 @@ export class AuthService {
     L extends FastifyBaseLogger,
     P extends FastifyTypeProvider,
   >(app: FastifyInstance<S, Q, R, L, P>): Promise<void> {
-    await app.register(fastifyCookie);
-    await app.register(fastifySession, {
-      secret: this.config.authSecret,
-      cookieName: SESSION_COOKIE,
-      store: this.store,
-      saveUninitialized: false,
-      rolling: false,
-      cookie: {
-        path: '/',
-        httpOnly: true,
-        secure: this.config.nodeEnv === 'production',
-        sameSite: 'lax',
-      },
-    });
+    await app.register(fastifyCookie, { secret: this.config.authSecret });
   }
-  public async getSession(request: Pick<FastifyRequest, 'session'>): Promise<AuthSession | null> {
-    if (!request.session?.userId) return null;
+  public async getSession(request: SessionRequest): Promise<AuthSession | null> {
+    const id = requestSessionId(request);
+    if (!id) return null;
     const [row] = await this.database.orm
       .select({ user: users, expiresAt: sessions.expiresAt })
       .from(sessions)
@@ -96,17 +96,13 @@ export class AuthService {
         users,
         and(eq(users.id, sessions.userId), eq(users.authVersion, sessions.authVersion)),
       )
-      .where(
-        and(
-          eq(sessions.id, sessionDigest(request.session.sessionId)),
-          gt(sessions.expiresAt, this.clock.now()),
-        ),
-      )
+      .where(and(eq(sessions.id, id), gt(sessions.expiresAt, this.clock.now())))
       .limit(1);
     return row ? { user: publicUser(row.user), session: { expiresAt: row.expiresAt } } : null;
   }
   public async login(
     request: FastifyRequest,
+    reply: FastifyReply,
     username: string,
     password: string,
   ): Promise<AuthSession> {
@@ -119,8 +115,8 @@ export class AuthService {
     if (!(await verifyPassword(password, candidate?.hash)) || !candidate) {
       throw new AppError('INVALID_CREDENTIALS', 'Username or password is incorrect.', 401);
     }
-    const previousId = request.session.sessionId;
-    await request.session.regenerate();
+    const previous = requestSessionId(request);
+    const token = randomBytes(32).toString('base64url');
     const now = this.clock.now();
     const expiresAt = new Date(now.getTime() + SESSION_LIFETIME_MS);
     const user = await this.database.orm.transaction(async (transaction) => {
@@ -136,24 +132,34 @@ export class AuthService {
           401,
         );
       }
-      request.session.userId = locked.id;
-      request.session.authVersion = locked.authVersion;
-      request.session.cookie.expires = expiresAt;
-      request.session.cookie.originalMaxAge = null;
-      await transaction.delete(sessions).where(eq(sessions.id, sessionDigest(previousId)));
+      if (previous) await transaction.delete(sessions).where(eq(sessions.id, previous));
       await transaction.delete(sessions).where(lte(sessions.expiresAt, now));
       await transaction.insert(sessions).values({
-        id: sessionDigest(request.session.sessionId),
+        id: sessionDigest(token),
         userId: locked.id,
         authVersion: locked.authVersion,
-        data: sessionData(request.session),
         expiresAt,
         createdAt: now,
         updatedAt: now,
       });
       return locked;
     });
+    void reply.setCookie(SESSION_COOKIE, token, {
+      expires: expiresAt,
+      httpOnly: true,
+      path: '/',
+      sameSite: 'lax',
+      secure: this.config.nodeEnv === 'production',
+      signed: true,
+    });
     return { user: publicUser(user), session: { expiresAt } };
+  }
+  /** Ends the browser's current session; other sessions of the account stay valid. */
+  public async endSession(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    const id = requestSessionId(request);
+    if (id) await this.database.orm.delete(sessions).where(eq(sessions.id, id));
+    request.authSession = null;
+    void reply.clearCookie(SESSION_COOKIE, { path: '/' });
   }
   public async changePassword(
     userId: string,

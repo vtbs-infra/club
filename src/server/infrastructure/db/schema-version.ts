@@ -14,4 +14,9 @@ export const EXPECTED_SCHEMA_MIGRATIONS = [
     hash: 'e4a2cc0b44e794fca66359aae29459154eb867f48ff22486b428e04cd8886075',
     tag: '0002_bilibili_managed_session',
   },
+  {
+    createdAt: '1794074582615',
+    hash: '99e5838da6848ee7c8b622d7916da53b7ad2490f9d8e8e55a9fc6d3257c3289f',
+    tag: '0003_drop_session_data',
+  },
 ] as const;
