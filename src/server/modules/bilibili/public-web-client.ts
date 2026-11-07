@@ -2,6 +2,21 @@ import { BilibiliApiClient } from 'bilibili-live-danmaku';
 import { BilibiliProviderError } from './passport-client.js';
 import type { BilibiliReadingSession, BilibiliReadingSnapshot } from './reading-session.js';
 
+/**
+ * The library visits the HTML homepage for buvid3, which may redirect to a locale page that the
+ * redirect policy below rejects. Take the device identity from the API instead and leave the
+ * rest of the cookie initialization to the library.
+ */
+class DeviceApiClient extends BilibiliApiClient {
+  public override async wwwBilibili(): Promise<void> {
+    const { data } = await this.xapiSpi();
+    if (typeof data?.b_3 !== 'string' || !data.b_3) {
+      throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
+    }
+    this.cookies.set('buvid3', data.b_3);
+  }
+}
+
 /** Share completed cookies, never an in-flight initialization owned by another operation. */
 export class PublicWebClient {
   private deviceCookie: string | null = null;
@@ -18,7 +33,7 @@ export class PublicWebClient {
   ): Promise<BilibiliApiClient> {
     const lifetime = AbortSignal.any([signal, snapshot.signal]);
     lifetime.throwIfAborted();
-    const client = new BilibiliApiClient({
+    const client = new DeviceApiClient({
       fetch: async (input, init) => {
         const url = new URL(input instanceof Request ? input.url : input.toString());
         if (
@@ -51,17 +66,7 @@ export class PublicWebClient {
       client.setCookie(this.deviceCookie);
     } else {
       try {
-        // The HTML homepage may redirect to a locale page. Obtain the device identity
-        // from its API so initialization does not depend on browser navigation.
-        const { data: device } = await client.xapiSpi();
-        if (typeof device?.b_3 !== 'string' || !device.b_3)
-          throw new BilibiliProviderError('BILIBILI_INVALID_RESPONSE');
-        client.cookies.set('buvid3', device.b_3);
-        const { data: ticket } = await client.apiGenWebTicket();
-        client.cookies.set('bili_ticket', ticket.ticket);
-        client.cookies.set('bili_ticket_expires', String(ticket.created_at + ticket.ttl));
-        client.cookies.set('enable_web_push', 'DISABLE');
-        await client.activateBuvid();
+        await client.initCookie();
       } catch (error) {
         lifetime.throwIfAborted();
         if (error instanceof BilibiliProviderError) throw error;

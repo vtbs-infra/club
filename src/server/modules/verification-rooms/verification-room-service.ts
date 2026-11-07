@@ -179,7 +179,6 @@ export class VerificationRoomService {
     try {
       await this.connections.testRoom(room.biliRoomId);
     } catch (error) {
-      this.reportError?.(error, 'verification-room.test');
       const now = new Date();
       await this.database.orm.transaction(async (transaction) => {
         await transaction
@@ -203,6 +202,7 @@ export class VerificationRoomService {
         'VERIFICATION_ROOM_CONNECTION_FAILED',
         'The verification room connection test failed.',
         502,
+        { cause: error },
       );
     }
     const now = new Date();
