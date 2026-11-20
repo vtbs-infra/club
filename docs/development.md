@@ -86,8 +86,9 @@ git tag -a "v$version" -m "Club v$version"
 git push origin "v$version"
 ```
 
-Tag 会触发发布流水线：在同一提交上重新运行完整 CI，构建并验证 `linux/amd64` 镜像，推送到
-`ghcr.io/vtbs-infra/club`，再创建 GitHub Release。
+Tag 会触发发布流水线：在同一提交上重新运行完整 CI。镜像任务使用 Docker 的 containerd 镜像存储，
+加载包含构建来源和 SBOM 的完整 OCI 归档，按构建返回的索引摘要启动 `linux/amd64` 镜像做冒烟测试。
+通过后，发布任务将同一份归档推送到 `ghcr.io/vtbs-infra/club`，再创建 GitHub Release。
 
 - 已发布的版本、Tag、镜像和迁移都不覆盖。流水线失败时在 Actions 中重跑失败的 job；如果同一
   版本对应了不同的提交或来源，停下来人工处理；
