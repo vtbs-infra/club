@@ -68,7 +68,7 @@
     "lucide-react": "^1.71.0",
     "oxlint": "1.93.0",
     "oxlint-tsgolint": "7.0.2006",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "qrcode.react": "4.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
