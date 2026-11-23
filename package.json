@@ -65,7 +65,7 @@
     "@vitest/coverage-v8": "5.1.1",
     "concurrently": "^10.0.7",
     "drizzle-kit": "^0.31.11",
-    "lucide-react": "^1.77.0",
+    "lucide-react": "^1.78.0",
     "oxlint": "1.93.0",
     "oxlint-tsgolint": "7.0.2006",
     "prettier": "^3.10.1",
