@@ -41,7 +41,7 @@
   "dependencies": {
     "@fastify/cookie": "11.1.5",
     "@fastify/multipart": "^10.1.9",
-    "@fastify/static": "^10.1.12",
+    "@fastify/static": "^11.0.0",
     "@fastify/swagger": "^9.9.5",
     "bilibili-live-danmaku": "0.7.16",
     "drizzle-orm": "^0.45.4",
